@@ -30,7 +30,7 @@
  *    run it through `migrate`, and assert the result matches what a fresh
  *    `createState()` at the new version would produce for the same intent.
  */
-import { STATE_VERSION, DEFAULT_CONFIG } from "./create.mjs";
+import { STATE_VERSION, DEFAULT_CONFIG, DEFAULT_OUTPUT } from "./create.mjs";
 
 export { STATE_VERSION };
 
@@ -66,6 +66,31 @@ export const MIGRATIONS = {
     windows: normalizeDraggable(state.windows),
     urgent: state.urgent ?? [],
   }),
+  // 1 → 2: multiple outputs (sway-style displays/stages). Every workspace
+  // now belongs to an `output`, and state gains `outputs` (id → { workspaces,
+  // activeWorkspace }), `outputOrder` and `focusedOutput`. A pre-outputs
+  // state had exactly one implicit output holding every workspace, so
+  // backfill a single `DEFAULT_OUTPUT` that owns them all, focused, with the
+  // existing `activeWorkspace` carried over as its active workspace.
+  1: (state) => {
+    const workspaceIds = state.workspaceOrder ?? Object.keys(state.workspaces ?? {});
+    return {
+      ...state,
+      version: 2,
+      workspaces: Object.fromEntries(
+        Object.entries(state.workspaces ?? {}).map(([id, ws]) => [id, { ...ws, output: ws.output ?? DEFAULT_OUTPUT }]),
+      ),
+      outputs: state.outputs ?? {
+        [DEFAULT_OUTPUT]: {
+          id: DEFAULT_OUTPUT,
+          workspaces: workspaceIds,
+          activeWorkspace: state.activeWorkspace ?? workspaceIds[0],
+        },
+      },
+      outputOrder: state.outputOrder ?? [DEFAULT_OUTPUT],
+      focusedOutput: state.focusedOutput ?? DEFAULT_OUTPUT,
+    };
+  },
 };
 
 /**

@@ -8,12 +8,35 @@ export const getWindow = (state, id) => state.windows[id];
 
 export const activeWorkspace = (state) => state.workspaces[state.activeWorkspace];
 
+/** The output that currently has input focus. */
+export const focusedOutput = (state) => state.outputs?.[state.focusedOutput];
+
+/** Every output, in `outputOrder`. */
+export const outputsList = (state) => (state.outputOrder ?? []).map((id) => state.outputs[id]).filter(Boolean);
+
+/** The active workspace of a given output (default: the focused one). */
+export const outputActiveWorkspace = (state, outputId = state.focusedOutput) => state.outputs?.[outputId]?.activeWorkspace;
+
+/** The output a workspace belongs to. */
+export const outputOf = (state, workspaceId) => state.workspaces[workspaceId]?.output;
+
+/** The workspaces belonging to a given output, in workspace order. */
+export const workspacesOf = (state, outputId) =>
+  (state.outputs?.[outputId]?.workspaces ?? []).map((id) => state.workspaces[id]).filter(Boolean);
+
 export const focusedWindow = (state) => (state.focus.window ? state.windows[state.focus.window] : undefined);
 
 /** Windows of a workspace in workspace order. */
 export const windowsIn = (state, workspaceId = state.activeWorkspace) =>
   (state.workspaces[workspaceId]?.windows ?? []).map((id) => state.windows[id]).filter(Boolean);
 
+/**
+ * A window is visible when its workspace is the *active workspace of that
+ * workspace's own output* — which output currently has focus is irrelevant,
+ * since every output renders its own active workspace regardless. Sticky
+ * windows skip that check: they are visible on every workspace of their own
+ * output.
+ */
 export const isVisible = (state, id) => {
   const win = state.windows[id];
   // Popped-out windows, like minimized ones, leave the layout — they are
@@ -21,19 +44,28 @@ export const isVisible = (state, id) => {
   if (!win || win.status === "minimized" || win.status === "popped-out") return false;
   // A scratchpad window not currently shown belongs to no workspace.
   if (win.workspace === null) return false;
-  // Sticky windows skip the active-workspace check: they are visible everywhere.
-  if (win.workspace !== state.activeWorkspace && !win.sticky) return false;
+  const ws = state.workspaces[win.workspace];
+  if (!ws) return false;
+  const active = state.outputs?.[ws.output]?.activeWorkspace ?? state.activeWorkspace;
+  if (win.workspace !== active && !win.sticky) return false;
   return win.parent ? isVisible(state, win.parent) : true;
 };
 
 /**
- * Visible windows of the active workspace: its own windows, plus any sticky
- * window that lives on another workspace (visible everywhere).
+ * Visible windows of an output's active workspace (default: the focused
+ * output, so single-output callers see exactly the old behaviour): its own
+ * windows, plus any sticky window that lives on another workspace of the
+ * *same* output (visible everywhere on that output).
  */
-export const visibleWindows = (state) => {
-  const local = windowsIn(state).filter((win) => isVisible(state, win.id));
+export const visibleWindows = (state, outputId = state.focusedOutput) => {
+  const activeWs = state.outputs?.[outputId]?.activeWorkspace ?? state.activeWorkspace;
+  const local = windowsIn(state, activeWs).filter((win) => isVisible(state, win.id));
   const stickyElsewhere = Object.values(state.windows).filter(
-    (win) => win.sticky && win.workspace !== state.activeWorkspace && isVisible(state, win.id),
+    (win) =>
+      win.sticky &&
+      win.workspace !== activeWs &&
+      state.workspaces[win.workspace]?.output === outputId &&
+      isVisible(state, win.id),
   );
   return [...local, ...stickyElsewhere];
 };
@@ -73,9 +105,9 @@ export const urgentWindows = (state) => state.urgent.filter((id) => state.window
 /** Every window id, bottom to top, across all layers. */
 export const stackingOrder = (state) => LAYERS.flatMap((layer) => state.stack[layer] ?? []);
 
-/** Windows that may receive focus in the active workspace, in workspace order. */
-export const focusable = (state) =>
-  visibleWindows(state)
+/** Windows that may receive focus on an output's active workspace, in workspace order. */
+export const focusable = (state, outputId = state.focusedOutput) =>
+  visibleWindows(state, outputId)
     .map((win) => win.id)
     .filter((id) => !isBlocked(state, id));
 
@@ -99,14 +131,14 @@ export const inTiledBase = (state, win) =>
   win.status !== "maximized";
 
 /**
- * Visible windows of the active workspace in the order they are painted,
- * bottom to top — what `derive` produces, as opposed to `stackingOrder`, the
- * logical stack across all workspaces:
+ * Visible windows of an output's active workspace in the order they are
+ * painted, bottom to top — what `derive` produces, as opposed to
+ * `stackingOrder`, the logical stack across all workspaces:
  *   background-layer windows → the tiled base → every other layer by stack.
  * A fullscreen window is painted alone.
  */
-export const paintOrder = (state) => {
-  const visible = visibleWindows(state);
+export const paintOrder = (state, outputId = state.focusedOutput) => {
+  const visible = visibleWindows(state, outputId);
   const fullscreen = visible.find((win) => win.status === "fullscreen");
   if (fullscreen) return [fullscreen.id];
   const rank = new Map(stackingOrder(state).map((id, i) => [id, i]));

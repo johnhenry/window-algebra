@@ -11,7 +11,7 @@
  * `update` never touches the DOM, timers, randomness, or the clock. Ids are
  * supplied by the caller.
  */
-import { LAYERS, STATUSES, createWindowRecord, createWorkspace } from "./create.mjs";
+import { LAYERS, STATUSES, createWindowRecord, createWorkspace, createOutput } from "./create.mjs";
 import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile } from "../layouts/bsp.mjs";
 import { treeFrom, treeFromBsp, treeNodeAt, treeSetSizesAt } from "../layouts/tree.mjs";
@@ -105,18 +105,32 @@ const bspDrop = (state, workspaceId, id) =>
     ? setLayout(state, workspaceId, (layout) => ({ ...layout, tree: bspRemove(layout.tree ?? null, id) }))
     : state;
 
-/** Apply focus, following policy: modal redirection, workspace switch, raise. */
+/** Apply focus, following policy: modal redirection, output/workspace switch, raise. */
 const applyFocus = (state, requested) => {
   const target = modalTarget(state, requested);
   const previous = state.focus.window;
   let next = state;
   const events = [];
   const win = next.windows[target];
+  const ws = win.workspace != null ? next.workspaces[win.workspace] : undefined;
+  const outputId = ws?.output;
+  // Focusing a window on another output switches which output is focused,
+  // the same way focusing one on another workspace switches the workspace.
+  if (ws && outputId !== next.focusedOutput) {
+    events.push({ type: "output/focused", id: outputId, previous: next.focusedOutput });
+    next = { ...next, focusedOutput: outputId, activeWorkspace: next.outputs[outputId].activeWorkspace };
+  }
   // A sticky window is visible on every workspace already, so focusing it
   // never needs to switch which workspace is active.
   if (win.workspace !== next.activeWorkspace && !win.sticky) {
     events.push({ type: "workspace/activated", id: win.workspace, previous: next.activeWorkspace });
-    next = { ...next, activeWorkspace: win.workspace };
+    next = {
+      ...next,
+      activeWorkspace: win.workspace,
+      ...(outputId
+        ? { outputs: { ...next.outputs, [outputId]: { ...next.outputs[outputId], activeWorkspace: win.workspace } } }
+        : {}),
+    };
   }
   if (win.status === "minimized") {
     next = setWindow(next, target, { status: "normal" });
@@ -578,33 +592,54 @@ const handlers = {
     const { id } = command;
     if (typeof id !== "string" || !id) return rejected(state, command, "missing-id");
     if (state.workspaces[id]) return rejected(state, command, "duplicate-id");
-    const ws = createWorkspace({ id, layout: command.layout ?? state.workspaces[state.activeWorkspace].layout });
+    const outputId = command.output ?? state.focusedOutput;
+    if (!state.outputs[outputId]) return rejected(state, command, "unknown-output");
+    const ws = createWorkspace({ id, layout: command.layout ?? state.workspaces[state.activeWorkspace].layout, output: outputId });
     if (ws.layout.type === "bsp") ws.layout = { ...ws.layout, tree: null };
     let next = {
       ...state,
       workspaces: { ...state.workspaces, [id]: ws },
       workspaceOrder: [...state.workspaceOrder, id],
+      outputs: {
+        ...state.outputs,
+        [outputId]: { ...state.outputs[outputId], workspaces: [...state.outputs[outputId].workspaces, id] },
+      },
     };
-    const created = result(next, [{ type: "workspace/created", id }], [RENDER]);
+    const created = result(next, [{ type: "workspace/created", id, output: outputId }], [RENDER]);
     return command.activate ? merge(created, handlers["workspace/activate"](next, { type: "workspace/activate", id })) : created;
   },
 
+  /** Activate a workspace, switching (and focusing) its output too if it belongs to another one. */
   "workspace/activate"(state, command) {
-    if (!state.workspaces[command.id]) return rejected(state, command, "unknown-workspace");
-    if (state.activeWorkspace === command.id) return result(state);
-    const next = { ...state, activeWorkspace: command.id };
-    return merge(
-      result(next, [{ type: "workspace/activated", id: command.id, previous: state.activeWorkspace }], [RENDER]),
-      refocus({ ...next, focus: { ...next.focus, window: null } }),
-    );
+    const ws = state.workspaces[command.id];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    const outputId = ws.output;
+    const focusedThere = state.focusedOutput === outputId;
+    const activeThere = state.outputs[outputId].activeWorkspace === command.id;
+    if (focusedThere && activeThere) return result(state);
+    const events = [];
+    let next = state;
+    if (!focusedThere) {
+      events.push({ type: "output/focused", id: outputId, previous: state.focusedOutput });
+      next = { ...next, focusedOutput: outputId };
+    }
+    if (!activeThere) {
+      events.push({ type: "workspace/activated", id: command.id, previous: state.outputs[outputId].activeWorkspace });
+      next = { ...next, outputs: { ...next.outputs, [outputId]: { ...next.outputs[outputId], activeWorkspace: command.id } } };
+    }
+    next = { ...next, activeWorkspace: command.id };
+    return merge(result(next, events, [RENDER]), refocus({ ...next, focus: { ...next.focus, window: null } }));
   },
 
   "workspace/remove"(state, command) {
     const { id } = command;
-    if (!state.workspaces[id]) return rejected(state, command, "unknown-workspace");
+    const ws = state.workspaces[id];
+    if (!ws) return rejected(state, command, "unknown-workspace");
     if (state.workspaceOrder.length === 1) return rejected(state, command, "last-workspace");
-    const fallback = command.fallback ?? state.workspaceOrder.find((ws) => ws !== id);
+    if (state.outputs[ws.output].workspaces.length === 1) return rejected(state, command, "last-workspace-on-output");
+    const fallback = command.fallback ?? state.workspaceOrder.find((wid) => wid !== id);
     if (!state.workspaces[fallback] || fallback === id) return rejected(state, command, "unknown-workspace");
+    const localFallback = state.outputs[ws.output].workspaces.find((wid) => wid !== id);
     let next = state;
     for (const winId of state.workspaces[id].windows) {
       if (next.windows[winId]?.workspace === id && !next.windows[winId].parent) {
@@ -612,13 +647,59 @@ const handlers = {
       }
     }
     const { [id]: _gone, ...workspaces } = next.workspaces;
+    const outputId = ws.output;
     next = {
       ...next,
       workspaces,
       workspaceOrder: without(next.workspaceOrder, id),
-      activeWorkspace: next.activeWorkspace === id ? fallback : next.activeWorkspace,
+      activeWorkspace: next.activeWorkspace === id ? localFallback : next.activeWorkspace,
+      outputs: {
+        ...next.outputs,
+        [outputId]: {
+          ...next.outputs[outputId],
+          workspaces: without(next.outputs[outputId].workspaces, id),
+          activeWorkspace: next.outputs[outputId].activeWorkspace === id ? localFallback : next.outputs[outputId].activeWorkspace,
+        },
+      },
     };
     return merge(result(next, [{ type: "workspace/removed", id, fallback }], [RENDER]), refocus(next));
+  },
+
+  /**
+   * Move a workspace (and everything on it) to another output. Rejected when
+   * it is the only workspace its current output has (an output always keeps
+   * at least one). `activate` also focuses it (and so its new output) after
+   * the move.
+   */
+  "workspace/move-to-output"(state, command) {
+    const { id } = command;
+    const ws = state.workspaces[id];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    const target = command.output;
+    if (!state.outputs[target]) return rejected(state, command, "unknown-output");
+    if (ws.output === target) return result(state);
+    const source = state.outputs[ws.output];
+    if (source.workspaces.length === 1) return rejected(state, command, "last-workspace-on-output");
+    const localFallback = source.workspaces.find((wid) => wid !== id);
+    let next = setWorkspace(state, id, { output: target });
+    next = {
+      ...next,
+      outputs: {
+        ...next.outputs,
+        [ws.output]: {
+          ...source,
+          workspaces: without(source.workspaces, id),
+          activeWorkspace: source.activeWorkspace === id ? localFallback : source.activeWorkspace,
+        },
+        [target]: { ...next.outputs[target], workspaces: [...next.outputs[target].workspaces, id] },
+      },
+    };
+    if (next.focusedOutput === ws.output && next.activeWorkspace === id) {
+      next = { ...next, activeWorkspace: localFallback };
+    }
+    const moved = result(next, [{ type: "workspace/moved-to-output", id, output: target, from: ws.output }], [RENDER]);
+    if (command.activate) return merge(moved, handlers["workspace/activate"](next, { type: "workspace/activate", id }));
+    return merge(moved, refocus(next));
   },
 
   /**
@@ -876,6 +957,92 @@ const handlers = {
     return result({ ...state, config: { ...state.config, rules: [...rules] } }, [{ type: "rules/changed", rules }], [RENDER]);
   },
 
+  /**
+   * Create a new output (sway-style display/stage): its own workspace(s),
+   * disjoint from every other output. `workspaces` (ids, or `{ id, layout }`
+   * objects, like `createState`) defaults to a single `"<id>-1"` workspace.
+   * `focus: true` also focuses the new output (see `output/focus`).
+   */
+  "output/create"(state, command) {
+    const { id } = command;
+    if (typeof id !== "string" || !id) return rejected(state, command, "missing-id");
+    if (state.outputs[id]) return rejected(state, command, "duplicate-id");
+    const specs = command.workspaces ?? [`${id}-1`];
+    if (!Array.isArray(specs) || specs.length === 0) return rejected(state, command, "missing-workspaces");
+    const list = [];
+    for (const spec of specs) {
+      const wsId = typeof spec === "string" ? spec : spec?.id;
+      if (typeof wsId !== "string" || !wsId) return rejected(state, command, "missing-id");
+      if (state.workspaces[wsId] || list.some((ws) => ws.id === wsId)) return rejected(state, command, "duplicate-id");
+      list.push(createWorkspace(typeof spec === "string" ? { id: spec, output: id } : { ...spec, output: id }));
+    }
+    let next = {
+      ...state,
+      workspaces: { ...state.workspaces, ...Object.fromEntries(list.map((ws) => [ws.id, ws])) },
+      workspaceOrder: [...state.workspaceOrder, ...list.map((ws) => ws.id)],
+      outputs: { ...state.outputs, [id]: createOutput({ id, workspaces: list.map((ws) => ws.id) }) },
+      outputOrder: [...state.outputOrder, id],
+    };
+    const created = result(next, [{ type: "output/created", id, workspaces: list.map((ws) => ws.id) }], [RENDER]);
+    return command.focus ? merge(created, handlers["output/focus"](next, { type: "output/focus", id })) : created;
+  },
+
+  /**
+   * Remove an output, moving all of its workspaces (and their windows) onto
+   * `fallback` (default: another existing output). Rejected when it is the
+   * only output (there is always at least one).
+   */
+  "output/remove"(state, command) {
+    const { id } = command;
+    if (!state.outputs[id]) return rejected(state, command, "unknown-output");
+    if (state.outputOrder.length === 1) return rejected(state, command, "last-output");
+    const fallback = command.fallback ?? state.outputOrder.find((oid) => oid !== id);
+    if (!state.outputs[fallback] || fallback === id) return rejected(state, command, "unknown-output");
+    const moving = state.outputs[id].workspaces;
+    const workspaces = { ...state.workspaces };
+    for (const wsId of moving) workspaces[wsId] = { ...workspaces[wsId], output: fallback };
+    const fbOutput = state.outputs[fallback];
+    let next = {
+      ...state,
+      workspaces,
+      outputs: { ...state.outputs, [fallback]: { ...fbOutput, workspaces: [...fbOutput.workspaces, ...moving] } },
+    };
+    const { [id]: _gone, ...outputs } = next.outputs;
+    next = { ...next, outputs, outputOrder: without(next.outputOrder, id) };
+    if (next.focusedOutput === id) {
+      next = { ...next, focusedOutput: fallback, activeWorkspace: next.outputs[fallback].activeWorkspace };
+    }
+    const removed = result(next, [{ type: "output/removed", id, fallback, workspaces: moving }], [RENDER]);
+    return merge(removed, refocus(next));
+  },
+
+  /**
+   * Focus another output: the source of `workspace/activated`'s cross-output
+   * counterpart. Keyboard focus follows to a focusable window on the newly
+   * focused output's active workspace when the current focus isn't already
+   * there (most-recently-focused first, like `refocus`), else it clears.
+   */
+  "output/focus"(state, command) {
+    const { id } = command;
+    if (!state.outputs[id]) return rejected(state, command, "unknown-output");
+    if (state.focusedOutput === id) return result(state);
+    const previous = state.focusedOutput;
+    const next = { ...state, focusedOutput: id, activeWorkspace: state.outputs[id].activeWorkspace };
+    const focused = result(next, [{ type: "output/focused", id, previous }], [RENDER]);
+    const focusWin = next.focus.window ? next.windows[next.focus.window] : null;
+    const focusedWs = focusWin?.workspace != null ? next.workspaces[focusWin.workspace] : undefined;
+    if (focusedWs?.output === id) return focused;
+    const candidates = focusable(next, id);
+    if (candidates.length === 0) {
+      if (!next.focus.window) return focused;
+      const blurred = { ...next, focus: { ...next.focus, window: null } };
+      return merge(focused, result(blurred, [{ type: "window/blurred", id: next.focus.window }], [{ type: "focus", id: null }]));
+    }
+    const history = next.focus.history.filter((wid) => next.windows[wid]);
+    const pick = [...history].reverse().find((wid) => candidates.includes(wid)) ?? candidates[candidates.length - 1];
+    return merge(focused, applyFocus(next, pick));
+  },
+
   ...dropHandlers(),
 };
 
@@ -883,12 +1050,21 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * Cycle focus among focusable windows, wrapping across outputs: every
+ * output's own focusable windows, concatenated in `outputOrder`. A single
+ * output degenerates to cycling within it, as before.
+ */
 function cycleFocus(state, direction) {
-  const ids = focusable(state);
-  if (ids.length === 0) return result(state);
-  const index = ids.indexOf(state.focus.window);
-  const nextIndex = index === -1 ? 0 : (index + direction + ids.length) % ids.length;
-  return applyFocus(state, ids[nextIndex]);
+  const entries = state.outputOrder.flatMap((oid) => focusable(state, oid).map((wid) => ({ wid, oid })));
+  if (entries.length === 0) return result(state);
+  const index = entries.findIndex((entry) => entry.wid === state.focus.window);
+  const nextIndex = index === -1 ? 0 : (index + direction + entries.length) % entries.length;
+  const target = entries[nextIndex];
+  if (target.oid === state.focusedOutput) return applyFocus(state, target.wid);
+  const switched = { ...state, focusedOutput: target.oid, activeWorkspace: state.outputs[target.oid].activeWorkspace };
+  const outputEvent = result(switched, [{ type: "output/focused", id: target.oid, previous: state.focusedOutput }], [RENDER]);
+  return merge(outputEvent, applyFocus(switched, target.wid));
 }
 
 function setStatus(state, command, status) {

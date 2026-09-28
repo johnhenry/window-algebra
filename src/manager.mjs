@@ -38,7 +38,11 @@ const coalesce = (commands, command) => {
  * @param {object} [options.modifiers] extra/override layout modifiers for derive (see `MODIFIERS`)
  * @param {object} [options.extensions] extra command handlers for update
  * @param {object} [options.drops] extra/override drop interpreters for window/drop, keyed by layout type
- * @param {{ commit(renderTree, opts?): void, measure?(): object }} [options.renderer]
+ * @param {{ commit(renderTree, opts?): void, measure?(): object }} [options.renderer] the renderer for the
+ *   focused output (single-output use)
+ * @param {object<string, { commit(renderTree, opts?): void, measure?(): object }>} [options.renderers] one
+ *   renderer per output id, for driving several stages (multiple outputs) at once; see `setRenderer`
+ *   to attach/replace/remove one later
  * @param {(task: () => void) => void} [options.schedule] commit scheduler (default: immediate)
  * @param {boolean|number} [options.history] enable undo/redo (number = limit)
  * @param {(effect: object, wm: object) => void} [options.onEffect] interpret effects
@@ -59,6 +63,7 @@ export const createWindowManager = ({
   extensions: extraHandlers,
   drops,
   renderer,
+  renderers,
   schedule = immediateScheduler,
   history: historyOption = false,
   onEffect,
@@ -67,6 +72,10 @@ export const createWindowManager = ({
   const extensions = drops ? { ...dropHandlers(dropRegistry), ...extraHandlers } : extraHandlers;
   let history = createHistory(initial, { limit: typeof historyOption === "number" ? historyOption : 100 });
   const listeners = new Set();
+  // One renderer per output, for driving several stages at once. `renderer`
+  // (single-output) is kept alongside it, always addressing the focused
+  // output's own tree, regardless of `renderers`.
+  const rendererMap = new Map(Object.entries(renderers ?? {}));
   // The command log mirrors history: undo moves the last entry aside and redo
   // puts it back, so `replay(wm.origin, wm.log)` always equals the present
   // state. A `load()` is recorded as a marker that starts a new origin.
@@ -76,8 +85,9 @@ export const createWindowManager = ({
 
   const getState = () => history.present;
 
-  const present = (state = getState()) => {
-    const tree = derive(state, { layouts, modifiers });
+  /** Derived presentation tree and compiled render tree, for an output (default: the focused one). */
+  const present = (state = getState(), { output } = {}) => {
+    const tree = derive(state, { layouts, modifiers, output });
     return { tree, render: compile(tree, presentationContext(state)) };
   };
 
@@ -87,8 +97,11 @@ export const createWindowManager = ({
   const isImmediate = (command) => command?.gesture != null || command?.immediate === true;
 
   const render = (command) => {
-    if (!renderer) return;
-    schedule(() => renderer.commit(present().render, { immediate: isImmediate(command) }));
+    const opts = { immediate: isImmediate(command) };
+    if (renderer) schedule(() => renderer.commit(present().render, opts));
+    for (const [outputId, r] of rendererMap) {
+      schedule(() => r.commit(present(getState(), { output: outputId }).render, opts));
+    }
   };
 
   const notify = (events, command) => {
@@ -177,6 +190,18 @@ export const createWindowManager = ({
     /** Derived presentation tree and compiled render tree for the current state. */
     present,
     render,
+    /**
+     * Attach, replace, or (passing no renderer) remove the renderer driving
+     * a given output's stage, then render it immediately. Multiple outputs
+     * are driven by calling this once per output id.
+     */
+    setRenderer(outputId, outputRenderer) {
+      if (outputRenderer) rendererMap.set(outputId, outputRenderer);
+      else rendererMap.delete(outputId);
+      render();
+    },
+    /** Realized geometry for a given output's renderer, if it can measure. */
+    measureOutput: (outputId) => rendererMap.get(outputId)?.measure?.() ?? {},
     /** Commands applied since `origin` (for replay/sync); undone commands are excluded. */
     get log() {
       return entries.slice(lastLoad() + 1).flatMap((entry) => entry.commands ?? [entry.command]);
@@ -227,6 +252,14 @@ export const createWindowManager = ({
     setSticky: (id, sticky) => dispatch({ type: "window/set-sticky", id, sticky }),
     createWorkspace: (id, options = {}) => dispatch({ ...options, type: "workspace/create", id }),
     activateWorkspace: command("workspace/activate"),
+    /** Create a new output (sway-style display/stage); see `output/create`. */
+    createOutput: (id, options = {}) => dispatch({ ...options, type: "output/create", id }),
+    /** Remove an output, moving its workspaces onto `options.fallback` (default: another output). */
+    removeOutput: (id, options = {}) => dispatch({ ...options, type: "output/remove", id }),
+    /** Focus another output; keyboard focus follows to a window on it, if any. */
+    focusOutput: command("output/focus"),
+    /** Move a workspace (and everything on it) onto another output. */
+    moveWorkspaceToOutput: (id, output, options = {}) => dispatch({ ...options, type: "workspace/move-to-output", id, output }),
     setLayout: (layout, workspace) => dispatch({ type: "layout/set", layout, workspace }),
     setRatio: (ratio, options = {}) => dispatch({ ...options, type: "layout/set-ratio", ratio }),
     /** Resize a persisted split: `resizeSplit(path, { delta } | { weights }, options)`. */

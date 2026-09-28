@@ -87,21 +87,26 @@ const presentFloating = (win, state, index) => {
 };
 
 /**
- * Derive the presentation tree for the active workspace.
+ * Derive the presentation tree for an output's active workspace.
  *
  * @param {object} state
  * @param {object} [options]
  * @param {object} [options.layouts] extra/override layout interpreters keyed by spec type
  * @param {object} [options.modifiers] extra/override layout modifiers keyed by modifier type (see `MODIFIERS`)
+ * @param {string} [options.output] which output to derive (default: `state.focusedOutput`);
+ *   drive several renderers — one per output — by calling `derive` once per output id.
  */
-export const derive = (state, { layouts = {}, modifiers = {} } = {}) => {
+export const derive = (state, { layouts = {}, modifiers = {}, output } = {}) => {
   const registry = { ...LAYOUTS, ...layouts };
   const modifierRegistry = { ...MODIFIERS, ...modifiers };
-  const ws = state.workspaces[state.activeWorkspace];
+  const outputId = output ?? state.focusedOutput;
+  const activeWs = state.outputs?.[outputId]?.activeWorkspace ?? state.activeWorkspace;
+  const ws = state.workspaces[activeWs];
   const focused = state.focus.window;
-  // The active workspace's own visible windows, plus any sticky window that
-  // lives on another workspace (visible everywhere).
-  const visible = visibleWindows(state);
+  // The output's active workspace's own visible windows, plus any sticky
+  // window that lives on another workspace of the same output (visible
+  // everywhere on it).
+  const visible = visibleWindows(state, outputId);
 
   const fullscreen = visible.find((win) => win.status === "fullscreen");
   if (fullscreen) return overlay({}, view(fullscreen.id));

@@ -54,7 +54,18 @@ export { dropZoneAt, dropTargetAt, previewDrop, zoneRect } from "./interaction/d
 export { snapZoneAt, snapZoneRect, magnetize, magnetizeResize, SNAP_ZONES } from "./interaction/snap.mjs";
 
 // Logical state: update / derive
-export { createState, createWorkspace, createWindowRecord, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, STATE_VERSION } from "./state/create.mjs";
+export {
+  createState,
+  createWorkspace,
+  createOutput,
+  createWindowRecord,
+  LAYERS,
+  ROLES,
+  STATUSES,
+  DEFAULT_CONFIG,
+  DEFAULT_OUTPUT,
+  STATE_VERSION,
+} from "./state/create.mjs";
 export { migrate, MIGRATIONS } from "./state/migrate.mjs";
 export { update, reduce, replay, COMMANDS } from "./state/update.mjs";
 export { derive, presentationContext, LAYOUTS } from "./state/derive.mjs";

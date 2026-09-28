@@ -275,6 +275,8 @@
         "window/pop-out": ["id"], "window/pop-in": ["id"],
         "window/set-title": ["id", "title"], "window/set-constraints": ["id", "constraints"], "window/swap": ["a", "b"], "window/promote": ["id"],
         "window/move-to-workspace": ["id", "workspace"], "workspace/create": ["newWs", "activate"], "workspace/activate": ["wsId"], "workspace/remove": ["wsId"],
+        "output/create": ["newOutputId", "workspacesJson", "focusOpt"], "output/remove": ["outputIdField", "fallbackOutputOpt"], "output/focus": ["outputIdField"],
+        "workspace/move-to-output": ["wsId", "targetOutputField", "activate"],
         "layout/set": ["layout"], "layout/set-ratio": ["ratio"], "layout/rotate-split": ["idOpt"],
         "layout/resize-split": ["workspaceOpt", "resizeSplit"], "config/set": ["config"],
         "window/drop": ["id", "target", "zone"], "window/swap-next": ["idOpt"], "window/swap-previous": ["idOpt"],
@@ -317,6 +319,13 @@
           wsId: () => field("id", select("id", state.workspaceOrder, state.workspaceOrder.at(-1))),
           newWs: () => field("id", h("input", { type: "text", name: "id", value: `ws${state.workspaceOrder.length + 1}` })),
           activate: () => field("activate", h("input", { type: "checkbox", name: "activate", checked: true, style: { width: "auto" } })),
+          newOutputId: () => field("id", h("input", { type: "text", name: "id", value: `output${state.outputOrder.length + 1}` })),
+          workspacesJson: () => field("workspaces (JSON array, optional)", h("input", { type: "text", name: "workspaces", value: "" })),
+          focusOpt: () => field("focus", h("input", { type: "checkbox", name: "focus", style: { width: "auto" } })),
+          outputIdField: () => field("id", select("id", state.outputOrder, state.focusedOutput)),
+          targetOutputField: () =>
+            field("output", select("output", state.outputOrder, state.outputOrder.find((o) => o !== state.focusedOutput) ?? state.outputOrder[0])),
+          fallbackOutputOpt: () => field("fallback", select("fallback", ["", ...state.outputOrder], "")),
           layout: () => field("layout", select("layout", [...Object.keys(LAYOUTS)], "bsp")),
           ratio: () => field("ratio", h("input", { type: "number", name: "ratio", value: 0.65, step: 0.05 })),
           resizeSplit: () =>
@@ -339,7 +348,7 @@
             continue;
           }
           if (el.type === "number") value = Number(value);
-          if (name === "constraints" || name === "rules") value = JSON.parse(value);
+          if (name === "constraints" || name === "rules" || name === "workspaces") value = JSON.parse(value);
           if (name === "resizeSplit") {
             Object.assign(command, JSON.parse(value));
             continue;
