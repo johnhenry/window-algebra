@@ -23,6 +23,10 @@
       .taskbar button[data-status="minimized"] { opacity: 0.6; border-style: dashed; }
       .taskbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
       .taskbar .hint { margin-left: auto; color: var(--faint); font-size: 12px; white-space: nowrap; }
+      .taskbar button[data-wm-urgent] { border-color: var(--urgent, rgb(234 88 12)); animation: urgent-pulse 1s infinite; }
+      .ws-tabs button[data-wm-urgent] { color: var(--urgent, rgb(234 88 12)); }
+      .ws-tabs button[data-wm-urgent]::after { content: "●"; font-size: 8px; margin-left: 2px; }
+      @keyframes urgent-pulse { 50% { box-shadow: 0 0 0 2px var(--urgent, rgb(234 88 12)); } }
       aside { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; min-height: 0; }
       aside section { border-bottom: 1px solid var(--line); }
       aside h2 { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 12px 4px; display: flex; align-items: center; gap: 6px; }
@@ -34,6 +38,7 @@
       .wid { font: 11.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--surface-3); border: 1px solid transparent; cursor: pointer; }
       .wid.focused { border-color: var(--accent); color: var(--accent); }
       .wid.blocked { background: var(--warn-soft); color: var(--warn); }
+      .wid.urgent { outline: 1.5px solid var(--urgent, rgb(234 88 12)); }
       .wid.tiled { border-style: dashed; }
       .layer.painted { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 4px; }
       .wid.min { opacity: 0.5; }
@@ -135,6 +140,7 @@
             <button class="btn small" data-spawn="panel" title="role: panel → layer top">Panel</button>
             <button class="btn small" data-spawn="background" title="layer: background">Background win</button>
             <button class="btn small" data-spawn="system" title="layer: system">System overlay</button>
+            <button class="btn small ghost" id="urgent-demo" title="window/set-urgent on the focused window, after a 3s delay (Alt+U focuses the oldest urgent window)">⚠ Urgent in 3s</button>
           </div>
         </section>
         <section>
@@ -201,6 +207,7 @@
           <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>1</kbd>–<kbd>9</kbd></td><td>move focused window to workspace</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>Z</kbd> / <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>Z</kbd></td><td>undo / redo</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>B</kbd></td><td>blur (window/blur)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>U</kbd></td><td>focus the oldest urgent window, switching workspace if needed (focus/urgent)</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>close focused transient (menu, dialog, …) or leave fullscreen</td></tr>
           <tr><td><kbd>?</kbd></td><td>this sheet</td></tr>
         </table>
@@ -213,6 +220,7 @@
       import {
         createWindowManager, createState, LAYERS, dock, masterStack,
         focusable, modalTarget, blockedWindows, stackingOrder, paintOrder, inTiledBase, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
+        urgentWindows,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
@@ -493,14 +501,20 @@
       // ---------------------------------------------------------------- toolbar
       const renderWorkspaces = () => {
         const state = S();
+        const urgent = urgentWindows(state);
         $("#workspaces").replaceChildren(
-          ...state.workspaceOrder.map((ws, index) =>
-            h("button", { type: "button", "aria-pressed": String(ws === state.activeWorkspace), "data-ws": ws, "data-wm-workspace-target": ws, title: `Alt+${index + 1} · drop a window here to move it` },
+          ...state.workspaceOrder.map((ws, index) => {
+            const wsUrgent = urgent.some((id) => state.windows[id]?.workspace === ws);
+            return h("button", {
+              type: "button", "aria-pressed": String(ws === state.activeWorkspace), "data-ws": ws, "data-wm-workspace-target": ws,
+              ...(wsUrgent ? { "data-wm-urgent": "" } : {}),
+              title: `Alt+${index + 1} · drop a window here to move it${wsUrgent ? " · has an urgent window" : ""}`,
+            },
               ws,
               h("span", { class: "count" }, String(windowsIn(state, ws).filter((w) => w.role === "window").length)),
               h("span", { class: "rm", "data-rm": ws, title: `workspace/remove ${ws}` }, "×"),
-            ),
-          ),
+            );
+          }),
         );
         const layout = activeWorkspace(state).layout;
         $("#layout").value = layout.type;
@@ -567,6 +581,12 @@
           spawn(kind);
         };
       });
+      $("#urgent-demo").onclick = () => {
+        const id = focusedId();
+        if (!id) return toast("Nothing focused", "Focus a window first.", "rejected");
+        toast("Urgency scheduled", `${id} will become urgent in 3s.`);
+        setTimeout(() => wm.setUrgent(id), 3000);
+      };
       $("#help-open").onclick = () => $("#help").classList.add("open");
       $("#help-close").onclick = () => $("#help").classList.remove("open");
       $("#help").onclick = (event) => event.target === $("#help") && $("#help").classList.remove("open");
@@ -575,6 +595,7 @@
       const colorFor = (id) => renderer.elementFor(id)?.style.getPropertyValue("--wa-color") || "var(--faint)";
       const renderTaskbar = () => {
         const state = S();
+        const urgent = new Set(urgentWindows(state));
         const wins = windowsIn(state).filter((w) => w.role === "window" || w.role === "panel");
         $("#taskbar").replaceChildren(
           ...wins.map((win) =>
@@ -582,19 +603,21 @@
               type: "button",
               "data-status": win.status,
               "data-focused": String(win.id === state.focus.window),
-              title: `${win.id} · ${win.status}${isBlocked(state, win.id) ? " · blocked" : ""}`,
+              ...(urgent.has(win.id) ? { "data-wm-urgent": "" } : {}),
+              title: `${win.id} · ${win.status}${isBlocked(state, win.id) ? " · blocked" : ""}${urgent.has(win.id) ? " · urgent" : ""}`,
               onclick: () => (win.id === state.focus.window && win.status !== "minimized" ? wm.minimize(win.id) : wm.focus(win.id)),
             }, h("span", { class: "dot", style: { "--c": colorFor(win.id) } }), h("span", { class: "t" }, win.title || win.id), win.status !== "normal" ? h("span", { class: "chip" }, win.status) : ""),
           ),
-          h("span", { class: "hint" }, "click: focus (restores) · click focused: minimize"),
+          h("span", { class: "hint" }, "click: focus (restores) · click focused: minimize · ⚠ = urgent (Alt+U)"),
         );
       };
 
       const widChip = (state, id, tag = "") => {
         const win = state.windows[id];
+        const urgent = state.urgent.includes(id);
         return h("span", {
-          class: `wid${id === state.focus.window ? " focused" : ""}${isBlocked(state, id) ? " blocked" : ""}${win?.status === "minimized" ? " min" : ""}${tag ? ` ${tag}` : ""}`,
-          title: `${id}${tag ? ` (${tag})` : ""}: click to focus, shift-click to raise, alt-click to lower`,
+          class: `wid${id === state.focus.window ? " focused" : ""}${isBlocked(state, id) ? " blocked" : ""}${win?.status === "minimized" ? " min" : ""}${urgent ? " urgent" : ""}${tag ? ` ${tag}` : ""}`,
+          title: `${id}${tag ? ` (${tag})` : ""}${urgent ? " · urgent" : ""}: click to focus, shift-click to raise, alt-click to lower`,
           onclick: (e) => (e.shiftKey ? wm.raise(id) : e.altKey ? wm.lower(id) : wm.focus(id)),
         }, id);
       };
@@ -608,6 +631,7 @@
             ["focused", focused ? `${focused.id} (${focused.role})` : "—"],
             ["focus history", state.focus.history.slice(-6).join(" → ") || "—"],
             ["focusable", focusable(state).join(", ") || "—"],
+            ["urgent", urgentWindows(state).join(" → ") || "—"],
             ["requested", focused ? fmtRect(focused.placement) : "—"],
             ["actual", focused ? fmtRect(wm.measure()[focused.id]) : "—"],
           ].flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]),
@@ -723,6 +747,7 @@
           KeyD: () => spawn("dialog"),
           KeyZ: () => (event.shiftKey ? wm.redo() : wm.undo()),
           KeyB: () => wm.blur(),
+          KeyU: () => wm.focusUrgent(),
         };
         const fn = actions[event.code];
         if (!fn) return;

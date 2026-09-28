@@ -56,8 +56,8 @@ These candidates were considered and rejected (or left as derived helpers):
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 36 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
-| Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history. |
+| Commands | 38 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history, EWMH/X11-style urgency hints (`window/set-urgent`, `focus/urgent`, `config.urgency.clearOnFocus`). |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), and custom interpreters. |
 | Hybrid | Tiled base plus floating, dialog, popover, and notification layers in a single overlay. |
 | Transforms | mirror, flip, rotate, reverse, mapViews, replace, remove, swap, find, fold. |

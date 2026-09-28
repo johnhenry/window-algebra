@@ -152,6 +152,19 @@ describe("compile: tree → CSS declarations", () => {
     assert.equal(b.attrs.inert, undefined);
   });
 
+  test("urgent windows are marked on the view and in the tab strip", () => {
+    const out = compile(row({}, view("a"), view("b")), { urgent: ["b"] });
+    const [a, b] = viewNodes(out);
+    assert.equal(a.attrs["data-wm-urgent"], undefined);
+    assert.equal(b.attrs["data-wm-urgent"], "");
+
+    const tabbed = compile(stack({ chrome: "tabs", active: "a" }, view("a"), view("b")), { urgent: ["b"] });
+    const tabs = tabbed.children.find((child) => child.tag === "wm-tabs");
+    const [tabA, tabB] = tabs.children;
+    assert.equal(tabA.attrs["data-wm-urgent"], undefined);
+    assert.equal(tabB.attrs["data-wm-urgent"], "");
+  });
+
   test("a view appearing twice becomes a primary plus a projection", () => {
     const [first, second] = viewNodes(compile(row({}, view("logs"), view("logs"))));
     assert.equal(first.key, "view:logs");

@@ -11,6 +11,7 @@ import {
   isBlocked,
   windowsIn,
   bspIds,
+  urgentWindows,
 } from "../src/index.mjs";
 
 const deepFreeze = (value) => {
@@ -239,6 +240,100 @@ describe("focus, stacking and modality", () => {
   test("blur clears focus", () => {
     const state = reduce(withWindows(["a"]), { type: "window/blur" });
     assert.equal(state.focus.window, null);
+  });
+});
+
+describe("urgency hint", () => {
+  test("window/set-urgent marks and clears; defaults to true", () => {
+    let state = withWindows(["a", "b"]);
+    let out = update(state, { type: "window/set-urgent", id: "a" });
+    assert.deepEqual(urgentWindows(out.state), ["a"]);
+    assert.ok(out.events.some((e) => e.type === "window/urgent-changed" && e.id === "a" && e.urgent === true));
+
+    state = reduce(out.state, { type: "window/set-urgent", id: "b", urgent: true });
+    assert.deepEqual(urgentWindows(state), ["a", "b"]);
+
+    out = update(state, { type: "window/set-urgent", id: "a", urgent: false });
+    assert.deepEqual(urgentWindows(out.state), ["b"]);
+    assert.ok(out.events.some((e) => e.type === "window/urgent-changed" && e.id === "a" && e.urgent === false));
+  });
+
+  test("window/set-urgent is a no-op when the state would not change", () => {
+    const state = withWindows(["a"]);
+    const out = update(state, { type: "window/set-urgent", id: "a", urgent: false });
+    assert.equal(out.state, state);
+    assert.deepEqual(out.events, []);
+  });
+
+  test("window/set-urgent rejects unknown windows and non-boolean urgent", () => {
+    const state = withWindows(["a"]);
+    assert.equal(update(state, { type: "window/set-urgent", id: "nope" }).events[0].reason, "unknown-window");
+    assert.equal(update(state, { type: "window/set-urgent", id: "a", urgent: "yes" }).events[0].reason, "invalid-urgent");
+  });
+
+  test("focusing an urgent window clears its urgency (config.urgency.clearOnFocus)", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/set-urgent", id: "b" });
+    const out = update(state, { type: "window/focus", id: "b" });
+    assert.deepEqual(urgentWindows(out.state), []);
+    assert.ok(out.events.some((e) => e.type === "window/urgent-changed" && e.id === "b" && e.urgent === false));
+  });
+
+  test("config.urgency.clearOnFocus: false keeps the hint on focus", () => {
+    let state = withWindows(["a", "b"], { config: { urgency: { clearOnFocus: false } } });
+    state = reduce(state, { type: "window/set-urgent", id: "b" });
+    const out = update(state, { type: "window/focus", id: "b" });
+    assert.deepEqual(urgentWindows(out.state), ["b"]);
+    assert.ok(!out.events.some((e) => e.type === "window/urgent-changed"));
+  });
+
+  test("focus/urgent focuses the oldest urgent window, switching workspace if needed", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "workspace/create", id: "side", activate: true });
+    state = reduce(state, { type: "window/set-urgent", id: "a" });
+    state = reduce(state, { type: "window/set-urgent", id: "b" });
+    assert.equal(state.activeWorkspace, "side");
+
+    const out = update(state, { type: "focus/urgent" });
+    assert.equal(out.state.focus.window, "a");
+    assert.equal(out.state.activeWorkspace, "main");
+    assert.deepEqual(urgentWindows(out.state), ["b"]);
+    assert.ok(out.events.some((e) => e.type === "workspace/activated" && e.id === "main"));
+  });
+
+  test("focus/urgent is rejected when nothing is urgent", () => {
+    const state = withWindows(["a"]);
+    assert.equal(update(state, { type: "focus/urgent" }).events[0].reason, "no-urgent-window");
+  });
+
+  test("closing an urgent window drops it from the urgent list", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/set-urgent", id: "a" });
+    state = reduce(state, { type: "window/close", id: "a" });
+    assert.deepEqual(urgentWindows(state), []);
+  });
+
+  test("invalid config.urgency is rejected", () => {
+    assert.equal(update(createState(), { type: "config/set", urgency: "nope" }).events[0].reason, "invalid-config");
+    assert.equal(
+      update(createState(), { type: "config/set", urgency: { clearOnFocus: "nope" } }).events[0].reason,
+      "invalid-config",
+    );
+  });
+
+  test("urgency survives serialization and replay", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/set-urgent", id: "b" });
+    const restored = JSON.parse(JSON.stringify(state));
+    assert.deepEqual(urgentWindows(restored), ["b"]);
+
+    const commands = [
+      { type: "window/create", id: "a" },
+      { type: "window/create", id: "b" },
+      { type: "window/set-urgent", id: "b" },
+    ];
+    const replayed = replay(createState(), commands);
+    assert.deepEqual(urgentWindows(replayed), ["b"]);
   });
 });
 

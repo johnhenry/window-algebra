@@ -35,6 +35,7 @@ export const CHECKLIST = [
     ["workspace/create"], ["workspace/activate"], ["workspace/remove"],
     ["layout/set"], ["layout/set-ratio"], ["layout/rotate-split"], ["config/set"],
     ["window/drop"], ["window/swap-next"], ["window/swap-previous"], ["window/move-before"], ["window/move-after"], ["window/set-draggable"], ["window/detach"],
+    ["window/set-urgent"], ["focus/urgent"],
     ["extensions", "custom command handlers (extensions)"],
   ]),
   ...items("Rejections", [
@@ -42,6 +43,7 @@ export const CHECKLIST = [
     ["unknown-mode"], ["different-workspaces"], ["last-workspace"], ["invalid-layout"], ["unknown-layout", "unknown-layout (manager)"], ["invalid-ratio"], ["not-bsp"],
     ["unknown-command"], ["invalid-command"],
     ["same-window"], ["unknown-zone"], ["not-tiled"], ["blocked"], ["drag-disabled"], ["not-draggable"], ["zone-disabled"], ["too-small"], ["invalid-config"],
+    ["invalid-urgent"], ["no-urgent-window"],
   ]),
   ...items("Policies", [
     ["focus-raises", "focus vs raise (config.focusRaises)"],
@@ -59,12 +61,14 @@ export const CHECKLIST = [
     ["drop-semantics", "tiled drops: center swaps, edges insert (BSP: split), per layout axis"],
     ["drag-settings", "config.drag: tiled mode, edgeZone, preview, tooSmall; per-layout drag override"],
     ["pinned", "pinned windows (draggable: false)"],
+    ["urgency", "urgency hints (EWMH/X11-style): config.urgency.clearOnFocus, focus/urgent picks the oldest urgent window"],
   ]),
   ...items("Events & effects", [
     ["events", "all event types rendered"],
     ["effect-render", "render effect"],
     ["effect-focus", "WM focus ↔ keyboard focus (attachInput subscribe, focusin)"],
     ["subscribe"],
+    ["window/urgent-changed"],
   ]),
   ...items("State & history", [
     ["createState"], ["createWorkspace"], ["createWindowRecord"],
@@ -160,13 +164,14 @@ export const PAGES = [
       "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable",
       "drop-semantics", "drag-settings", "pinned", "tiled-drag", "drag-preview", "drag-shield", "drag-cancel", "drag-undo",
       "window/detach", "drag-to-float", "float-to-tile", "cross-workspace", "drag-children", "a11y-announce", "touch-longpress",
+      "window/set-urgent", "focus/urgent", "urgency", "window/urgent-changed", "invalid-urgent", "no-urgent-window",
     ],
   },
   {
     href: "./console.html",
     short: "Console",
     title: "Command console",
-    blurb: "Issue any of the 36 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
+    blurb: "Issue any of the 38 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
     covers: [
       ...[
         "window/create", "window/close", "window/focus", "window/blur", "focus/next", "focus/previous", "window/raise", "window/lower", "window/set-layer",
@@ -174,10 +179,12 @@ export const PAGES = [
         "window/set-title", "window/set-constraints", "window/swap", "window/promote", "window/move-to-workspace", "workspace/create", "workspace/activate",
         "workspace/remove", "layout/set", "layout/set-ratio", "layout/rotate-split", "config/set", "extensions",
         "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable", "window/detach",
+        "window/set-urgent", "focus/urgent",
       ],
       "same-window", "unknown-zone", "not-tiled", "blocked", "drag-disabled", "not-draggable", "zone-disabled", "too-small", "invalid-config",
       "missing-id", "duplicate-id", "unknown-parent", "unknown-workspace", "unknown-window", "unknown-layer", "unknown-mode", "different-workspaces",
       "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command",
+      "invalid-urgent", "no-urgent-window", "urgency", "window/urgent-changed",
       "events", "effect-render", "effect-focus", "subscribe", "update", "reduce", "replay", "undo-redo", "history-fns", "serialize", "log-replay",
       "createState", "createWorkspace", "createWindowRecord", "constants", "derive", "presentationContext", "queries", "createWindowManager",
       "compile", "createDomRenderer", "immediateScheduler", "equals", "cascade-close", "modal-graph", "refocus",

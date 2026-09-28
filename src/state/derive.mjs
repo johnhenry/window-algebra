@@ -19,7 +19,7 @@ import {
   bspReconcile,
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
-import { isVisible, isBlocked, inTiledBase } from "./queries.mjs";
+import { isVisible, isBlocked, inTiledBase, urgentWindows } from "./queries.mjs";
 
 const activeOf = (ids, focused, spec) => (ids.includes(spec.active) ? spec.active : ids.includes(focused) ? focused : ids[0]);
 
@@ -143,4 +143,6 @@ export const presentationContext = (state) => ({
   modes: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.mode])),
   roles: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.role])),
   pinned: Object.values(state.windows).filter((win) => win.draggable === false).map((win) => win.id),
+  /** Ids currently marked urgent (window/set-urgent); see focus/urgent. */
+  urgent: urgentWindows(state),
 });

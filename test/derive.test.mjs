@@ -128,4 +128,10 @@ describe("derive: state → presentation tree", () => {
     assert.deepEqual(ctx.blocked, ["a"]);
     assert.equal(ctx.roles.d, "dialog");
   });
+
+  test("presentationContext exposes urgent windows", () => {
+    let state = make([win("a"), win("b")]);
+    state = reduce(state, { type: "window/set-urgent", id: "a" });
+    assert.deepEqual(presentationContext(state).urgent, ["a"]);
+  });
 });

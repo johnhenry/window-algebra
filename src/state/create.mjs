@@ -44,6 +44,13 @@ export const DEFAULT_CONFIG = Object.freeze({
     crossWorkspace: true,
     follow: false,
   }),
+  /**
+   * EWMH/X11-style urgency hints.
+   * - clearOnFocus: focusing an urgent window clears its urgency automatically.
+   */
+  urgency: Object.freeze({
+    clearOnFocus: true,
+  }),
 });
 
 const emptyStack = () => Object.fromEntries(LAYERS.map((layer) => [layer, []]));
@@ -69,13 +76,20 @@ export const createState = ({ workspaces = ["main"], layout, config = {} } = {})
   if (list.length === 0) throw new TypeError("createState(): at least one workspace is required.");
   return {
     version: 1,
-    config: { ...DEFAULT_CONFIG, ...config, drag: { ...DEFAULT_CONFIG.drag, ...config.drag } },
+    config: {
+      ...DEFAULT_CONFIG,
+      ...config,
+      drag: { ...DEFAULT_CONFIG.drag, ...config.drag },
+      urgency: { ...DEFAULT_CONFIG.urgency, ...config.urgency },
+    },
     windows: {},
     workspaces: Object.fromEntries(list.map((ws) => [ws.id, ws])),
     workspaceOrder: list.map((ws) => ws.id),
     activeWorkspace: list[0].id,
     focus: { window: null, history: [] },
     stack: emptyStack(),
+    /** Ids of windows currently marked urgent, oldest first. */
+    urgent: [],
   };
 };
 
