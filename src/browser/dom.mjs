@@ -118,7 +118,22 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       if (element !== reference) place(parent, element, reference);
       previous = element;
       if (child.view === undefined && child.text === undefined) reconcileChildren(element, child.children, live);
-      else if (child.view !== undefined) mountSurface(child, element);
+      else if (child.view !== undefined) {
+        mountSurface(child, element);
+        syncBlocked(element, "data-wm-blocked" in child.attrs);
+      }
+    }
+  };
+
+  /**
+   * A view blocked by a modal keeps pointer hit-testing (so clicks land on it
+   * and are redirected, not passed through to the window underneath) while its
+   * contents are inert: no focus, no input, hidden from assistive tech.
+   */
+  const syncBlocked = (element, blocked) => {
+    for (const child of element.children) {
+      if (blocked) child.setAttribute("inert", "");
+      else child.removeAttribute("inert");
     }
   };
 

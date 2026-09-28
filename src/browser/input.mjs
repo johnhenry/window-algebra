@@ -9,6 +9,10 @@
  * Tab buttons rendered by the compiler carry data-wm-tab="<id>".
  */
 import { createDrag, updateDrag, createResize, updateResize } from "../interaction/drag.mjs";
+import { isBlocked } from "../state/queries.mjs";
+
+/** Elements that handle their own pointer input, even inside a drag handle. */
+const INTERACTIVE = "[data-wm-command], button, a, input, select, textarea, label, [contenteditable]";
 
 /**
  * @param {object} options
@@ -36,9 +40,19 @@ export const attachInput = ({ root, getState, dispatch, snap }) => {
     const win = state.windows[id];
     if (!win) return;
     if (state.focus.window !== id) dispatch({ type: "window/focus", id });
+    // A window blocked by a modal only redirects focus (above); no drags or resizes.
+    if (isBlocked(state, id)) {
+      event.preventDefault();
+      return;
+    }
 
     const handle = event.target.closest?.("[data-wm-handle]");
     if (!handle || win.mode !== "floating" || win.status !== "normal") return;
+    // Controls inside a handle (title-bar buttons, inputs) must keep their own
+    // click: starting a gesture would capture the pointer on the handle and
+    // retarget pointerup/click away from the control.
+    const control = event.target.closest?.(INTERACTIVE);
+    if (control && control !== handle && control.closest?.("[data-wm-handle]") === handle) return;
     const kind = handle.getAttribute("data-wm-handle");
     const origin = { x: event.clientX, y: event.clientY };
     if (kind === "move") {

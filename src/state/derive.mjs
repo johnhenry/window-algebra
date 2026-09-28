@@ -21,7 +21,7 @@ import {
   bspRemove,
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
-import { isVisible, isBlocked } from "./queries.mjs";
+import { isVisible, isBlocked, inTiledBase } from "./queries.mjs";
 
 const activeOf = (ids, focused, spec) => (ids.includes(spec.active) ? spec.active : ids.includes(focused) ? focused : ids[0]);
 
@@ -104,10 +104,7 @@ export const derive = (state, { layouts = {} } = {}) => {
   const fullscreen = visible.find((win) => win.status === "fullscreen");
   if (fullscreen) return overlay({}, view(fullscreen.id));
 
-  const allFloat = ws.layout?.type === "floating";
-  const tiledIds = allFloat
-    ? []
-    : visible.filter((win) => win.role === "window" && win.mode === "tiled" && win.status !== "maximized").map((w) => w.id);
+  const tiledIds = visible.filter((win) => inTiledBase(state, win)).map((w) => w.id);
 
   const interpreter = typeof ws.layout === "function" ? ws.layout : registry[ws.layout?.type];
   if (!interpreter) throw new TypeError(`derive(): no layout interpreter for "${ws.layout?.type}".`);
@@ -131,17 +128,18 @@ export const derive = (state, { layouts = {} } = {}) => {
   if (gapSize) base = transform(base, (node) => (isContainer(node) ? gap({ all: gapSize }, node) : node));
   if (insetSize) base = inset({ all: insetSize }, base);
 
-  // Everything not tiled is layered above, ordered by the stacking model.
+  // Everything not tiled is layered by the stacking model: the background layer
+  // beneath the tiled base, every other layer above it (see `paintOrder`).
   const tiled = new Set(tiledIds);
   const upper = visible.filter((win) => !tiled.has(win.id));
   const rank = new Map(LAYERS.flatMap((layer) => state.stack[layer] ?? []).map((id, i) => [id, i]));
   upper.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   let notificationIndex = 0;
-  const layered = upper.map((win) =>
-    presentFloating(win, state, win.role === "notification" ? notificationIndex++ : 0),
-  );
+  const present = (win) => presentFloating(win, state, win.role === "notification" ? notificationIndex++ : 0);
+  const below = upper.filter((win) => win.layer === "background").map(present);
+  const above = upper.filter((win) => win.layer !== "background").map(present);
 
-  return overlay({}, base, ...layered);
+  return overlay({}, ...below, base, ...above);
 };
 
 /** Non-layout facts the renderer needs: focus and input eligibility. */

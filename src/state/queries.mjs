@@ -48,3 +48,38 @@ export const focusable = (state) =>
 /** Descendants (children, grandchildren, ...) of a window. */
 export const descendantsOf = (state, id) =>
   childrenOf(state, id).flatMap((child) => [child.id, ...descendantsOf(state, child.id)]);
+
+/**
+ * Is a window part of its workspace's tiled base? Tiled windows are laid out
+ * by the layout and painted beneath every non-tiled window except the
+ * background layer, whatever their position in `state.stack`.
+ */
+export const inTiledBase = (state, win) =>
+  Boolean(win) &&
+  state.workspaces[win.workspace]?.layout?.type !== "floating" &&
+  win.role === "window" &&
+  win.mode === "tiled" &&
+  win.status !== "maximized";
+
+/**
+ * Visible windows of the active workspace in the order they are painted,
+ * bottom to top — what `derive` produces, as opposed to `stackingOrder`, the
+ * logical stack across all workspaces:
+ *   background-layer windows → the tiled base → every other layer by stack.
+ * A fullscreen window is painted alone.
+ */
+export const paintOrder = (state) => {
+  const visible = visibleWindows(state);
+  const fullscreen = visible.find((win) => win.status === "fullscreen");
+  if (fullscreen) return [fullscreen.id];
+  const rank = new Map(stackingOrder(state).map((id, i) => [id, i]));
+  const tiled = visible.filter((win) => inTiledBase(state, win)).map((win) => win.id);
+  const upper = visible
+    .filter((win) => !inTiledBase(state, win))
+    .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  return [
+    ...upper.filter((win) => win.layer === "background").map((win) => win.id),
+    ...tiled,
+    ...upper.filter((win) => win.layer !== "background").map((win) => win.id),
+  ];
+};

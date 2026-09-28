@@ -134,7 +134,7 @@ describe("compile: tree → CSS declarations", () => {
     assert.equal(sides.style.padding, "1px 2px 0px 2px");
   });
 
-  test("views are size containers keyed by id with focus/inert/role attributes", () => {
+  test("views are size containers keyed by id with focus/blocked/role attributes", () => {
     const out = compile(row({}, view("a"), view("b")), {
       focused: "a",
       blocked: ["b"],
@@ -146,7 +146,10 @@ describe("compile: tree → CSS declarations", () => {
     assert.equal(a.style["container-type"], "size");
     assert.equal(a.attrs["data-focused"], "");
     assert.equal(a.attrs["aria-label"], "Editor");
-    assert.equal(b.attrs.inert, "");
+    // Blocked views are marked, not inert: an inert element is skipped by
+    // hit-testing, so clicks would fall through to the window underneath.
+    assert.equal(b.attrs["data-wm-blocked"], "");
+    assert.equal(b.attrs.inert, undefined);
   });
 
   test("a view appearing twice becomes a primary plus a projection", () => {

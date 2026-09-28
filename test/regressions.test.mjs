@@ -14,8 +14,10 @@ import {
   update,
   replay,
   find,
+  paintOrder,
+  views,
 } from "../src/index.mjs";
-import { createDomRenderer, createSurfaceRegistry } from "../src/browser/index.mjs";
+import { createDomRenderer, createSurfaceRegistry, attachInput } from "../src/browser/index.mjs";
 import { createFakeDocument } from "./helpers/fake-dom.mjs";
 
 const setup = (options = {}) => {
@@ -222,5 +224,107 @@ describe("manager: unknown layout types are rejected (regression)", () => {
     assert.equal(wm.setLayout({ type: "mine" }).events[0].type, "layout/changed");
     assert.equal(wm.setLayout({ type: "bsp" }).events[0].type, "layout/changed");
     assert.equal(wm.createWorkspace("y").events[0].type, "workspace/created");
+  });
+});
+
+describe("input: title-bar buttons and modal blocking (regression)", () => {
+  const withInput = () => {
+    const { doc, root, renderer } = setup();
+    const wm = createWindowManager({ renderer });
+    const detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+    return { doc, root, renderer, wm, detach };
+  };
+
+  test("a button inside a floating window's move handle neither starts a drag nor captures the pointer", () => {
+    const { doc, root, renderer, wm } = withInput();
+    wm.create({ id: "a" });
+    wm.create({ id: "f", mode: "floating", placement: { x: 10, y: 10, width: 200, height: 100 } });
+    wm.focus("a");
+    const bar = doc.createElement("header");
+    bar.setAttribute("data-wm-handle", "move");
+    let captured = false;
+    bar.setPointerCapture = () => { captured = true; };
+    const min = doc.createElement("button");
+    min.setAttribute("data-wm-command", "window/minimize");
+    bar.append(min);
+    renderer.elementFor("f").append(bar);
+
+    // Before the fix, pointerdown started a move gesture and captured the pointer on
+    // the title bar, so pointerup/click were retargeted and the button never fired.
+    root.dispatch("pointerdown", { target: min, clientX: 50, clientY: 20, pointerId: 1, preventDefault() {} });
+    assert.equal(captured, false);
+    assert.equal(wm.state.focus.window, "f", "pressing a control still focuses its window");
+    root.dispatch("pointermove", { clientX: 150, clientY: 120 });
+    assert.equal(wm.state.windows.f.placement.x, 10, "no drag started");
+    root.dispatch("click", { target: min });
+    assert.equal(wm.state.windows.f.status, "minimized", "one click minimizes an unfocused window");
+  });
+
+  test("a blocked window stays hit-testable: its contents are inert, the view is not", () => {
+    const { doc, renderer, wm } = withInput();
+    wm.create({ id: "p", mode: "floating", placement: { x: 0, y: 0, width: 200, height: 200 } });
+    renderer.elementFor("p").append(doc.createElement("div"));
+    wm.create({ id: "d", role: "dialog", parent: "p", modal: true });
+    const view = renderer.elementFor("p");
+    assert.equal(view.getAttribute("inert"), null, "an inert view would let clicks fall through to the window below");
+    assert.equal(view.getAttribute("data-wm-blocked"), "");
+    assert.ok([...view.children].every((child) => child.getAttribute("inert") === ""));
+    wm.close("d");
+    assert.equal(view.getAttribute("data-wm-blocked"), null);
+    assert.ok([...view.children].every((child) => child.getAttribute("inert") === null));
+  });
+
+  test("clicking a blocked window redirects focus to its modal and starts no gesture", () => {
+    const { doc, root, renderer, wm } = withInput();
+    wm.create({ id: "p", mode: "floating", placement: { x: 0, y: 0, width: 200, height: 200 } });
+    wm.create({ id: "other", mode: "floating", placement: { x: 50, y: 50, width: 200, height: 200 } });
+    wm.create({ id: "d", role: "dialog", parent: "p", modal: true });
+    const bar = doc.createElement("header");
+    bar.setAttribute("data-wm-handle", "move");
+    renderer.elementFor("p").append(bar);
+    const stackBefore = [...wm.state.stack.normal];
+
+    root.dispatch("pointerdown", { target: bar, clientX: 60, clientY: 60, pointerId: 1, preventDefault() {} });
+    assert.equal(wm.state.focus.window, "d");
+    assert.deepEqual(wm.state.stack.normal, stackBefore, "neither the blocked window nor the one beneath is raised");
+    root.dispatch("pointermove", { clientX: 160, clientY: 160 });
+    assert.equal(wm.state.windows.p.placement.x, 0, "blocked windows cannot be dragged");
+  });
+});
+
+describe("paint order: background beneath the tiled base (regression)", () => {
+  const scene = () => {
+    let state = createState();
+    for (const cmd of [
+      { type: "window/create", id: "t1" },
+      { type: "window/create", id: "t2" },
+      { type: "window/create", id: "float", mode: "floating", placement: { x: 0, y: 0, width: 100, height: 100 } },
+      { type: "window/create", id: "wall", mode: "floating", placement: { x: 0, y: 0, width: 100, height: 100 } },
+      { type: "window/set-layer", id: "wall", layer: "background" },
+      { type: "window/focus", id: "t1" },
+    ]) state = update(state, cmd).state;
+    return state;
+  };
+  // Views in document order of the derived overlay = paint order, bottom to top.
+  const painted = (state) => views(derive(state));
+
+  test("background-layer windows are painted below tiled windows, not above them", () => {
+    const state = scene();
+    const order = painted(state);
+    assert.ok(order.indexOf("wall") < order.indexOf("t1"), `background above the tiled base: ${order}`);
+    assert.ok(order.indexOf("t1") < order.indexOf("float"));
+  });
+
+  test("paintOrder() reports what derive() paints; raising a tiled window can't lift it over a floating one", () => {
+    const state = scene();
+    assert.deepEqual(paintOrder(state), painted(state));
+    assert.deepEqual(paintOrder(state), ["wall", "t1", "t2", "float"]);
+    // t1 was focused (and so raised) last, yet it stays in the base beneath "float".
+    assert.equal(state.stack.normal.at(-1), "t1");
+    // As in the UI: pressing the maximize button focuses (and raises) the window first.
+    const focused = update(state, { type: "window/focus", id: "t2" }).state;
+    const maxed = update(focused, { type: "window/maximize", id: "t2" }).state;
+    assert.deepEqual(paintOrder(maxed), painted(maxed));
+    assert.equal(paintOrder(maxed).at(-1), "t2", "a maximized window leaves the base and stacks by rank");
   });
 });

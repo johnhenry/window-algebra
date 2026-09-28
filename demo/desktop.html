@@ -34,6 +34,8 @@
       .wid { font: 11.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--surface-3); border: 1px solid transparent; cursor: pointer; }
       .wid.focused { border-color: var(--accent); color: var(--accent); }
       .wid.blocked { background: var(--warn-soft); color: var(--warn); }
+      .wid.tiled { border-style: dashed; }
+      .layer.painted { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 4px; }
       .wid.min { opacity: 0.5; }
       .graph { padding: 2px 12px 10px; font: 12px/1.7 var(--mono); }
       .graph .node { white-space: nowrap; }
@@ -175,7 +177,7 @@
     <script type="module">
       import {
         createWindowManager, createState, LAYERS, dock, masterStack,
-        focusable, modalTarget, blockedWindows, stackingOrder, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
+        focusable, modalTarget, blockedWindows, stackingOrder, paintOrder, inTiledBase, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, focusEffect, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
@@ -498,11 +500,11 @@
         );
       };
 
-      const widChip = (state, id) => {
+      const widChip = (state, id, tag = "") => {
         const win = state.windows[id];
         return h("span", {
-          class: `wid${id === state.focus.window ? " focused" : ""}${isBlocked(state, id) ? " blocked" : ""}${win?.status === "minimized" ? " min" : ""}`,
-          title: `${id}: click to focus, shift-click to raise, alt-click to lower`,
+          class: `wid${id === state.focus.window ? " focused" : ""}${isBlocked(state, id) ? " blocked" : ""}${win?.status === "minimized" ? " min" : ""}${tag ? ` ${tag}` : ""}`,
+          title: `${id}${tag ? ` (${tag})` : ""}: click to focus, shift-click to raise, alt-click to lower`,
           onclick: (e) => (e.shiftKey ? wm.raise(id) : e.altKey ? wm.lower(id) : wm.focus(id)),
         }, id);
       };
@@ -522,9 +524,11 @@
         );
         $("#layers").replaceChildren(
           ...[...LAYERS].reverse().map((layer) =>
-            h("div", { class: "layer" }, h("span", { class: "name" }, layer), h("span", { class: "ids" }, (state.stack[layer] ?? []).filter((id) => state.windows[id]?.workspace === state.activeWorkspace).map((id) => widChip(state, id)))),
+            h("div", { class: "layer" }, h("span", { class: "name" }, layer), h("span", { class: "ids" }, (state.stack[layer] ?? []).filter((id) => state.windows[id]?.workspace === state.activeWorkspace).map((id) => widChip(state, id, inTiledBase(state, state.windows[id]) ? "tiled" : "")))),
           ),
-          h("div", { class: "note", style: { fontSize: "11.5px", marginTop: "4px" } }, `stackingOrder(): ${stackingOrder(state).length} windows across all workspaces. Shift-click raises, Alt-click lowers.`),
+          h("div", { class: "layer painted" }, h("span", { class: "name" }, "painted ↑"), h("span", { class: "ids" }, [...paintOrder(state)].reverse().map((id) => widChip(state, id, inTiledBase(state, state.windows[id]) ? "tiled" : "")))),
+          h("div", { class: "note", style: { fontSize: "11.5px", marginTop: "4px" } },
+            `Layers show the logical stack (stackingOrder(): ${stackingOrder(state).length} windows, all workspaces). "painted" is paintOrder(), top first: tiled windows form the base of the normal layer, so they always sit beneath floating windows (and above the background layer) however they are raised. Shift-click raises, Alt-click lowers.`),
         );
         // Modal graph: roots are windows without parents in the active workspace.
         const blocked = blockedWindows(state);

@@ -282,8 +282,8 @@ wm-view {
 wm-view[data-focused] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
 wm-view[data-mode="floating"] { box-shadow: var(--shadow); }
 wm-view[data-mode="floating"][data-focused] { box-shadow: 0 0 0 1px var(--accent), var(--shadow-lg); }
-wm-view[inert] { filter: saturate(0.4) brightness(0.92); }
-wm-view[inert]::after {
+wm-view[data-wm-blocked] { filter: saturate(0.4) brightness(0.92); cursor: not-allowed; }
+wm-view[data-wm-blocked]::after {
   content: "blocked by modal";
   position: absolute;
   inset: auto 8px 8px auto;

@@ -313,7 +313,10 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       Object.assign(attrs, { "data-view": id });
       if (occurrence > 1) attrs["data-view-projection"] = String(occurrence);
       if (context.focused === id) attrs["data-focused"] = "";
-      if (blocked.has(id)) attrs.inert = "";
+      // Blocked by a modal: the renderer makes the contents inert but keeps the
+      // view itself hit-testable, so a click on it is not passed through to
+      // whatever lies underneath (inert elements are skipped by hit-testing).
+      if (blocked.has(id)) Object.assign(attrs, { "data-wm-blocked": "", "aria-disabled": "true" });
       if (context.modes?.[id]) attrs["data-mode"] = context.modes[id];
       if (context.roles?.[id]) attrs["data-role"] = context.roles[id];
       if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
@@ -406,6 +409,6 @@ export const BASE_CSS = `
 wm-overlay, wm-row, wm-column, wm-grid, wm-stack { box-sizing: border-box; }
 wm-root, [data-wm-root] { display: block; position: relative; overflow: hidden; }
 [data-wm-root] > wm-overlay { width: 100%; height: 100%; }
-wm-view[inert] { filter: saturate(0.6); }
+wm-view[inert], wm-view[data-wm-blocked] { filter: saturate(0.6); }
 wm-tabs > button[aria-selected="true"] { font-weight: 600; }
 `.trim();

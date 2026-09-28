@@ -44,7 +44,7 @@ export const CHECKLIST = [
     ["focus-raises", "focus vs raise (config.focusRaises)"],
     ["layers", "7 stacking layers"],
     ["modal-graph", "modal graph: nested modals, focus redirection"],
-    ["blocked-inert", "blocked windows render inert"],
+    ["blocked-inert", "blocked windows: inert contents, clicks redirect to the modal"],
     ["cascade-close", "close cascades to child windows"],
     ["refocus", "refocus from focus history"],
     ["focus-restores", "focus restores a minimized window / switches workspace"],
