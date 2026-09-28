@@ -133,6 +133,27 @@ describe("derive: constraints apply to tiled windows (regression)", () => {
     assert.match(rendered, /"min-width":"300px"/);
     assert.ok(!find(tree, (node) => node.type === "size" && node.options.minWidth !== undefined && node.child.id === "a"));
   });
+
+  test("exact aspectRatio becomes CSS aspect-ratio on the tiled view; a range is ignored", () => {
+    let state = createState();
+    state = update(state, { type: "window/create", id: "a", constraints: { aspectRatio: 1.5 } }).state;
+    state = update(state, { type: "window/create", id: "b", constraints: { aspectRatio: { min: 1, max: 2 } } }).state;
+    const tree = derive(state);
+    const wrapperA = find(tree, (node) => node.type === "size" && node.child.type === "view" && node.child.id === "a");
+    assert.deepEqual(wrapperA.options, { aspectRatio: 1.5 });
+    const rendered = JSON.stringify(compile(tree));
+    assert.match(rendered, /"aspect-ratio":"1.5"/);
+    // A range has no single CSS value, so "b" gets no aspectRatio in its size() options
+    // (master-stack still wraps every tiled view in size({ weight }), unrelated to this feature).
+    assert.ok(!find(tree, (node) => node.type === "size" && node.child.id === "b" && node.options.aspectRatio !== undefined));
+  });
+
+  test("widthIncrement/heightIncrement are advisory for tiled windows: no CSS wrapper by themselves", () => {
+    let state = createState();
+    state = update(state, { type: "window/create", id: "a", constraints: { widthIncrement: 10, heightIncrement: 20 } }).state;
+    const tree = derive(state);
+    assert.ok(!find(tree, (node) => node.type === "size" && node.child.id === "a"));
+  });
 });
 
 describe("manager: log stays replayable across undo/redo/load (regression)", () => {

@@ -59,6 +59,7 @@ export const CHECKLIST = [
     ["drop-semantics", "tiled drops: center swaps, edges insert (BSP: split), per layout axis"],
     ["drag-settings", "config.drag: tiled mode, edgeZone, preview, tooSmall; per-layout drag override"],
     ["pinned", "pinned windows (draggable: false)"],
+    ["tiled-aspect-ratio", "exact constraints.aspectRatio becomes CSS aspect-ratio for tiled windows"],
   ]),
   ...items("Events & effects", [
     ["events", "all event types rendered"],
@@ -110,6 +111,7 @@ export const CHECKLIST = [
     ["drag-fns", "createDrag / updateDrag / createResize / updateResize / EDGES"],
     ["drop-fns", "dropZoneAt / dropTargetAt / previewDrop / zoneRect"],
     ["updateRatio", "updateRatio (divider drag)"],
+    ["size-hints", "constrainSize honours aspectRatio, widthIncrement/heightIncrement, baseWidth/baseHeight; sizeToCells"],
   ]),
 ];
 
@@ -203,7 +205,7 @@ export const PAGES = [
       "requested-actual", "tiled-constraints", "measure", "window/move", "window/resize", "window/set-constraints", "container-queries",
       "anchor-css", "anchor-fallback", "anchor", "anchorName", "rect-helpers", "drag-fns", "snap", "createFrameScheduler",
       "drag-move", "resize-edges", "roles", "styleOf", "createDomRenderer", "destroy", "createWindowManager", "attachInput", "px",
-      "window/toggle-floating",
+      "window/toggle-floating", "size-hints", "tiled-aspect-ratio",
     ],
   },
   {
