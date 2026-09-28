@@ -818,6 +818,14 @@ const handlers = {
       if (!isPlainObject(urgency)) return rejected(state, command, "invalid-config");
       if (urgency.clearOnFocus !== undefined && typeof urgency.clearOnFocus !== "boolean") return rejected(state, command, "invalid-config");
     }
+    const snap = patch.snap;
+    if (snap !== undefined) {
+      if (!isPlainObject(snap)) return rejected(state, command, "invalid-config");
+      if (snap.edges !== undefined && typeof snap.edges !== "boolean") return rejected(state, command, "invalid-config");
+      if (snap.threshold !== undefined && !(Number(snap.threshold) >= 0)) return rejected(state, command, "invalid-config");
+      if (snap.magnet !== undefined && !(Number(snap.magnet) >= 0)) return rejected(state, command, "invalid-config");
+      if (snap.zones !== undefined && !["halves-quarters", "halves", "quarters", "off"].includes(snap.zones)) return rejected(state, command, "invalid-config");
+    }
     const config = { ...state.config };
     for (const [key, value] of Object.entries(patch)) {
       config[key] = isPlainObject(value) && isPlainObject(config[key]) ? { ...config[key], ...value } : value;

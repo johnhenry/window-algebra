@@ -98,6 +98,31 @@ describe("migrate()", () => {
     const result = migrate(state);
     assert.deepEqual(result.state, state);
   });
+
+  // config.snap (see interaction/snap.mjs) was added without bumping STATE_VERSION or a
+  // migration step, to avoid clashing with other in-flight feature branches at the same
+  // version. That means a pre-existing version-1 state — saved by `main` or another
+  // branch before this feature — passes straight through `migrate` unchanged, and
+  // config.snap is never backfilled. This is documented, not a bug this feature fixes;
+  // consumers (attachInput's snapConfigOf, the desktop demo's settings panel) must
+  // tolerate state.config.snap being entirely or partially absent.
+  test("a pre-snap version-1 state passes through unchanged: config.snap stays missing", () => {
+    const state = createState();
+    delete state.config.snap;
+    const result = migrate(state);
+    assert.ok(result.ok);
+    assert.equal(result.state, state, "unchanged, current-version states pass through as-is");
+    assert.equal("snap" in result.state.config, false);
+  });
+
+  test("a JSON round-trip of a pre-snap state has no snap key at all, confirming the gap", () => {
+    const state = createState();
+    delete state.config.snap;
+    const roundTripped = JSON.parse(JSON.stringify(state));
+    const result = migrate(roundTripped);
+    assert.ok(result.ok);
+    assert.equal("snap" in result.state.config, false);
+  });
 });
 
 describe("versioning in the manager and replay", () => {

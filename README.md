@@ -259,6 +259,34 @@ The adapter also handles:
 - **Touch.** Touch pointers start a drag with a still long press (`longPress`, default 400 ms); moving first hands the gesture back to the browser, and the context menu is suppressed during the press. `BASE_CSS` sets `touch-action: none` only on `[data-wm-handle]` (and `pan-x` on tab strips), so content inside windows keeps scrolling.
 - **Accessibility.** `announce: true` adds a visually hidden `aria-live` region inside `root` that narrates drag start, the current target ("Release to move before Terminal."), the drop ("Editor moved before Terminal.") and cancellation; pass an element to use your own region, or a function to receive the messages. With `subscribe`, moves made by command (keyboard shortcuts, the API) are announced too. `keyboard: true` moves the focused window with <kbd>Alt</kbd>+<kbd>Shift</kbd>+arrows (`window/move-before` / `window/move-after`) and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>PageUp</kbd>/<kbd>PageDown</kbd> (swap), or pass your own `{ combo: commandType }` map (`DEFAULT_MOVE_KEYS` is the default).
 
+## Snap zones and magnetism (floating windows)
+
+Windows-Snap / macOS-tiling / WM-magnetism, for floating windows only (tiled windows already have `window/drop`, above). Two independent behaviours, both settable with `config/set { snap: { … } }` (merges one level deep):
+
+- **Edge/corner zones.** While dragging a floating window's move handle, approaching a stage edge or corner shows a preview — reusing the drag overlay's drop-zone highlight — of the half, quarter or maximize placement it would take; releasing there applies it with one `window/resize { id, x, y, width, height }` (tagged with the drag's `gesture` token, so the whole gesture is one undo step). A corner takes priority over the plain edge it also touches.
+- **Magnetism.** Moving or resizing a floating window snaps its moving edge(s) onto any other visible window's edges, or the stage's, within `magnet` px — independently on each axis, so only the near edge snaps.
+
+**Settings** (`config.snap`):
+
+- `edges` (default `true`): master switch for the zone preview.
+- `threshold` (default `16`): how close (px) the pointer must be to a stage edge/corner to count as "near" (symmetric: a pointer captured mid-drag may overshoot a little and still count, but not arbitrarily far).
+- `zones`: `"halves-quarters"` (default, both), `"halves"` (edges only, never a corner quarter), `"quarters"` (corners only), or `"off"` (same as `edges: false`).
+- `magnet` (default `8`): how close (px) a moving/resizing edge must be to another edge to snap onto it; `0` disables magnetism.
+
+**Pure helpers** (`src/interaction/snap.mjs`), never touching the DOM or dispatching:
+
+```js
+snapZoneAt(stage, point, config)          // → "maximize" | "left" | "right" | "bottom"
+                                           //   | "top-left" | "top-right" | "bottom-left" | "bottom-right" | null
+snapZoneRect(stage, zone)                 // → { x, y, width, height } within `stage`, or null
+magnetize(rect, others, config)           // → rect translated to snap onto others' edges (move)
+magnetizeResize(rect, others, edge, config) // → rect with only `edge`'s side(s) snapped (resize)
+```
+
+`others` is a plain array of rects — pass the stage's own rect among them for it to attract too, and the measured rects of every other visible window for magnetism against them (a floating window's rect is its `placement`; a tiled window's is whatever the renderer measures). `SNAP_ZONES` lists every zone `snapZoneRect` understands. `constrainSize` (already used by `window/resize`) still clamps a snap zone's width/height to the window's own constraints, so a zone never violates them — it just may not fill the whole half/quarter/stage.
+
+Rejections: `config/set { snap: … }` is rejected (`invalid-config`) for a non-object, a non-boolean `edges`, a negative `threshold` or `magnet`, or a `zones` outside the four listed above.
+
 ## derive: from state to presentation
 
 `derive(state, { layouts, modifiers })` returns an `overlay` for the active workspace. The tiled base comes first, and floating windows, dialogs, popovers, and notifications are layered above it in stacking order. Layout specs are plain data (`{ type: "master-stack", ratio }`, `{ type: "bsp", tree }`, `{ type: "grid", min: 300 }`, …), optionally carrying `modifiers` (see *Layout modifiers*, below). You can add interpreters:
