@@ -211,6 +211,11 @@ export const resolveDrop = (state, { id, target, zone }, drops = DROPS, { allowF
  *
  *   { type: "window/drop", id, target, zone, geometry? }
  *
+ * The dragged window may also be a floating top-level window (dropped into
+ * the layout; it becomes tiled) unless `config.drag.toTiled` is "off". A
+ * floating window has no slot to trade, so its "swap" inserts it in the
+ * target's place instead.
+ *
  * `geometry` (optional) is `{ [id]: { width, height } }`: estimated slot sizes
  * *after* the drop (the input adapter measures its preview). With
  * `config.drag.tooSmall: "reject"` a drop whose slot would violate the dragged
@@ -218,7 +223,8 @@ export const resolveDrop = (state, { id, target, zone }, drops = DROPS, { allowF
  * setting is advisory: the pure core has no pixels to check.
  */
 export const createDropHandler = (drops = DROPS) => (state, command) => {
-  const resolved = resolveDrop(state, command, drops);
+  // A floating window may be dropped into the layout unless config.drag.toTiled is "off".
+  const resolved = resolveDrop(state, command, drops, { allowFloating: state.config.drag?.toTiled !== "off" });
   if (resolved.reason) return rejected(state, command, resolved.reason);
   const { id, target, zone, geometry } = command;
   if (state.config.drag?.tooSmall === "reject" && geometry) {

@@ -379,3 +379,30 @@ describe("input: keyboard focus and WM focus stay in sync (regression)", () => {
     assert.equal(doc.activeElement, outside);
   });
 });
+
+describe("stacking: children stay above a raised parent (regression)", () => {
+  test("focusing or detaching a parent keeps its non-modal dialog above it, so the anchor precedes it", () => {
+    let s = replay(createState(), [
+      { type: "window/create", id: "p", mode: "floating" },
+      { type: "window/create", id: "other", mode: "floating" },
+      { type: "window/create", id: "dlg", role: "dialog", parent: "p" },
+      { type: "window/create", id: "tip", role: "tooltip", parent: "dlg" },
+      { type: "window/focus", id: "other" },
+    ]);
+    s = update(s, { type: "window/focus", id: "p" }).state;
+    const order = paintOrder(s);
+    assert.ok(order.indexOf("dlg") > order.indexOf("p"));
+    assert.ok(order.indexOf("tip") > order.indexOf("dlg"));
+    // derive: the anchored dialog comes after its anchor in the overlay.
+    const ids = views(derive(s));
+    assert.ok(ids.indexOf("dlg") > ids.indexOf("p"));
+
+    let t = replay(createState(), [
+      { type: "window/create", id: "p" },
+      { type: "window/create", id: "q" },
+      { type: "window/create", id: "dlg", role: "dialog", parent: "p", focus: false },
+    ]);
+    t = update(t, { type: "window/detach", id: "p", x: 10, y: 10 }).state;
+    assert.ok(paintOrder(t).indexOf("dlg") > paintOrder(t).indexOf("p"));
+  });
+});

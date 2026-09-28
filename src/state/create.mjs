@@ -27,8 +27,23 @@ export const DEFAULT_CONFIG = Object.freeze({
    * - preview: show where every window would land while dragging
    * - tooSmall: "allow" | "reject" — refuse drops whose resulting slot violates
    *   min/max constraints (needs the geometry estimate the adapter supplies)
+   * - toFloating: "modifier" | "threshold" | "off" — how a dragged tiled window
+   *   detaches as floating (modifier held, or dragged outside the layout)
+   * - toTiled: "modifier" | "always" | "off" — when a dragged floating window
+   *   may be dropped into the layout
+   * - crossWorkspace: dropping on a [data-wm-workspace-target] moves the window there
+   * - follow: ...and activates that workspace
    */
-  drag: Object.freeze({ tiled: "swap-or-insert", edgeZone: 0.25, preview: true, tooSmall: "allow" }),
+  drag: Object.freeze({
+    tiled: "swap-or-insert",
+    edgeZone: 0.25,
+    preview: true,
+    tooSmall: "allow",
+    toFloating: "modifier",
+    toTiled: "modifier",
+    crossWorkspace: true,
+    follow: false,
+  }),
 });
 
 const emptyStack = () => Object.fromEntries(LAYERS.map((layer) => [layer, []]));

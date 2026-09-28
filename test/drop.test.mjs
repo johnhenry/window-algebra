@@ -161,7 +161,9 @@ describe("window/drop: rejections", () => {
   });
   test("not tiled: floating, maximized, minimized, dialogs, the floating layout", () => {
     const s = base();
-    assert.equal(reason(drop(update(s, { type: "window/set-mode", id: "a", mode: "floating" }).state, "a", "b", "center")), "not-tiled");
+    // A floating *dragged* window is refused only when config.drag.toTiled is "off"; a floating target always is.
+    const noTiling = update(s, { type: "config/set", drag: { toTiled: "off" } }).state;
+    assert.equal(reason(drop(update(noTiling, { type: "window/set-mode", id: "a", mode: "floating" }).state, "a", "b", "center")), "not-tiled");
     assert.equal(reason(drop(update(s, { type: "window/set-mode", id: "b", mode: "floating" }).state, "a", "b", "center")), "not-tiled");
     assert.equal(reason(drop(update(s, { type: "window/maximize", id: "a" }).state, "a", "b", "center")), "not-tiled");
     assert.equal(reason(drop(update(s, { type: "window/minimize", id: "b" }).state, "a", "b", "center")), "not-tiled");
@@ -194,14 +196,18 @@ describe("window/drop: rejections", () => {
 
 describe("drag settings", () => {
   test("createState defaults, merged partially from options", () => {
-    assert.deepEqual(createState().config.drag, { tiled: "swap-or-insert", edgeZone: 0.25, preview: true, tooSmall: "allow" });
+    assert.deepEqual(createState().config.drag, {
+      tiled: "swap-or-insert", edgeZone: 0.25, preview: true, tooSmall: "allow",
+      toFloating: "modifier", toTiled: "modifier", crossWorkspace: true, follow: false,
+    });
     assert.deepEqual(createState({ config: { drag: { tiled: "swap" } } }).config.drag.edgeZone, 0.25);
   });
 
   test("config/set merges drag one level deep and validates it", () => {
     const s = update(createState(), { type: "config/set", drag: { edgeZone: 0.1 } }).state;
-    assert.deepEqual(s.config.drag, { tiled: "swap-or-insert", edgeZone: 0.1, preview: true, tooSmall: "allow" });
-    for (const drag of [{ tiled: "sometimes" }, { tooSmall: "maybe" }, { edgeZone: 0.9 }, "swap"]) {
+    assert.equal(s.config.drag.edgeZone, 0.1);
+    assert.equal(s.config.drag.tiled, "swap-or-insert");
+    for (const drag of [{ tiled: "sometimes" }, { tooSmall: "maybe" }, { edgeZone: 0.9 }, "swap", { toFloating: "yes" }, { toTiled: "never" }]) {
       assert.equal(reason(update(s, { type: "config/set", drag })), "invalid-config");
     }
   });

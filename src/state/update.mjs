@@ -14,8 +14,8 @@
 import { LAYERS, STATUSES, createWindowRecord, createWorkspace } from "./create.mjs";
 import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate } from "../layouts/bsp.mjs";
-import { modalTarget, descendantsOf, focusable, isVisible } from "./queries.mjs";
-import { dropHandlers, swapWindows, DRAG_MODES } from "./drops.mjs";
+import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./queries.mjs";
+import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 
 const RENDER = Object.freeze({ type: "render" });
 
@@ -40,9 +40,20 @@ const setLayout = (state, workspaceId, fn) => {
   return setWorkspace(state, workspaceId, { layout: fn(ws.layout) });
 };
 
-const raiseInStack = (state, id) => {
+const raiseOne = (state, id) => {
   const layer = state.windows[id].layer;
   return { ...state, stack: { ...state.stack, [layer]: [...without(state.stack[layer], id), id] } };
+};
+
+/**
+ * Raise a window within its layer, and its descendants (dialogs, sheets,
+ * popovers) above it: a child is never painted beneath its parent, and an
+ * anchored child must follow its anchor for CSS anchor positioning to apply.
+ */
+const raiseInStack = (state, id) => {
+  const rank = new Map(LAYERS.flatMap((layer) => state.stack[layer] ?? []).map((wid, i) => [wid, i]));
+  const children = descendantsOf(state, id).sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
+  return [id, ...children].reduce(raiseOne, state);
 };
 
 const lowerInStack = (state, id) => {
@@ -250,6 +261,29 @@ const handlers = {
     return result(next, [{ type: "window/mode-changed", id: win.id, mode: command.mode }], [RENDER]);
   },
 
+  /**
+   * Pop a tiled window out of the layout as a floating window at a position
+   * (the drag-to-float gesture): one command, one undo step. Width and height
+   * default to the window's stored floating size.
+   */
+  "window/detach"(state, command) {
+    const win = state.windows[command.id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (state.config.drag?.toFloating === "off") return rejected(state, command, "drag-disabled");
+    if (win.draggable === false) return rejected(state, command, "not-draggable");
+    if (!isDroppable(state, win)) return rejected(state, command, "not-tiled");
+    if (isBlocked(state, win.id)) return rejected(state, command, "blocked");
+    const sizeValue = constrainSize(
+      { width: command.width ?? win.placement.width, height: command.height ?? win.placement.height },
+      win.constraints,
+    );
+    const placement = { ...win.placement, ...sizeValue, x: command.x ?? win.placement.x, y: command.y ?? win.placement.y };
+    let next = setWindow(state, win.id, { mode: "floating", placement });
+    next = bspDrop(next, win.workspace, win.id);
+    next = raiseInStack(next, win.id);
+    return result(next, [{ type: "window/detached", id: win.id, placement }], [RENDER]);
+  },
+
   "window/toggle-floating"(state, command) {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
@@ -324,6 +358,8 @@ const handlers = {
       next = bspAdd(next, next.windows[id]);
     }
     const moved = result(next, [{ type: "window/workspace-changed", id: win.id, workspace: target }], [RENDER]);
+    // follow: go with the window (activate its new workspace and focus it).
+    if (command.follow) return merge(moved, applyFocus(next, win.id));
     return merge(moved, refocus(next));
   },
 
@@ -425,6 +461,8 @@ const handlers = {
       if (drag.tiled !== undefined && !DRAG_MODES.includes(drag.tiled)) return rejected(state, command, "invalid-config");
       if (drag.tooSmall !== undefined && drag.tooSmall !== "allow" && drag.tooSmall !== "reject") return rejected(state, command, "invalid-config");
       if (drag.edgeZone !== undefined && !(Number(drag.edgeZone) >= 0 && Number(drag.edgeZone) <= 0.5)) return rejected(state, command, "invalid-config");
+      if (drag.toFloating !== undefined && !["modifier", "threshold", "off"].includes(drag.toFloating)) return rejected(state, command, "invalid-config");
+      if (drag.toTiled !== undefined && !["modifier", "always", "off"].includes(drag.toTiled)) return rejected(state, command, "invalid-config");
     }
     const config = { ...state.config };
     for (const [key, value] of Object.entries(patch)) {

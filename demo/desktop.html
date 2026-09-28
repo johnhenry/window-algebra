@@ -127,6 +127,7 @@
             <button class="btn small" data-spawn="dialog" title="Modal dialog on the focused window">Modal dialog</button>
             <button class="btn small" data-spawn="chain" title="Three nested modals">Nested modals ×3</button>
             <button class="btn small" data-spawn="sheet">Sheet</button>
+            <button class="btn small" data-spawn="attached" title="Non-modal dialog on the focused window: it travels with its parent when you drag it">Attached dialog</button>
             <button class="btn small" data-spawn="menu">Menu</button>
             <button class="btn small" data-spawn="popover">Popover</button>
             <button class="btn small" data-spawn="tooltip">Tooltip</button>
@@ -147,10 +148,17 @@
               <input type="range" id="drag-edge" min="0" max="0.5" step="0.01" /></label>
             <label title="config.drag.tooSmall: reject drops whose slot would violate min/max constraints (the adapter measures its preview)">too small
               <select id="drag-small"><option>allow</option><option>reject</option></select></label>
+            <label title="config.drag.toFloating: detach a dragged tiled window as floating">tiled → floating
+              <select id="drag-float"><option value="modifier">Shift held</option><option value="threshold">drag outside</option><option value="off">off</option></select></label>
+            <label title="config.drag.toTiled: drop a dragged floating window into the layout">floating → tiled
+              <select id="drag-tile"><option value="modifier">Shift held</option><option value="always">always</option><option value="off">off</option></select></label>
+            <label class="inline" title="config.drag.crossWorkspace: drop on a workspace tab to move the window there"><input type="checkbox" id="drag-cross" /> onto workspace tabs</label>
+            <label class="inline" title="config.drag.follow: switch to the workspace a window was dropped on"><input type="checkbox" id="drag-follow" /> follow</label>
             <label class="inline" title="config.drag.preview: ghost outlines of where every window would land"><input type="checkbox" id="drag-preview" /> preview</label>
             <button class="btn small" id="pin" title="window/set-draggable on the focused window (Alt+L)">Pin focused</button>
           </div>
-          <p class="note drag-note">Drag a tiled window's title bar onto another: the center swaps, an edge inserts before/after (BSP: splits). A dashed ghost shows where every window would land; Esc cancels. One drop = one undo step.</p>
+          <p class="note drag-note">Drag a tiled window's title bar onto another: the center swaps, an edge inserts before/after (BSP: splits). Hold <kbd>Shift</kbd> to float it at the pointer; Shift-drag a floating window onto a tiled one to tile it there; drop on a workspace tab to move it. Touch: long-press the title bar. Esc cancels; one drag = one undo step.</p>
+          <p class="note drag-note" aria-hidden="true">announced: <span id="announced">—</span></p>
         </section>
         <section>
           <h2>Focus <span class="spacer"></span><span class="chip" id="focus-chip">—</span></h2>
@@ -181,7 +189,9 @@
           <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>J</kbd> / <kbd>K</kbd></td><td>swap with next / previous tiled window (window/swap-next, window/swap-previous)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>[</kbd> / <kbd>]</kbd></td><td>move before / after its neighbour (window/move-before, window/move-after)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>L</kbd></td><td>pin / unpin: toggle dragging (window/set-draggable)</td></tr>
-          <tr><td><kbd>Esc</kbd> while dragging</td><td>cancel the drag</td></tr>
+          <tr><td><kbd>Esc</kbd> while dragging</td><td>cancel the drag (a floating window goes back)</td></tr>
+          <tr><td><kbd>Shift</kbd> + drag</td><td>tiled title bar: float it at the pointer (window/detach) · floating title bar over a tiled window: tile it there (window/drop)</td></tr>
+          <tr><td>drag onto a workspace tab</td><td>move the window to that workspace (window/move-to-workspace; "follow" switches too)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>raise / lower within its layer</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>T</kbd></td><td>toggle "always on top" (window/set-layer top ⇄ normal)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>M</kbd> · <kbd>X</kbd> · <kbd>F</kbd></td><td>minimize · maximize/restore · fullscreen/restore</td></tr>
@@ -232,9 +242,18 @@
         history: 300,
       });
       // present/simulate let the drag preview use this manager's custom layouts and drop interpreters.
-      const inputOptions = { root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, present: wm.present, simulate: wm.simulate };
+      // `wm` supplies getState, dispatch, subscribe, present, simulate and drops;
+      // announce: true adds an aria-live region narrating drags (mirrored in the panel).
+      const inputOptions = { root, wm, announce: true };
       let detachInput = attachInput(inputOptions);
       syncChrome(wm, root);
+      // Mirror the adapter's (visually hidden) live region in the drag panel.
+      const mirrorAnnouncer = () => {
+        const region = root.querySelector("[data-wm-announcer]");
+        if (!region) return;
+        new MutationObserver(() => ($("#announced").textContent = region.textContent || "—")).observe(region, { childList: true, characterData: true, subtree: true });
+      };
+      mirrorAnnouncer();
 
       const S = () => wm.getState();
       const focusedId = () => S().focus.window;
@@ -279,6 +298,15 @@
                 h("button", { class: "btn small", onclick: () => spawn("sheet", { parent: id }) }, "Sheet"),
                 h("button", { class: "btn small primary", "data-wm-command": "window/close" }, "OK"),
               ),
+            ),
+          );
+        },
+        attached: (id) => (el) => {
+          const win = S().windows[id];
+          el.append(
+            h("div", { class: "dialog-body" },
+              h("p", {}, "A non-modal dialog attached to ", h("code", {}, win.parent), ". Drag the parent anywhere (another slot, Shift to float, onto a workspace tab): this travels with it."),
+              h("div", { class: "acts" }, h("button", { class: "btn small primary", "data-wm-command": "window/close" }, "Close")),
             ),
           );
         },
@@ -340,6 +368,7 @@
         floating: { mode: "floating" },
         dialog: { role: "dialog", modal: true, placement: { width: 380, height: 190 } },
         sheet: { role: "sheet", modal: true, placement: { width: 340 } },
+        attached: { role: "dialog", placement: { width: 280, height: 150 } },
         menu: { role: "menu", placement: { width: 200, height: 250 }, anchorSide: { side: "bottom", align: "start", offset: 2 } },
         popover: { role: "popover", placement: { width: 220, height: 96 }, anchorSide: { side: "right", align: "start", offset: 6 } },
         tooltip: { role: "tooltip", placement: { width: 210, height: 36 }, anchorSide: { side: "top", align: "center", offset: 6 } },
@@ -348,14 +377,14 @@
         background: { mode: "floating", layer: "background", placement: { x: 140, y: 120, width: 360, height: 240 } },
         system: { role: "panel", layer: "system", placement: { x: 24, y: 24, width: 230, height: 34 }, focus: false },
       };
-      const TITLES = { app: "App", floating: "Floating", dialog: "Dialog", sheet: "Sheet", menu: "Menu", popover: "Popover", tooltip: "Tooltip", notification: "Notice", panel: "Clock", background: "Wallpaper app", system: "Recorder" };
+      const TITLES = { attached: "Attached", app: "App", floating: "Floating", dialog: "Dialog", sheet: "Sheet", menu: "Menu", popover: "Popover", tooltip: "Tooltip", notification: "Notice", panel: "Clock", background: "Wallpaper app", system: "Recorder" };
 
       const spawn = (kind, options = {}) => {
         const n = ++seq;
         const bodyKind = kind === "floating" || kind === "background" ? "app" : kind;
         const id = `${kind === "background" ? "bg" : kind === "system" ? "sys" : kind}-${n}`;
         const { anchorSide, ...base } = KIND_OPTIONS[kind];
-        const needsParent = ["dialog", "sheet", "menu", "popover", "tooltip"].includes(kind);
+        const needsParent = ["dialog", "sheet", "attached", "menu", "popover", "tooltip"].includes(kind);
         const parent = options.parent ?? (needsParent ? focusedId() : undefined);
         if (needsParent && !parent) {
           toast("Nothing focused", `A ${kind} needs a parent window — focus one first.`, "rejected");
@@ -363,7 +392,7 @@
         }
         const title = options.title ?? `${TITLES[kind]} ${n}`;
         const bare = ["menu", "popover", "tooltip", "notification", "system"].includes(kind);
-        const actions = kind === "dialog" || kind === "sheet" ? ["close"] : kind === "panel" ? ["close"] : ["min", "max", "float", "close"];
+        const actions = kind === "dialog" || kind === "sheet" || kind === "attached" ? ["close"] : kind === "panel" ? ["close"] : ["min", "max", "float", "close"];
         surfaces.set(id, windowSurface({ id, title, color: SWATCHES[n % SWATCHES.length], actions, bare, body: BODIES[bodyKind](id, options.extra) }));
         const placement = { ...(base.placement ?? {}) };
         if (kind === "floating" || kind === "app") Object.assign(placement, { x: 60 + (n % 7) * 28, y: 40 + (n % 7) * 24 });
@@ -466,7 +495,7 @@
         const state = S();
         $("#workspaces").replaceChildren(
           ...state.workspaceOrder.map((ws, index) =>
-            h("button", { type: "button", "aria-pressed": String(ws === state.activeWorkspace), "data-ws": ws, title: `Alt+${index + 1}` },
+            h("button", { type: "button", "aria-pressed": String(ws === state.activeWorkspace), "data-ws": ws, "data-wm-workspace-target": ws, title: `Alt+${index + 1} · drop a window here to move it` },
               ws,
               h("span", { class: "count" }, String(windowsIn(state, ws).filter((w) => w.role === "window").length)),
               h("span", { class: "rm", "data-rm": ws, title: `workspace/remove ${ws}` }, "×"),
@@ -483,6 +512,10 @@
         $("#edge-out").textContent = Number(drag.edgeZone).toFixed(2);
         $("#drag-small").value = drag.tooSmall;
         $("#drag-preview").checked = drag.preview;
+        $("#drag-float").value = drag.toFloating;
+        $("#drag-tile").value = drag.toTiled;
+        $("#drag-cross").checked = drag.crossWorkspace;
+        $("#drag-follow").checked = drag.follow;
         const focused = focusedWindow(state);
         $("#pin").textContent = focused?.draggable === false ? "Unpin focused" : "Pin focused";
         $("#drag-chip").textContent = `effective: ${layout.drag ?? drag.tiled}`;
@@ -492,6 +525,10 @@
       $("#drag-edge").oninput = (event) => setDrag({ edgeZone: Number(event.target.value) });
       $("#drag-small").onchange = (event) => setDrag({ tooSmall: event.target.value });
       $("#drag-preview").onchange = (event) => setDrag({ preview: event.target.checked });
+      $("#drag-float").onchange = (event) => setDrag({ toFloating: event.target.value });
+      $("#drag-tile").onchange = (event) => setDrag({ toTiled: event.target.value });
+      $("#drag-cross").onchange = (event) => setDrag({ crossWorkspace: event.target.checked });
+      $("#drag-follow").onchange = (event) => setDrag({ follow: event.target.checked });
       $("#drag-layout").onchange = (event) => {
         const { drag: _drag, ...spec } = activeWorkspace(S()).layout;
         wm.setLayout(event.target.value ? { ...spec, drag: event.target.value } : spec);
@@ -513,6 +550,7 @@
       $("#snap").onchange = (event) => {
         detachInput();
         detachInput = attachInput({ ...inputOptions, snap: event.target.checked ? 16 : undefined });
+        mirrorAnnouncer();
       };
       $("#undo").onclick = () => wm.undo();
       $("#redo").onclick = () => wm.redo();

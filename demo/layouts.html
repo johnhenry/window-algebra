@@ -81,7 +81,8 @@
           </div>
           <div class="keys">
             <span><kbd>1</kbd>–<kbd>0</kbd> layout</span><span><kbd>n</kbd> new</span><span><kbd>x</kbd> close</span><span><kbd>j</kbd>/<kbd>k</kbd> focus</span><span><kbd>Enter</kbd> promote</span><span><kbd>[</kbd>/<kbd>]</kbd> ratio</span><span><kbd>r</kbd> rotate</span>
-            <span><kbd>s</kbd>/<kbd>S</kbd> swap next/prev</span><span><kbd>,</kbd>/<kbd>.</kbd> move before/after</span><span>drag a title bar: swap / insert</span>
+            <span><kbd>s</kbd>/<kbd>S</kbd> swap next/prev</span><span><kbd>,</kbd>/<kbd>.</kbd> move before/after</span><span><kbd>Alt</kbd><kbd>Shift</kbd><kbd>←</kbd>/<kbd>→</kbd> move · <kbd>PgUp</kbd>/<kbd>PgDn</kbd> swap (adapter keyboard)</span>
+            <span>drag a title bar: swap / insert · <kbd>Shift</kbd>-drag: float / tile · drag tabs to reorder · touch: long-press</span>
           </div>
           <div class="dragset" id="dragset">
             <span class="title" title="config.drag">Drag</span>
@@ -89,7 +90,10 @@
             <label class="inline" title="config.drag.edgeZone">edge <input type="range" id="drag-edge" min="0" max="0.5" step="0.01" style="width: 80px" /> <output id="edge-out"></output></label>
             <label class="inline" title="config.drag.tooSmall">too small <select id="drag-small"><option>allow</option><option>reject</option></select></label>
             <label class="inline" title="config.drag.preview"><input type="checkbox" id="drag-preview" /> preview</label>
+            <label class="inline" title="config.drag.toFloating">to floating <select id="drag-float"><option>modifier</option><option>threshold</option><option>off</option></select></label>
+            <label class="inline" title="config.drag.toTiled">to tiled <select id="drag-tile"><option>modifier</option><option>always</option><option>off</option></select></label>
           </div>
+          <div class="note" id="announced" style="padding: 0 12px 6px" title="attachInput({ announce }) messages (also sent to an aria-live region)">announcements appear here</div>
           <div class="note" id="status" style="padding: 0 12px 4px"></div>
           <div class="note" id="hover" style="padding: 0 12px 8px; font-family: var(--mono); font-size: 11.5px" title="Pure helpers, evaluated as you hover the stage: dropZoneAt, dropTargetAt and previewDrop for the focused window">hover the stage…</div>
         </div>
@@ -165,7 +169,10 @@
         history: true,
       });
       // present/simulate: the drag preview derives custom layouts (dock, spotlight) like the manager does.
-      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: 8, present: wm.present, simulate: wm.simulate });
+      // `wm` supplies getState, dispatch, subscribe, present, simulate and drops.
+      // keyboard: true moves the focused window with Alt+Shift+arrows / PageUp / PageDown;
+      // announce receives every drag narration (a screen reader would get it from an aria-live region).
+      attachInput({ root, wm, snap: 8, keyboard: true, announce: (message) => ($("#announced").textContent = message) });
       syncChrome(wm, root);
 
       let counter = 0;
@@ -326,6 +333,8 @@
         $("#edge-out").textContent = Number(drag.edgeZone).toFixed(2);
         $("#drag-small").value = drag.tooSmall;
         $("#drag-preview").checked = drag.preview;
+        $("#drag-float").value = drag.toFloating;
+        $("#drag-tile").value = drag.toTiled;
         const focused = wm.state.focus.window;
         $("#status").textContent = `${Object.keys(wm.state.windows).length} windows · focused ${focused ?? "none"}${lastRejection ? ` · last rejection: ${lastRejection}` : ""}`;
       };
@@ -375,6 +384,8 @@
       $("#drag-edge").oninput = (e) => setDrag({ edgeZone: Number(e.target.value) });
       $("#drag-small").onchange = (e) => setDrag({ tooSmall: e.target.value });
       $("#drag-preview").onchange = (e) => setDrag({ preview: e.target.checked });
+      $("#drag-float").onchange = (e) => setDrag({ toFloating: e.target.value });
+      $("#drag-tile").onchange = (e) => setDrag({ toTiled: e.target.value });
 
       document.addEventListener("keydown", (event) => {
         if (isTyping(event) || event.metaKey || event.ctrlKey || event.altKey) return;
