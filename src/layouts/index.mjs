@@ -135,3 +135,4 @@ export const spiral = ({ ratio = 0.5, ratios } = {}, ids) => {
 };
 
 export * from "./bsp.mjs";
+export * from "./tree.mjs";
