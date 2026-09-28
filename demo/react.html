@@ -9,6 +9,10 @@
       .network-note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
       .network-note code { background: var(--surface); border-radius: 4px; padding: 0 4px; }
       #stage-host { margin: 8px 16px 16px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; height: 60vh; }
+      /* WindowManagerStage's host `<div class="stage">` is an ordinary block
+         element sized by its content; without an explicit height it collapses
+         to near zero (views end up ~1 line tall) instead of filling #stage-host. */
+      #stage-host > .stage { height: 100%; }
       .win { display: grid; grid-template-rows: auto 1fr; height: 100%; }
       .win header { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; padding: 4px 8px; border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: 8px 8px 0 0; user-select: none; }
       [data-mode="floating"] .win header { cursor: move; }
