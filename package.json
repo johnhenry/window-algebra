@@ -11,7 +11,9 @@
     "./algebra": "./src/algebra/nodes.mjs",
     "./transforms": "./src/algebra/transforms.mjs",
     "./layouts": "./src/layouts/index.mjs",
-    "./css": "./src/css/compile.mjs"
+    "./css": "./src/css/compile.mjs",
+    "./react": "./src/bindings/react.mjs",
+    "./element": "./src/bindings/element.mjs"
   },
   "files": [
     "src"

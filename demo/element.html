@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>&lt;wa-stage&gt; custom element</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      wa-stage { display: block; margin: 8px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+      .note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); }
+      .note code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar">
+      <button class="btn small" id="new">New window</button>
+      <button class="btn small" id="close">Close focused</button>
+      <select id="layout" aria-label="Layout">
+        <option value="master-stack">master-stack</option>
+        <option value="bsp">bsp</option>
+        <option value="columns">columns</option>
+        <option value="tabs">tabs</option>
+        <option value="monocle">monocle</option>
+      </select>
+      <span class="sep"></span>
+      <button class="btn small" id="undo">Undo</button>
+      <button class="btn small" id="redo">Redo</button>
+      <span class="sep"></span>
+      <button class="btn small" id="reconfigure">Swap wm (.configure)</button>
+    </nav>
+    <p class="note">
+      Works entirely offline: no framework, no build step. <code>&lt;wa-stage&gt;</code> is a plain
+      <code>HTMLElement</code> subclass that owns its own window manager, DOM renderer and input adapter for as long
+      as it is connected, and exposes the live manager as <code>.wm</code>.
+    </p>
+    <wa-stage id="stage" class="stage" aria-label="window-algebra stage"></wa-stage>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createSurfaceRegistry } from "../src/browser/index.mjs";
+      import { defineWindowAlgebraElement } from "../src/bindings/element.mjs";
+      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+
+      initPage({ current: "./element.html", title: "<wa-stage> custom element" });
+
+      // Register the element once. Nothing here needs a browser build step —
+      // `defineWindowAlgebraElement` just calls the platform's own
+      // `customElements.define`.
+      defineWindowAlgebraElement("wa-stage");
+
+      const surfaces = createSurfaceRegistry();
+      let counter = 0;
+      const open = (wm, options = {}) => {
+        const id = options.id ?? `w${++counter}`;
+        const title = options.title ?? `Window ${counter}`;
+        surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${id}: rendered by <wa-stage>'s own DOM renderer.`) }));
+        wm.create({ id, title, ...options });
+        return id;
+      };
+
+      const startWm = () => {
+        const wm = createWindowManager({ state: createState({ config: { gap: 6, inset: 6 } }), history: 200 });
+        open(wm, { title: "Editor" });
+        open(wm, { title: "Terminal" });
+        open(wm, { title: "Browser" });
+        return wm;
+      };
+
+      const stage = document.getElementById("stage");
+      let wm = startWm();
+      stage.configure({ wm, surfaceFor: surfaces });
+      syncChrome(wm, stage);
+
+      const focused = () => stage.wm.state.focus.window;
+      document.getElementById("new").onclick = () => open(stage.wm);
+      document.getElementById("close").onclick = () => focused() && stage.wm.close(focused());
+      document.getElementById("layout").onchange = (event) => stage.wm.setLayout({ type: event.target.value });
+      document.getElementById("undo").onclick = () => stage.wm.undo();
+      document.getElementById("redo").onclick = () => stage.wm.redo();
+      // Demonstrates .configure() re-attaching live: a brand-new manager (and
+      // windows) replaces the old one without recreating the element itself.
+      document.getElementById("reconfigure").onclick = () => {
+        wm = startWm();
+        stage.configure({ wm, surfaceFor: surfaces });
+        syncChrome(wm, stage);
+      };
+
+      window.stage = stage;
+    </script>
+  </body>
+</html>

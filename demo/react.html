@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React bindings</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      .network-note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+      .network-note code { background: var(--surface); border-radius: 4px; padding: 0 4px; }
+      #stage-host { margin: 8px 16px 16px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; height: 60vh; }
+      .win { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+      .win header { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; padding: 4px 8px; border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: 8px 8px 0 0; user-select: none; }
+      [data-mode="floating"] .win header { cursor: move; }
+      .win header strong { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+      .win header button { flex: none; font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; }
+      .win .body { padding: 12px; overflow: auto; color: var(--muted); }
+      .win .body em { color: var(--accent); font-style: normal; font-weight: 600; }
+      .grip { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+      #error { margin: 16px; padding: 12px 14px; border-radius: 8px; border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--line)); color: var(--danger); font: 13px var(--mono); display: none; }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar" id="toolbar" hidden>
+      <button class="btn small" id="new">New window</button>
+      <button class="btn small" id="close">Close focused</button>
+      <select id="layout" aria-label="Layout">
+        <option value="master-stack">master-stack</option>
+        <option value="bsp">bsp</option>
+        <option value="columns">columns</option>
+        <option value="tabs">tabs</option>
+        <option value="monocle">monocle</option>
+      </select>
+      <span class="sep"></span>
+      <button class="btn small" id="undo">Undo</button>
+      <button class="btn small" id="redo">Redo</button>
+      <span class="chip" id="count"></span>
+    </nav>
+    <p class="network-note">
+      <strong>Needs network access.</strong> This page loads React and react-dom from
+      <code>esm.sh</code> over the network (no dependency is added to this package — <code>src/bindings/react.mjs</code>
+      itself imports nothing but the library's own modules). Everything else on this hub works fully offline; see
+      <a href="./element.html">&lt;wa-stage&gt;</a> for the same idea with zero network dependency.
+    </p>
+    <div id="stage-host"></div>
+    <div id="error"></div>
+
+    <script type="module">
+      import { initPage } from "./shared/kit.mjs";
+      initPage({ current: "./react.html", title: "React bindings" });
+
+      const errorEl = document.getElementById("error");
+      const showError = (message) => {
+        errorEl.textContent = message;
+        errorEl.style.display = "block";
+      };
+
+      try {
+        const React = (await import("https://esm.sh/react@18")).default;
+        const { createRoot } = await import("https://esm.sh/react-dom@18/client");
+        const { createPortal } = await import("https://esm.sh/react-dom@18");
+        const { createState } = await import("../src/index.mjs");
+        const { createReactBindings } = await import("../src/bindings/react.mjs");
+
+        const { useWindowManager, useWindowState, WindowManagerStage } = createReactBindings(React);
+        const { createElement: e, useState, useRef } = React;
+
+        let counter = 0;
+        const nextId = () => `w${++counter}`;
+
+        // A window's content is an ordinary React component — state, effects,
+        // context all work — mounted as a portal into its view by WindowManagerStage.
+        const WindowSurface = ({ wm, id, title }) => {
+          const [note, setNote] = useState("");
+          return e(
+            "div",
+            { className: "win" },
+            e(
+              "header",
+              { "data-wm-handle": "move" },
+              e("strong", {}, title),
+              e("button", { "data-wm-command": "window/toggle-floating", title: "Float" }, "⧉"),
+              e("button", { "data-wm-command": "window/close", title: "Close" }, "×"),
+            ),
+            e(
+              "div",
+              { className: "body" },
+              e("p", {}, id, ": rendered by React, mounted as a portal into the WM's own DOM."),
+              e("p", {}, e("em", {}, note.length), " characters typed — this is real React state, untouched by layout changes."),
+              e("input", {
+                placeholder: "type here, then change layout",
+                value: note,
+                onChange: (event) => setNote(event.target.value),
+              }),
+            ),
+            e("div", { className: "grip", "data-wm-handle": "resize-se" }),
+          );
+        };
+
+        const App = () => {
+          const { wm } = useWindowManager({ state: createState({ config: { gap: 6, inset: 6 } }), history: 200 });
+          const wmRef = useRef(wm);
+          wmRef.current = wm;
+          const count = useWindowState(wm, (state) => Object.keys(state.windows).length);
+
+          useState(() => {
+            wm.create({ id: nextId(), title: "Editor" });
+            wm.create({ id: nextId(), title: "Terminal" });
+            wm.create({ id: nextId(), title: "Browser" });
+          });
+
+          // Wire the toolbar (plain DOM, outside React) to this render's wm.
+          document.getElementById("count").textContent = `${count} window${count === 1 ? "" : "s"}`;
+          document.getElementById("new").onclick = () => wm.create({ id: nextId(), title: `Window ${counter}` });
+          document.getElementById("close").onclick = () => wm.state.focus.window && wm.close(wm.state.focus.window);
+          document.getElementById("layout").onchange = (event) => wm.setLayout({ type: event.target.value });
+          document.getElementById("undo").onclick = () => wm.undo();
+          document.getElementById("redo").onclick = () => wm.redo();
+
+          return e(WindowManagerStage, {
+            wm,
+            className: "stage",
+            renderSurface: (id) => e(WindowSurface, { wm, id, title: wm.getState().windows[id]?.title ?? id }),
+            createPortal,
+          });
+        };
+
+        createRoot(document.getElementById("stage-host")).render(e(App));
+        document.getElementById("toolbar").hidden = false;
+      } catch (error) {
+        showError(`Could not load React from esm.sh (no network access?): ${error.message}`);
+      }
+    </script>
+  </body>
+</html>
