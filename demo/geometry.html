@@ -133,9 +133,30 @@
             <label class="inline"><input type="checkbox" id="fallback" /> force JS fallback</label>
             <select id="side" aria-label="side"><option>right</option><option>bottom</option><option>top</option><option>left</option></select>
             <select id="align" aria-label="align"><option>center</option><option>start</option><option>end</option></select>
+            <select id="gravity" aria-label="gravity" title="grow direction from the attach point (default: same as side)">
+              <option value="">gravity: side</option><option>top</option><option>bottom</option><option>left</option><option>right</option>
+            </select>
             <button class="btn small" id="reanchor">re-anchor</button>
           </div>
-          <div class="note">The tooltip is anchored to <code>editor</code> with <code>anchor({ to, side, align, offset })</code>. The fallback destroys the renderer and creates a new one with <code>anchorFallback: true</code>, which strips the CSS anchor declarations and computes <code>left/top</code> in JS.</div>
+          <div class="note">Positioner rules (<code>xdg_positioner</code>-style constraint adjustment): pick which axes may <strong>flip</strong> to the opposite side/align, <strong>slide</strong> back into the stage, or <strong>resize</strong> to fit it, then use "pin near edge" to force an overflow and watch which one fires.</div>
+          <div class="row">
+            <span class="note" style="width: 4.5em">flip</span>
+            <label class="inline"><input type="checkbox" id="flip-x" checked /> x</label>
+            <label class="inline"><input type="checkbox" id="flip-y" checked /> y</label>
+            <span class="sep"></span>
+            <span class="note" style="width: 4.5em">slide</span>
+            <label class="inline"><input type="checkbox" id="slide-x" /> x</label>
+            <label class="inline"><input type="checkbox" id="slide-y" /> y</label>
+            <span class="sep"></span>
+            <span class="note" style="width: 4.5em">resize</span>
+            <label class="inline"><input type="checkbox" id="resize-x" /> x</label>
+            <label class="inline"><input type="checkbox" id="resize-y" /> y</label>
+          </div>
+          <div class="row">
+            <button class="btn small" id="pin-corner">pin editor near a stage corner (forces overflow)</button>
+            <button class="btn small" id="unpin-corner">un-pin</button>
+          </div>
+          <div class="note">The tooltip is anchored to <code>editor</code> with <code>anchor({ to, side, align, offset, gravity, flip, slide, resize })</code>. The fallback destroys the renderer and creates a new one with <code>anchorFallback: true</code>, which strips the CSS anchor declarations and runs the same <code>positionPopup</code> math in JS — the only place <code>slide</code>/<code>resize</code> take effect, since CSS anchor positioning can't express either.</div>
           <pre class="code" id="anchor-style"></pre>
         </section>
         <section>
@@ -157,7 +178,7 @@
     </main>
 
     <script type="module">
-      import { createWindowManager, createState, geometry, createDrag, updateDrag, createResize, updateResize, EDGES, anchorName, px } from "../src/index.mjs";
+      import { createWindowManager, createState, geometry, createDrag, updateDrag, createResize, updateResize, EDGES, anchorName, px, positionPopup } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, fmtRect } from "./shared/kit.mjs";
 
@@ -201,12 +222,39 @@
       let detach = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
       syncChrome(wm, root);
       for (const [id, title, , options] of defs) wm.create({ id, title, ...options });
+      const axesFrom = (xId, yId) => [$(xId).checked && "x", $(yId).checked && "y"].filter(Boolean);
+      const positionerOptions = () => ({
+        to: "editor",
+        side: $("#side").value,
+        align: $("#align").value,
+        offset: 6,
+        gravity: $("#gravity").value || undefined,
+        flip: axesFrom("#flip-x", "#flip-y"),
+        slide: axesFrom("#slide-x", "#slide-y"),
+        resize: axesFrom("#resize-x", "#resize-y"),
+      });
       const anchorTip = () => {
         if (wm.state.windows.tip) wm.close("tip");
-        wm.create({ id: "tip", title: "Tip", role: "tooltip", parent: "editor", focus: false, placement: { width: 150, height: 34 }, anchor: { to: "editor", side: $("#side").value, align: $("#align").value, offset: 6 } });
+        wm.create({ id: "tip", title: "Tip", role: "tooltip", parent: "editor", focus: false, placement: { width: 150, height: 34 }, anchor: positionerOptions() });
       };
       anchorTip();
       wm.focus("palette");
+
+      // Push editor's floating-equivalent placement is not available (it's tiled), so
+      // "pin near a corner" instead resizes the stage down and moves the tooltip's own
+      // requested rect toward a corner via window/resize on "tip" won't help either
+      // (tiled anchors follow their target). Instead we shrink the stage width slider,
+      // which pushes "editor" toward the top-left, and offer a one-click shortcut for it.
+      let pinnedStageWidth = null;
+      $("#pin-corner").onclick = () => {
+        pinnedStageWidth = $("#stage-w").value;
+        $("#stage-w").value = "35";
+        $("#stage-w").dispatchEvent(new Event("input"));
+      };
+      $("#unpin-corner").onclick = () => {
+        $("#stage-w").value = pinnedStageWidth ?? "100";
+        $("#stage-w").dispatchEvent(new Event("input"));
+      };
 
       // ---------------------------------------------------------------- measuring & drawing
       const marks = $("#marks");
@@ -362,6 +410,19 @@
         for (const decl of style.split("; ").filter((d) => /position|anchor|left|top|margin|self/.test(d))) lines.push(`  ${decl}`);
         if (renderer.anchorFallback && el) lines.push(`  (inline) left: ${el.style.left}; top: ${el.style.top}`);
         if (a) lines.push(`actual: ${fmtRect(a)}`);
+        // positionPopup is pure, so it can compute (and show) the same placement
+        // the JS anchor fallback used, from the same measured rects — including
+        // which axis, if any, ended up flipped, slid or resized.
+        const m = renderer.measure();
+        if (m.editor && m.tip) {
+          const stage = root.getBoundingClientRect();
+          const placed = positionPopup(m.editor, { width: m.tip.width, height: m.tip.height }, { width: stage.width, height: stage.height }, positionerOptions());
+          lines.push(
+            `positionPopup(editor, tip, stage) → x:${placed.x.toFixed(0)} y:${placed.y.toFixed(0)} w:${placed.width.toFixed(0)} h:${placed.height.toFixed(0)}`,
+            `  side:${placed.side} align:${placed.align} gravity:${placed.gravity}`,
+            `  flipped:${JSON.stringify(placed.flipped)} slid:${JSON.stringify(placed.slid)} resized:${JSON.stringify(placed.resized)}`,
+          );
+        }
         $("#anchor-style").textContent = lines.join("\n");
       };
       $("#fallback").onchange = (event) => {
@@ -372,8 +433,9 @@
         requestAnimationFrame(() => requestAnimationFrame(draw));
       };
       $("#reanchor").onclick = anchorTip;
-      $("#side").onchange = anchorTip;
-      $("#align").onchange = anchorTip;
+      for (const id of ["#side", "#align", "#gravity", "#flip-x", "#flip-y", "#slide-x", "#slide-y", "#resize-x", "#resize-y"]) {
+        $(id).addEventListener("change", anchorTip);
+      }
 
       // ---------------------------------------------------------------- primitives
       const animate = (steps, fn, ms = 16) =>

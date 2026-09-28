@@ -36,7 +36,7 @@ There are eleven primitives, and all of them except `view` take options first:
 
 - Leaf: `view(id)`
 - Containers: `row`, `column`, `grid`, `stack`, `overlay`
-- Modifiers: `place`, `size`, `gap`, `inset`, `anchor`
+- Modifiers: `place`, `size`, `gap`, `inset`, `anchor` (`anchor`'s side-attached form takes Wayland `xdg_positioner`-style constraint adjustment: `gravity`, `flip`, `slide`, `resize` — see README, "Positioner rules for anchored popups")
 
 These candidates were considered and rejected (or left as derived helpers):
 

@@ -110,7 +110,20 @@ export const size = (options, child) => modifier("size", options, child);
 export const gap = (options, child) => modifier("gap", options, child);
 /** Padding around the wrapped allocation. */
 export const inset = (options, child) => modifier("inset", options, child);
-/** Position relative to another view: { to, side, align, x, y, offset }. */
+/**
+ * Position relative to another view: `{ to, side, align, x, y, offset, inside, gravity, flip, slide, resize }`.
+ * `side`/`align`/`offset` attach the popup to one edge of `to`; `x`/`y`/`inside`
+ * position it inside `to` instead. `gravity`, `flip`, `slide` and `resize` are
+ * Wayland `xdg_positioner`-style constraint adjustment for the side-attached
+ * form: `gravity` (default: `side`) says which way the popup grows from the
+ * attach point; `flip`/`slide`/`resize` are each `["x","y"]` subsets naming
+ * which axes may flip to the opposite side/alignment, slide back into the
+ * stage, or shrink to fit it, when it would otherwise overflow. See
+ * `positionPopup` in `src/geometry/positioner.mjs` for the placement math,
+ * `anchorStyle` in `src/css/compile.mjs` for how much of it maps to CSS
+ * anchor positioning, and the JS anchor fallback in `src/browser/dom.mjs`
+ * for the full semantics (including `slide`/`resize`, which CSS can't express).
+ */
 export const anchor = (options, child) => modifier("anchor", options, child);
 
 /**

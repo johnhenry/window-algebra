@@ -48,6 +48,7 @@ export * from "./layouts/index.mjs";
 
 // Geometry and interaction (pure)
 export * as geometry from "./geometry/rect.mjs";
+export { positionPopup, SIDES as POPUP_SIDES } from "./geometry/positioner.mjs";
 export { createDrag, updateDrag, createResize, updateResize, updateRatio, EDGES } from "./interaction/drag.mjs";
 export { dropZoneAt, dropTargetAt, previewDrop, zoneRect } from "./interaction/drop.mjs";
 export { snapZoneAt, snapZoneRect, magnetize, magnetizeResize, SNAP_ZONES } from "./interaction/snap.mjs";

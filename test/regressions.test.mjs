@@ -121,6 +121,78 @@ describe("renderer: explicit JS anchor fallback (regression)", () => {
   });
 });
 
+describe("renderer: positioner constraint adjustment via JS fallback (regression)", () => {
+  const build = (anchorOptions) =>
+    overlay({}, row({}, view("host")), anchor(anchorOptions, size({ width: 40, height: 20 }, view("menu"))));
+
+  test("flip: an overflowing primary axis flips side and gravity together", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 120 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", flip: ["y"] })));
+    renderer.elementFor("host").rect = { left: 50, top: 90, width: 20, height: 15 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 20 };
+    renderer.reposition();
+    // host bottom = 105; below it (height 20) would end at 125 > stage height 120, so it flips above.
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "70px");
+  });
+
+  test("without flip requested, the same overflow is left alone", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 120 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start" })));
+    renderer.elementFor("host").rect = { left: 50, top: 90, width: 20, height: 15 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 20 };
+    renderer.reposition();
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "105px");
+  });
+
+  test("slide: an overflowing cross axis translates back into the stage", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 200 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", slide: ["x"] })));
+    renderer.elementFor("host").rect = { left: 280, top: 10, width: 20, height: 20 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 20 };
+    renderer.reposition();
+    // align start puts the menu's left at 280; width 40 would spill past the 300-wide stage.
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("left"), "260px");
+  });
+
+  test("resize: an overflowing axis shrinks the popup and sets its size directly", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 100 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", resize: ["y"] })));
+    renderer.elementFor("host").rect = { left: 50, top: 70, width: 20, height: 15 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 200 };
+    renderer.reposition();
+    const menu = renderer.elementFor("menu");
+    assert.equal(menu.style.getPropertyValue("top"), "85px"); // host bottom edge
+    assert.equal(menu.style.getPropertyValue("height"), "15px"); // 100 - 85
+  });
+
+  test("resize is undone (size cleared) once the element stops being anchored", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 100 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", resize: ["y"] })));
+    renderer.elementFor("host").rect = { left: 50, top: 70, width: 20, height: 15 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 200 };
+    renderer.reposition();
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("height"), "15px");
+    renderer.commit(compile(overlay({}, row({}, view("host")), size({ width: 40 }, view("menu")))));
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("height"), "");
+  });
+
+  test("gravity can be opposite the anchor side, overlapping the space just past it", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 200 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", gravity: "top" })));
+    renderer.elementFor("host").rect = { left: 50, top: 50, width: 20, height: 20 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 20 };
+    renderer.reposition();
+    // side "bottom" attaches at the host's bottom edge (70); gravity "top" grows upward from there.
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "50px");
+  });
+});
+
 describe("derive: constraints apply to tiled windows (regression)", () => {
   test("min/max constraints become size() on the tiled view", () => {
     let state = createState();
@@ -228,6 +300,29 @@ describe("derive: popover anchor options pass through (regression)", () => {
     assert.equal(style["position-area"], "center");
     assert.equal(style["justify-self"], "start");
     assert.equal(style["align-self"], "start");
+  });
+
+  test("flip / slide / resize / gravity reach the anchor node too", () => {
+    let state = createState();
+    state = update(state, { type: "window/create", id: "doc" }).state;
+    state = update(state, {
+      type: "window/create",
+      id: "menu",
+      role: "menu",
+      parent: "doc",
+      anchor: { to: "doc", side: "bottom", flip: ["x"], slide: ["y"], resize: ["y"], gravity: "top" },
+    }).state;
+    const node = find(derive(state), (n) => n.type === "anchor");
+    assert.deepEqual(node.options, {
+      to: "doc",
+      side: "bottom",
+      align: "start",
+      offset: 4,
+      flip: ["x"],
+      slide: ["y"],
+      resize: ["y"],
+      gravity: "top",
+    });
   });
 });
 

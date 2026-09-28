@@ -453,9 +453,12 @@
         dialog: { role: "dialog", modal: true, placement: { width: 380, height: 190 } },
         sheet: { role: "sheet", modal: true, placement: { width: 340 } },
         attached: { role: "dialog", placement: { width: 280, height: 150 } },
-        menu: { role: "menu", placement: { width: 200, height: 250 }, anchorSide: { side: "bottom", align: "start", offset: 2 } },
-        popover: { role: "popover", placement: { width: 220, height: 96 }, anchorSide: { side: "right", align: "start", offset: 6 } },
-        tooltip: { role: "tooltip", placement: { width: 210, height: 36 }, anchorSide: { side: "top", align: "center", offset: 6 } },
+        // Positioner rules (flip/slide/resize/gravity — xdg_positioner-style
+        // constraint adjustment) replace what used to be a hand-rolled "measure
+        // the parent, flip to the other side if it doesn't fit" policy below.
+        menu: { role: "menu", placement: { width: 200, height: 250 }, anchorSide: { side: "bottom", align: "start", offset: 2, flip: ["y"], slide: ["x"] } },
+        popover: { role: "popover", placement: { width: 220, height: 96 }, anchorSide: { side: "right", align: "start", offset: 6, flip: ["x"], slide: ["y"] } },
+        tooltip: { role: "tooltip", placement: { width: 210, height: 36 }, anchorSide: { side: "top", align: "center", offset: 6, flip: ["y"] } },
         notification: { role: "notification", placement: { width: 300, height: 64 }, focus: false },
         panel: { role: "panel", placement: { x: 24, y: 24, width: 190, height: 110 } },
         background: { mode: "floating", layer: "background", placement: { x: 140, y: 120, width: 360, height: 240 } },
@@ -486,17 +489,9 @@
           for (let p = parent; S().windows[p]?.modal; p = S().windows[p].parent) depth++;
           Object.assign(placement, { width: 400 - depth * 44, height: 200 - depth * 22 });
         }
-        // Policy from *actual* geometry: anchor outside the parent when there is
-        // room (CSS flips if needed), otherwise inside its top-left / top edge.
-        let anchorOptions = anchorSide;
-        if (parent && (kind === "menu" || kind === "tooltip")) {
-          const r = wm.measure()[parent];
-          const stage = root.getBoundingClientRect();
-          const roomBelow = r ? stage.height - (r.y + r.height) : 0;
-          const roomAbove = r ? r.y : 0;
-          if (kind === "menu" && roomBelow < placement.height + 8) anchorOptions = { side: "top", align: "start", inside: true };
-          if (kind === "tooltip" && roomAbove < placement.height + 8) anchorOptions = { side: "top", align: "center", inside: true };
-        }
+        // `anchorSide`'s own flip/slide (set above, per kind) handles staying
+        // on screen near an edge — no need to measure the parent by hand.
+        const anchorOptions = anchorSide;
         wm.create({ id, title, ...base, placement, ...(parent ? { parent } : {}), ...(anchorOptions && parent ? { anchor: { to: parent, ...anchorOptions } } : {}) });
         return id;
       };
