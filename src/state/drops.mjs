@@ -184,12 +184,14 @@ const writeOrder = (all, next) => {
   return all.map((x) => (moving.has(x) ? next[k++] : x));
 };
 
-/** Swap two windows in their workspace order and, for BSP, in the tree. */
+/** Swap two windows in their workspace order and, for BSP/tree, in the stored tree. */
 export const swapWindows = (state, a, b) => {
   const ws = state.workspaces[state.windows[a].workspace];
   let next = setWorkspace(state, ws.id, { windows: ws.windows.map((id) => (id === a ? b : id === b ? a : id)) });
   if (ws.layout?.type === "bsp" && ws.layout.tree) {
     next = setWorkspace(next, ws.id, { layout: { ...ws.layout, tree: bspSwap(ws.layout.tree, a, b) } });
+  } else if (ws.layout?.type === "tree" && ws.layout.tree) {
+    next = setWorkspace(next, ws.id, { layout: { ...ws.layout, tree: treeSwap(ws.layout.tree, a, b) } });
   }
   return next;
 };
@@ -285,11 +287,13 @@ export const createDropHandler = (drops = DROPS) => (state, command) => {
   return result(next, [event], [RENDER]);
 };
 
-/** Order used by the keyboard commands: the BSP tree's leaf order, else the workspace order. */
+/** Order used by the keyboard commands: the BSP/tree's leaf order, else the workspace order. */
 const neighbourOrder = (state, wsId) => {
   const ws = state.workspaces[wsId];
   const ids = tiledOrder(state, wsId);
-  return ws.layout?.type === "bsp" ? bspIds(bspReconcile(ws.layout.tree, ids)) : ids;
+  if (ws.layout?.type === "bsp") return bspIds(bspReconcile(ws.layout.tree, ids));
+  if (ws.layout?.type === "tree") return treeIds(treeReconcile(ws.layout.tree, ids));
+  return ids;
 };
 
 const subjectOf = (state, command) => {
@@ -329,6 +333,18 @@ const moveRelative = (position) => (drops) => (state, command) => {
     const vertical = bspParentDirection(tree, target) === "vertical";
     const zone = position === "before" ? (vertical ? "top" : "left") : vertical ? "bottom" : "right";
     next = applyOp(state, drops, { id: subject.id, target, zone, op: "split" });
+  } else if (ws.layout?.type === "tree") {
+    // A target inside a tabs container reorders the tab strip; otherwise split
+    // along its container's own axis (row: left/right, column: top/bottom).
+    const tree = treeReconcile(ws.layout.tree, tiledOrder(state, ws.id));
+    const parentType = treeParentType(tree, target);
+    if (parentType === "tabs") {
+      next = applyOp(state, drops, { id: subject.id, target, zone: position === "before" ? "left" : "right", op: position });
+    } else {
+      const vertical = parentType === "column";
+      const zone = position === "before" ? (vertical ? "top" : "left") : vertical ? "bottom" : "right";
+      next = applyOp(state, drops, { id: subject.id, target, zone, op: "split" });
+    }
   } else {
     next = applyOp(state, drops, { id: subject.id, target, zone: position === "before" ? "left" : "right", op: position });
   }

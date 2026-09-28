@@ -378,6 +378,80 @@ describe("window/drop: docking tree", () => {
   });
 });
 
+describe("window/swap-next, window/swap-previous, window/move-before, window/move-after: docking tree", () => {
+  const make = (tree) => withWindows(["a", "b", "c"], { layout: { type: "tree", tree } });
+  const treeOf = (out) => out.state.workspaces.main.layout.tree;
+
+  test("swap-next on a tree-docked row actually swaps positions in layout.tree", () => {
+    const s = make({ type: "row", children: ["a", "b", "c"] });
+    const out = update(s, { type: "window/swap-next", id: "a" });
+    const event = out.events.find((e) => e.type === "window/swapped");
+    assert.deepEqual(event, { type: "window/swapped", a: "a", b: "b" });
+    assert.deepEqual(out.state.workspaces.main.windows, ["b", "a", "c"]);
+    // The tree itself must reflect the swap, not just workspace order.
+    assert.deepEqual(treeOf(out), { type: "row", children: ["b", "a", "c"] });
+  });
+
+  test("swap-previous on a tree-docked row swaps the other way", () => {
+    const s = make({ type: "row", children: ["a", "b", "c"] });
+    const out = update(s, { type: "window/swap-previous", id: "b" });
+    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", a: "b", b: "a" });
+    assert.deepEqual(treeOf(out), { type: "row", children: ["b", "a", "c"] });
+  });
+
+  test("swap-next/previous swap leaves wherever they sit, including across nested containers", () => {
+    const s = make({ type: "row", children: ["a", { type: "column", children: ["b", "c"] }] });
+    // neighbourOrder follows the tree's leaf order: a, b, c
+    const out = update(s, { type: "window/swap-next", id: "a" });
+    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", a: "a", b: "b" });
+    assert.deepEqual(treeOf(out), { type: "row", children: ["b", { type: "column", children: ["a", "c"] }] });
+  });
+
+  test("swap-next wraps around and is a no-op event-wise when nothing moves visually only if tree already matches", () => {
+    const s = make({ type: "row", children: ["a", "b", "c"] });
+    const out = update(s, { type: "window/swap-next", id: "c" }); // wraps to a
+    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", a: "c", b: "a" });
+    assert.deepEqual(treeOf(out), { type: "row", children: ["c", "b", "a"] });
+  });
+
+  test("move-before/move-after on a row splits along the row's own axis (left/right)", () => {
+    const s = make({ type: "row", children: ["a", "b", "c"] });
+    const before = update(s, { type: "window/move-before", id: "c", target: "a" });
+    assert.deepEqual(before.events.find((e) => e.type === "window/reordered"), {
+      type: "window/reordered", id: "c", target: "a", position: "before",
+    });
+    assert.deepEqual(treeOf(before).children[0], { type: "row", children: ["c", "a"], sizes: [0.5, 0.5] });
+
+    const after = update(s, { type: "window/move-after", id: "c", target: "a" });
+    assert.deepEqual(treeOf(after).children[0], { type: "row", children: ["a", "c"], sizes: [0.5, 0.5] });
+  });
+
+  test("move-before/move-after on a column splits vertically (top/bottom)", () => {
+    const s = make({ type: "column", children: ["a", "b", "c"] });
+    const before = update(s, { type: "window/move-before", id: "c", target: "a" });
+    assert.deepEqual(treeOf(before).children[0], { type: "column", children: ["c", "a"], sizes: [0.5, 0.5] });
+    const after = update(s, { type: "window/move-after", id: "c", target: "a" });
+    assert.deepEqual(treeOf(after).children[0], { type: "column", children: ["a", "c"], sizes: [0.5, 0.5] });
+  });
+
+  test("move-before/move-after onto a target inside a tabs container reorders the tab strip instead of splitting", () => {
+    const s = make({ type: "row", children: [{ type: "tabs", children: ["a", "b"] }, "c"] });
+    // Removing "c" collapses the outer row (a single remaining child), so the
+    // whole tree becomes the tabs container with "c" inserted into its strip.
+    const before = update(s, { type: "window/move-before", id: "c", target: "b" });
+    assert.deepEqual(treeOf(before), { type: "tabs", children: ["a", "c", "b"] });
+    const after = update(s, { type: "window/move-after", id: "c", target: "b" });
+    assert.deepEqual(treeOf(after), { type: "tabs", children: ["a", "b", "c"] });
+  });
+
+  test("move-before/move-after with no explicit target uses tree leaf-order neighbours", () => {
+    const s = make({ type: "row", children: ["a", { type: "column", children: ["b", "c"] }] });
+    // leaf order is a, b, c; moving b's next neighbour (c) after b in tree order
+    const out = update(s, { type: "window/move-after", id: "b" });
+    assert.equal(out.events.find((e) => e.type === "window/reordered")?.target, "c");
+  });
+});
+
 describe("docking tree: undo, replay, and serialization", () => {
   test("drops and resizes are one undo step each and replay to the same state", () => {
     const wm = createWindowManager({
