@@ -51,12 +51,26 @@ These candidates were considered and rejected (or left as derived helpers):
 - `aspect` / `limit`: these fold into `size`.
 - `when`: plain JavaScript conditionals do this.
 
+## Split sizing
+
+Resizable splits persist in the layout spec itself, each layout using whichever place is most natural for it — the same principle as master-stack's pre-existing `ratio`:
+
+- **columns / rows** (flat, N children): `spec.sizes[""]` is an array of N positive weights, one per child, in the same units as `size({ weight })` (so equal weights and *no* `sizes` compile to the identical CSS). Unset until the first resize.
+- **master-stack** (binary): the existing `spec.ratio` (0–1, master's share). Unaffected by adding splitters — a splitter is just another way to move it.
+- **BSP** (binary, nested, stateful): the existing per-node `tree.ratio`. A split is addressed by a `path` string of `"0"`/`"1"` steps from the root (`"0"` = into `first`, `"1"` = into `second`; `""` is the root split itself) — general addressing that reaches every split, including one with no leaf directly on either side (`bspNodeAt`/`bspSetRatioAt` in `src/layouts/bsp.mjs`). This is separate from `bspSetRatio`'s older leaf-id addressing, kept for `layout/set-ratio`.
+- **spiral** (binary, nested, generated fresh each render): `spec.ratios`, an array indexed by split depth (`0` = outermost), overriding the shared `spec.ratio` once that depth has been resized — the same shape as BSP's per-node ratio, without needing a stored tree.
+- **grid** is not resizable yet (tracks don't map onto a splitter between two DOM children the way a flex row/column's do); `autoGrid`'s tracks are responsive by design either way.
+
+One command covers every case: `layout/resize-split { workspace?, path, index?, delta | weights }`. `path` is the layout-specific address above (`""` for columns/rows/master-stack, an L/R string for BSP, a depth string for spiral); `index` (default 0) selects which of a flat container's N − 1 splitters, and is ignored by the binary layouts. `weights` replaces the addressed pair (or, for columns/rows, the whole array) outright; `delta` nudges the current ratio (binary layouts) or the addressed pair (columns/rows — which must already have `sizes` stored, from an earlier `weights` resize, since a bare delta has nothing to be relative to). Both keep at least 5% of a pair's shared total on each side. It is pure and validated like every other command: an unresizable layout, an unresolvable path, or a malformed value is rejected (`not-resizable`, `invalid-path`, `unknown-split`, `invalid-weights`, `missing-value`, `missing-weights`), never thrown.
+
+`compile()` renders a splitter between every pair of children of a row/column carrying this `resize` metadata: `[data-wm-splitter]`, `role="separator"`, `aria-orientation` (vertical for a row's splitters, horizontal for a column's), `aria-valuenow` (the pair's split as 0–100), and `data-wm-path`/`data-wm-index`/`data-wm-count` — exactly what `layout/resize-split` expects back. `attachInput` drags one with pointer capture (converting pixel movement to a weight delta via the container's measured size, clamped so neither side crosses a directly-wrapped window's min/max constraints) and answers the arrow key along its axis when it has focus; either way the whole gesture is one undo step, via the same `gesture` token mechanism as a floating drag.
+
 ## Requirements implemented in v0
 
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 42 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 43 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history, EWMH/X11-style urgency hints (`window/set-urgent`, `focus/urgent`, `config.urgency.clearOnFocus`). |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), and custom interpreters. |
 | Hybrid | Tiled base plus floating, dialog, popover, and notification layers in a single overlay. |
@@ -69,6 +83,7 @@ These candidates were considered and rejected (or left as derived helpers):
 | Scratchpad and sticky | i3-style scratchpad (`window/to-scratchpad`, `scratchpad/toggle`): hide a window off every workspace, then show it floating and centered, focused, on the active workspace; toggle again to hide. EWMH-style sticky (`window/set-sticky`): visible on every workspace, keeping its stacking and never joining a tiled base. |
 | Versioning | Every state carries `STATE_VERSION`; `migrate(state)` upgrades older (or unversioned) states through a `MIGRATIONS` registry and refuses states from a newer version. `wm.load()` and `replay()` both migrate their input. |
 | Size hints | ICCCM `WM_NORMAL_HINTS`-style hints beyond min/max: `aspectRatio` (exact or `{ min, max }`) and `widthIncrement`/`heightIncrement` with `baseWidth`/`baseHeight` (terminal-style cells). Honoured by `constrainSize` for floating move/resize and `window/resize`; tiled windows get CSS `aspect-ratio` for an exact ratio, increments are advisory. |
+| Split sizing | Persistent, resizable splits for columns/rows/master-stack/BSP/spiral (see "Split sizing" above): `layout/resize-split`, rendered `[data-wm-splitter]` handles, pointer drag and arrow-key resizing, one undo step per gesture, min/max constraints respected best-effort. |
 
 ## Open questions
 

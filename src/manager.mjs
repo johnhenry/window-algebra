@@ -213,6 +213,8 @@ export const createWindowManager = ({
     activateWorkspace: command("workspace/activate"),
     setLayout: (layout, workspace) => dispatch({ type: "layout/set", layout, workspace }),
     setRatio: (ratio, options = {}) => dispatch({ ...options, type: "layout/set-ratio", ratio }),
+    /** Resize a persisted split: `resizeSplit(path, { delta } | { weights }, options)`. */
+    resizeSplit: (path, change = {}, options = {}) => dispatch({ ...options, ...change, type: "layout/resize-split", path }),
     /** Replace `config.rules` wholesale. */
     setRules: (rules) => dispatch({ type: "rules/set", rules }),
 

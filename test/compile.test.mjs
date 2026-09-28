@@ -18,6 +18,14 @@ import {
   anchorName,
   styleText,
   masterStack,
+  columns,
+  rows,
+  fixedGrid,
+  spiral,
+  bspFrom,
+  bspSetRatio,
+  bspToLayout,
+  SPLITTER_SIZE,
 } from "../src/index.mjs";
 
 const viewNodes = (node, out = []) => {
@@ -38,9 +46,12 @@ describe("compile: tree → CSS declarations", () => {
 
   test("master-stack ratio 0.65 is expressed as flex weights, not pixels", () => {
     const out = compile(masterStack({ ratio: 0.65 }, ["a", "b", "c"]));
+    // A splitter (fixed px thickness) sits between the master and the rest.
     assert.equal(out.children[0].style.flex, "0.65 1 0");
-    assert.equal(out.children[1].style.flex, "0.35 1 0");
-    assert.ok(!JSON.stringify(out).includes("px"));
+    assert.equal(out.children[1].tag, "wm-splitter");
+    assert.equal(out.children[2].style.flex, "0.35 1 0");
+    const withoutSplitters = { ...out, children: out.children.filter((child) => child.tag !== "wm-splitter") };
+    assert.ok(!JSON.stringify(withoutSplitters).includes("px"));
   });
 
   test("fixed sizes along the main axis stop flexing", () => {
@@ -190,5 +201,64 @@ describe("toHTML", () => {
 
   test("styleText skips empty values", () => {
     assert.equal(styleText({ a: "1", b: "", c: undefined }), "a: 1");
+  });
+});
+
+describe("compile: resizable-split splitters", () => {
+  test("a row/column with N children carries N-1 splitters, addressed and valued from resize.weights", () => {
+    const out = compile(columns({}, ["a", "b", "c"]));
+    const splitters = out.children.filter((child) => child.tag === "wm-splitter");
+    assert.equal(splitters.length, 2);
+    for (const s of splitters) {
+      assert.equal(s.attrs.role, "separator");
+      assert.equal(s.attrs["aria-orientation"], "vertical"); // a row's splitter bar stands vertical
+      assert.equal(s.attrs["data-wm-count"], "3");
+      assert.equal(s.attrs["aria-valuenow"], "50"); // equal default weights
+      assert.equal(s.attrs.tabindex, "0");
+      assert.equal(s.style.flex, `0 0 ${SPLITTER_SIZE}px`);
+    }
+    assert.deepEqual(splitters.map((s) => s.attrs["data-wm-index"]), ["0", "1"]);
+    assert.equal(out.children[0].view, "a");
+    assert.equal(out.children[1].tag, "wm-splitter");
+    assert.equal(out.children[2].view, "b");
+    assert.equal(out.children[3].tag, "wm-splitter");
+    assert.equal(out.children[4].view, "c");
+
+    // `rows` is the column orientation: a horizontal splitter bar.
+    const rowsOut = compile(rows({}, ["a", "b"]));
+    assert.equal(rowsOut.children[1].attrs["aria-orientation"], "horizontal");
+
+    // Custom sizes change aria-valuenow accordingly.
+    const resized = compile(columns({ sizes: { "": [3, 1] } }, ["a", "b"]));
+    assert.equal(resized.children[1].attrs["aria-valuenow"], "75");
+  });
+
+  test("a single child gets no splitter", () => {
+    const out = compile(columns({}, ["a"]));
+    assert.equal(out.children.some((c) => c.tag === "wm-splitter"), false);
+  });
+
+  test("master-stack, bsp and spiral splits each carry exactly one splitter, addressed by path", () => {
+    const master = compile(masterStack({ ratio: 0.65 }, ["a", "b", "c"]));
+    assert.equal(master.children[1].attrs["data-wm-path"], "");
+    assert.equal(master.children[1].attrs["aria-valuenow"], "65");
+
+    const bsp = compile(bspToLayout(bspSetRatio(bspFrom(["a", "b"]), "b", 0.4)));
+    const splitter = bsp.children.find((c) => c.tag === "wm-splitter");
+    assert.equal(splitter.attrs["data-wm-path"], "");
+    assert.equal(splitter.attrs["aria-valuenow"], "40");
+
+    const nested = compile(spiral({}, ["a", "b", "c"]));
+    const outer = nested.children.find((c) => c.tag === "wm-splitter");
+    assert.equal(outer.attrs["data-wm-path"], "0");
+    // spiral's second level is a column nested inside the row; it has its own splitter.
+    const innerColumn = nested.children.find((c) => c.tag === "wm-column");
+    const innerSplitter = innerColumn?.children.find((c) => c.tag === "wm-splitter");
+    assert.equal(innerSplitter?.attrs["data-wm-path"], "1");
+  });
+
+  test("fixedGrid does not render splitters (grid track resizing is not yet supported)", () => {
+    const out = compile(fixedGrid({ columns: 3 }, ["a", "b", "c"]));
+    assert.equal(out.children.some((c) => c.tag === "wm-splitter"), false);
   });
 });

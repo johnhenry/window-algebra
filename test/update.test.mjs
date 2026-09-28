@@ -455,3 +455,101 @@ describe("layouts in state", () => {
     assert.equal(state.config.focusRaises, true);
   });
 });
+
+describe("layout/resize-split", () => {
+  test("master-stack: delta and weights both adjust spec.ratio, honouring side", () => {
+    let state = withWindows(["a", "b"], { layout: { type: "master-stack", ratio: 0.5 } });
+    state = reduce(state, { type: "layout/resize-split", path: "", delta: 0.1 });
+    assert.equal(state.workspaces.main.layout.ratio, 0.6);
+    state = reduce(state, { type: "layout/resize-split", path: "", weights: [0.3, 0.7] });
+    assert.equal(state.workspaces.main.layout.ratio, 0.3);
+    // Clamped to [0.05, 0.95].
+    state = reduce(state, { type: "layout/resize-split", path: "", delta: -10 });
+    assert.equal(state.workspaces.main.layout.ratio, 0.05);
+
+    // side: "right" puts the master second in the DOM, so weights are [rest, master].
+    let right = withWindows(["a", "b"], { layout: { type: "master-stack", ratio: 0.5, side: "right" } });
+    right = reduce(right, { type: "layout/resize-split", path: "", weights: [0.8, 0.2] });
+    assert.equal(right.workspaces.main.layout.ratio, 0.2);
+    right = reduce(right, { type: "layout/resize-split", path: "", delta: 0.1 });
+    // delta shifts the DOM-first (rest) side; for side: right that shrinks the master.
+    assert.equal(right.workspaces.main.layout.ratio, 0.1);
+  });
+
+  test("bsp: resize-split addresses a split by its L/R path, independent of layout/set-ratio's id addressing", () => {
+    let state = withWindows(["a", "b", "c"], { layout: { type: "bsp" } });
+    // bspFrom(["a","b","c"]): root split first=a, second=split(first=b, second=c).
+    state = reduce(state, { type: "layout/resize-split", path: "", delta: 0.2 });
+    assert.equal(state.workspaces.main.layout.tree.ratio, 0.7);
+    state = reduce(state, { type: "layout/resize-split", path: "1", weights: [0.2, 0.8] });
+    assert.equal(state.workspaces.main.layout.tree.second.ratio, 0.2);
+    // A path that runs into a leaf, or off the tree, is rejected.
+    assert.equal(update(state, { type: "layout/resize-split", path: "11", delta: 0.1 }).events[0].reason, "unknown-split");
+    assert.equal(update(state, { type: "layout/resize-split", path: "x", delta: 0.1 }).events[0].reason, "invalid-path");
+  });
+
+  test("spiral: per-depth ratios override the shared default once resized", () => {
+    let state = withWindows(["a", "b", "c"], { layout: { type: "spiral", ratio: 0.5 } });
+    state = reduce(state, { type: "layout/resize-split", path: "0", delta: 0.1 });
+    assert.deepEqual(state.workspaces.main.layout.ratios, [0.6]);
+    // Depth 1 has never been resized: it still falls back to the shared ratio (0.5), plus this delta.
+    state = reduce(state, { type: "layout/resize-split", path: "1", delta: 0.1 });
+    assert.deepEqual(state.workspaces.main.layout.ratios, [0.6, 0.6]);
+    assert.equal(state.workspaces.main.layout.ratio, 0.5); // the shared default itself is untouched
+    assert.equal(update(state, { type: "layout/resize-split", path: "-1", delta: 0.1 }).events[0].reason, "invalid-path");
+  });
+
+  test("columns/rows: weights replace the full array; delta needs a prior resize", () => {
+    let state = withWindows(["a", "b", "c"], { layout: { type: "columns" } });
+    // No stored sizes yet: a delta-only resize is rejected...
+    assert.equal(update(state, { type: "layout/resize-split", index: 0, delta: 0.1 }).events[0].reason, "missing-weights");
+    // ...but explicit weights seed it.
+    state = reduce(state, { type: "layout/resize-split", index: 0, weights: [2, 1, 1] });
+    assert.deepEqual(state.workspaces.main.layout.sizes, { "": [2, 1, 1] });
+    // Now a delta nudges just the addressed pair.
+    state = reduce(state, { type: "layout/resize-split", index: 1, delta: 0.5 });
+    assert.deepEqual(state.workspaces.main.layout.sizes[""], [2, 1.5, 0.5]);
+    // `rows` uses the same scheme.
+    let rows = withWindows(["a", "b"], { layout: { type: "rows" } });
+    rows = reduce(rows, { type: "layout/resize-split", weights: [3, 1] });
+    assert.deepEqual(rows.workspaces.main.layout.sizes, { "": [3, 1] });
+  });
+
+  test("rejections: unresizable layouts, unknown workspace, malformed weights/values", () => {
+    const state = withWindows(["a", "b"], { layout: { type: "monocle" } });
+    const reason = (command) => update(state, command).events[0].reason;
+    assert.equal(reason({ type: "layout/resize-split", weights: [1, 1] }), "not-resizable");
+    assert.equal(reason({ type: "layout/resize-split", workspace: "nope", delta: 0.1 }), "unknown-workspace");
+    assert.equal(reason({ type: "layout/resize-split" }), "missing-value");
+    assert.equal(reason({ type: "layout/resize-split", weights: [1] }), "invalid-weights");
+    assert.equal(reason({ type: "layout/resize-split", weights: [1, -1] }), "invalid-weights");
+    assert.equal(reason({ type: "layout/resize-split", weights: ["x", 1] }), "invalid-weights");
+    const cols = withWindows(["a", "b"], { layout: { type: "columns" } });
+    assert.equal(update(cols, { type: "layout/resize-split", path: "nope", delta: 0.1 }).events[0].reason, "unknown-split");
+  });
+
+  test("never throws and never mutates state", () => {
+    const state = deepFreeze(withWindows(["a", "b", "c"], { layout: { type: "bsp" } }));
+    for (const command of [
+      { type: "layout/resize-split", path: "", delta: 0.1 },
+      { type: "layout/resize-split", path: "0", weights: [0.1, 0.9] },
+      { type: "layout/resize-split" },
+      { type: "layout/resize-split", weights: null },
+    ]) {
+      assert.doesNotThrow(() => update(state, command));
+    }
+  });
+
+  test("COMMANDS lists layout/resize-split", () => {
+    assert.ok(COMMANDS.includes("layout/resize-split"));
+  });
+
+  test("events and effects follow the update() protocol", () => {
+    let state = withWindows(["a", "b"], { layout: { type: "master-stack" } });
+    const before = state.workspaces.main.layout.ratio;
+    const out = update(state, { type: "layout/resize-split", path: "", delta: 0.2 });
+    assert.notEqual(out.state.workspaces.main.layout.ratio, before);
+    assert.deepEqual(out.events, [{ type: "layout/split-resized", workspace: "main", path: "" }]);
+    assert.deepEqual(out.effects, [{ type: "render" }]);
+  });
+});

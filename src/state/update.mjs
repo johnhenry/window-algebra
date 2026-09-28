@@ -13,7 +13,7 @@
  */
 import { LAYERS, STATUSES, createWindowRecord, createWorkspace } from "./create.mjs";
 import { constrainSize } from "../geometry/rect.mjs";
-import { bspInsert, bspRemove, bspSetRatio, bspRotate } from "../layouts/bsp.mjs";
+import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt } from "../layouts/bsp.mjs";
 import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
@@ -604,6 +604,87 @@ const handlers = {
     if (!ws || ws.layout.type !== "bsp") return rejected(state, command, "not-bsp");
     const next = setLayout(state, wsId, (layout) => ({ ...layout, tree: bspRotate(layout.tree, command.id ?? state.focus.window) }));
     return result(next, [{ type: "layout/split-rotated", workspace: wsId }], [RENDER]);
+  },
+
+  /**
+   * Resize a persisted split, addressed by `path` (layout-specific — see
+   * docs/PRD.md, "Split sizing"): `""` for columns/rows/master-stack, a
+   * "0"/"1" string locating a BSP split (`bspNodeAt`), a depth string for
+   * spiral. `weights` ([a, b], or one entry per child for columns/rows)
+   * replaces the split's sizes outright; `delta` nudges the current ratio
+   * (master-stack/bsp/spiral) or the pair at `index`/`index + 1`
+   * (columns/rows, which must already have stored sizes to nudge — resize
+   * with `weights` first). Pure and validated: an unresizable layout, an
+   * unknown path, or a malformed value is rejected, never thrown.
+   */
+  "layout/resize-split"(state, command) {
+    const wsId = command.workspace ?? state.activeWorkspace;
+    const ws = state.workspaces[wsId];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    const spec = ws.layout;
+    if (!spec || typeof spec !== "object" || typeof spec.type !== "string") {
+      return rejected(state, command, "not-resizable");
+    }
+    const path = typeof command.path === "string" ? command.path : "";
+    const hasDelta = typeof command.delta === "number" && Number.isFinite(command.delta);
+    const hasWeights = Array.isArray(command.weights);
+    if (hasWeights && (command.weights.length < 2 || !command.weights.every((w) => typeof w === "number" && Number.isFinite(w) && w > 0))) {
+      return rejected(state, command, "invalid-weights");
+    }
+    if (!hasDelta && !hasWeights) return rejected(state, command, "missing-value");
+
+    const clampRatio = (value) => Math.min(0.95, Math.max(0.05, value));
+    const ratioFromPair = (a, b) => (a + b > 0 ? clampRatio(a / (a + b)) : 0.5);
+
+    let layout;
+    if (spec.type === "master-stack") {
+      if (path !== "") return rejected(state, command, "unknown-split");
+      const side = spec.side === "right" ? "right" : "left";
+      const current = typeof spec.ratio === "number" ? spec.ratio : 0.5;
+      let ratio;
+      if (hasWeights) {
+        const [a, b] = command.weights;
+        ratio = side === "right" ? ratioFromPair(b, a) : ratioFromPair(a, b);
+      } else {
+        ratio = clampRatio(current + (side === "right" ? -command.delta : command.delta));
+      }
+      layout = { ...spec, ratio };
+    } else if (spec.type === "bsp") {
+      if (!/^[01]*$/.test(path)) return rejected(state, command, "invalid-path");
+      const node = bspNodeAt(spec.tree ?? null, path);
+      if (!node) return rejected(state, command, "unknown-split");
+      const ratio = hasWeights ? ratioFromPair(command.weights[0], command.weights[1]) : clampRatio(node.ratio + command.delta);
+      layout = { ...spec, tree: bspSetRatioAt(spec.tree, path, ratio) };
+    } else if (spec.type === "spiral") {
+      const depth = Number(path);
+      if (path === "" || !Number.isInteger(depth) || depth < 0) return rejected(state, command, "invalid-path");
+      const ratios = Array.isArray(spec.ratios) ? spec.ratios.slice() : [];
+      const current = typeof ratios[depth] === "number" ? ratios[depth] : typeof spec.ratio === "number" ? spec.ratio : 0.5;
+      ratios[depth] = hasWeights ? ratioFromPair(command.weights[0], command.weights[1]) : clampRatio(current + command.delta);
+      layout = { ...spec, ratios };
+    } else if (spec.type === "columns" || spec.type === "rows") {
+      if (path !== "") return rejected(state, command, "unknown-split");
+      const stored = Array.isArray(spec.sizes?.[""]) ? spec.sizes[""] : null;
+      const index = Number.isInteger(command.index) ? command.index : 0;
+      if (index < 0) return rejected(state, command, "invalid-index");
+      let weights;
+      if (hasWeights) {
+        weights = command.weights.slice();
+      } else {
+        if (!stored || index + 1 >= stored.length) return rejected(state, command, "missing-weights");
+        weights = stored.slice();
+        const total = weights[index] + weights[index + 1];
+        const min = total * 0.05;
+        const a = Math.min(total - min, Math.max(min, weights[index] + command.delta));
+        weights[index] = a;
+        weights[index + 1] = total - a;
+      }
+      layout = { ...spec, sizes: { ...(spec.sizes ?? {}), "": weights } };
+    } else {
+      return rejected(state, command, "not-resizable");
+    }
+    const next = setLayout(state, wsId, () => layout);
+    return result(next, [{ type: "layout/split-resized", workspace: wsId, path }], [RENDER]);
   },
 
   /** Shallow patch; plain-object values (drag, defaultPlacement) merge one level deep. */

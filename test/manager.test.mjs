@@ -49,7 +49,7 @@ describe("createWindowManager facade", () => {
     assert.equal(frames.length, 1);
     frames[0]();
     assert.equal(commits.length, 1);
-    assert.equal(commits[0].children[0].children.length, 2); // master + stack column
+    assert.equal(commits[0].children[0].children.length, 3); // master, splitter, stack column
   });
 
   test("non-render effects go to onEffect", () => {

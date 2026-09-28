@@ -12,6 +12,14 @@
  * Anywhere on the page (usually a workspace switcher):
  *   data-wm-workspace-target="<id>"       drop a dragged window here to move it
  *                                         to that workspace (config.drag.crossWorkspace)
+ * The compiler renders a splitter between every pair of children of a
+ * resizable row/column ([data-wm-splitter], role="separator", with
+ * data-wm-path/data-wm-index/data-wm-count identifying which split — see
+ * docs/PRD.md, "Split sizing"). Dragging one dispatches `layout/resize-split`
+ * (pointer capture, one undo step); with it focused (it is a tabindex="0"
+ * separator), the arrow key along its axis nudges the split the same way.
+ * It sits beside the view elements, never inside one, so it never competes
+ * with a title bar's drag handle or buttons.
  *
  * While a window is dragged, an overlay inside `root` ([data-wm-drag-overlay])
  * shields iframes from the pointer and holds the preview: the hypothetical
@@ -29,7 +37,8 @@ import { isBlocked } from "../state/queries.mjs";
 import { update } from "../state/update.mjs";
 import { DROPS, dragMode, isDroppable, tiledOrder } from "../state/drops.mjs";
 import { derive, presentationContext } from "../state/derive.mjs";
-import { compile } from "../css/compile.mjs";
+import { compile, SPLITTER_SIZE } from "../css/compile.mjs";
+import { bspNodeAt } from "../layouts/bsp.mjs";
 import { createDomRenderer } from "./dom.mjs";
 
 /** Elements that handle their own pointer input, even inside a drag handle. */
@@ -158,6 +167,8 @@ const comboOf = (event) =>
  * @param {boolean|Record<string, string>} [options.keyboard] opt-in keyboard moving
  *   of the focused window: `true` uses DEFAULT_MOVE_KEYS, or pass a
  *   `{ "Alt+Shift+ArrowLeft": "window/move-before", … }` map
+ * @param {number} [options.splitterStep] fraction of a split's total weight
+ *   an arrow key nudges a focused splitter by (default 0.05)
  * @returns {() => void} detach
  */
 export const attachInput = (options) => {
@@ -179,10 +190,12 @@ export const attachInput = (options) => {
     dragPreview,
     announce,
     keyboard,
+    splitterStep = 0.05,
   } = options;
   let gesture = null; // floating move/resize in progress
   let pending = null; // press on a handle or tab, not yet a drag
   let drag = null; // tiled or tab drag in progress
+  let splitter = null; // splitter drag in progress
   const doc = root.ownerDocument;
   const view = doc?.defaultView;
   const timers = {
@@ -295,6 +308,168 @@ export const attachInput = (options) => {
       event.clientY < r.top - distance ||
       event.clientY > r.top + r.height + distance
     );
+  };
+
+  // ------------------------------------------------------------ splitters
+
+  /** The current weights of the split at `path` (full array), matching the layout's own defaults when unset. */
+  const readSplitWeights = (state, workspaceId, path, count) => {
+    const spec = state.workspaces[workspaceId]?.layout;
+    if (!spec) return new Array(count).fill(1);
+    if (spec.type === "master-stack") {
+      const ratio = typeof spec.ratio === "number" ? spec.ratio : 0.5;
+      return spec.side === "right" ? [1 - ratio, ratio] : [ratio, 1 - ratio];
+    }
+    if (spec.type === "bsp") {
+      const ratio = bspNodeAt(spec.tree ?? null, path)?.ratio ?? 0.5;
+      return [ratio, 1 - ratio];
+    }
+    if (spec.type === "spiral") {
+      const depth = Number(path);
+      const ratio = Array.isArray(spec.ratios) && typeof spec.ratios[depth] === "number" ? spec.ratios[depth] : spec.ratio ?? 0.5;
+      return [ratio, 1 - ratio];
+    }
+    const stored = spec.sizes?.[""];
+    return Array.isArray(stored) && stored.length === count ? stored.slice() : new Array(count).fill(1);
+  };
+
+  /** The view id of an element's single window, if it wraps exactly one (for constraint clamping). */
+  const singleViewId = (el) => {
+    if (!el || el.nodeType !== 1) return null;
+    if (el.getAttribute?.("data-view")) return el.getAttribute("data-view");
+    const views = el.querySelectorAll?.("wm-view[data-view]") ?? [];
+    return views.length === 1 ? views[0].getAttribute("data-view") : null;
+  };
+
+  /**
+   * Shrink `pixelDelta` (toward zero, never past it) so neither adjacent pane
+   * would cross a min/max constraint — best-effort: it only sees a constraint
+   * when a side wraps a single window directly (the common case for
+   * columns/rows/master-stack/bsp; a nested container is not narrowed).
+   */
+  const clampSplitterPixelDelta = (session, pixelDelta) => {
+    const state = getState();
+    const axis = session.axis;
+    const minKey = axis === "x" ? "minWidth" : "minHeight";
+    const maxKey = axis === "x" ? "maxWidth" : "maxHeight";
+    let delta = pixelDelta;
+    const prevC = state.windows[session.prevId]?.constraints;
+    if (prevC && session.prevSize !== undefined) {
+      if (Number.isFinite(prevC[minKey])) delta = Math.max(delta, prevC[minKey] - session.prevSize);
+      if (Number.isFinite(prevC[maxKey])) delta = Math.min(delta, prevC[maxKey] - session.prevSize);
+    }
+    const nextC = state.windows[session.nextId]?.constraints;
+    if (nextC && session.nextSize !== undefined) {
+      if (Number.isFinite(nextC[minKey])) delta = Math.min(delta, session.nextSize - nextC[minKey]);
+      if (Number.isFinite(nextC[maxKey])) delta = Math.max(delta, session.nextSize - nextC[maxKey]);
+    }
+    return delta;
+  };
+
+  /** New [a, b] for a pair given a weight delta, keeping each side at least 5% of the pair. */
+  const nudgePair = (a0, b0, weightDelta) => {
+    const total = a0 + b0;
+    const minShare = total * 0.05;
+    const a = Math.min(total - minShare, Math.max(minShare, a0 + weightDelta));
+    return [a, total - a];
+  };
+
+  const startSplitter = (el, event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    const path = el.getAttribute("data-wm-path") ?? "";
+    const index = Number(el.getAttribute("data-wm-index") ?? 0);
+    const count = Number(el.getAttribute("data-wm-count") ?? 2);
+    const axis = el.getAttribute("aria-orientation") === "vertical" ? "x" : "y";
+    const state = getState();
+    const workspace = state.activeWorkspace;
+    const container = el.parentNode;
+    const rect = container?.getBoundingClientRect?.() ?? { width: 0, height: 0 };
+    const mainSize = Math.max(1, (axis === "x" ? rect.width : rect.height) - (count - 1) * SPLITTER_SIZE);
+    const prevEl = el.previousSibling;
+    const nextEl = el.nextSibling;
+    const prevRect = prevEl?.getBoundingClientRect?.();
+    const nextRect = nextEl?.getBoundingClientRect?.();
+    splitter = {
+      token: gestureToken(),
+      workspace,
+      path,
+      index,
+      axis,
+      mainSize,
+      baseline: readSplitWeights(state, workspace, path, count),
+      pointerId: event.pointerId,
+      origin: axis === "x" ? event.clientX : event.clientY,
+      prevId: singleViewId(prevEl),
+      nextId: singleViewId(nextEl),
+      prevSize: axis === "x" ? prevRect?.width : prevRect?.height,
+      nextSize: axis === "x" ? nextRect?.width : nextRect?.height,
+      el,
+    };
+    el.setAttribute("data-wm-active", "");
+    try {
+      el.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic or already-released pointer.
+    }
+    listenKeys(true);
+    syncWatch();
+    event.preventDefault?.();
+  };
+
+  const updateSplitter = (event) => {
+    const pos = splitter.axis === "x" ? event.clientX : event.clientY;
+    const pixelDelta = clampSplitterPixelDelta(splitter, pos - splitter.origin);
+    const { baseline, index, mainSize } = splitter;
+    const total = baseline[index] + baseline[index + 1];
+    const weightDelta = mainSize > 0 ? (pixelDelta * total) / mainSize : 0;
+    const weights = baseline.slice();
+    [weights[index], weights[index + 1]] = nudgePair(baseline[index], baseline[index + 1], weightDelta);
+    dispatch({ type: "layout/resize-split", workspace: splitter.workspace, path: splitter.path, index, weights, gesture: splitter.token });
+  };
+
+  const endSplitter = (commit) => {
+    const session = splitter;
+    splitter = null;
+    listenKeys(false);
+    syncWatch();
+    session.el.removeAttribute("data-wm-active");
+    try {
+      session.el.releasePointerCapture?.(session.pointerId);
+    } catch {
+      // Already released.
+    }
+    if (!commit) {
+      // Escape: put the split back, within the same gesture (one undo step).
+      dispatch({
+        type: "layout/resize-split",
+        workspace: session.workspace,
+        path: session.path,
+        index: session.index,
+        weights: session.baseline.slice(),
+        gesture: session.token,
+      });
+    }
+  };
+
+  const ARROW_AXIS = { ArrowLeft: "x", ArrowRight: "x", ArrowUp: "y", ArrowDown: "y" };
+  const ARROW_SIGN = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 };
+
+  /** Arrow keys on a focused splitter nudge it by `splitterStep` of the pair's total. */
+  const onSplitterKeyDown = (splitterEl, event) => {
+    const axis = ARROW_AXIS[event.key];
+    if (!axis) return false;
+    if (axis !== (splitterEl.getAttribute("aria-orientation") === "vertical" ? "x" : "y")) return false;
+    event.preventDefault?.();
+    const path = splitterEl.getAttribute("data-wm-path") ?? "";
+    const index = Number(splitterEl.getAttribute("data-wm-index") ?? 0);
+    const count = Number(splitterEl.getAttribute("data-wm-count") ?? 2);
+    const state = getState();
+    const workspace = state.activeWorkspace;
+    const weights = readSplitWeights(state, workspace, path, count);
+    const total = weights[index] + weights[index + 1];
+    [weights[index], weights[index + 1]] = nudgePair(weights[index], weights[index + 1], ARROW_SIGN[event.key] * total * splitterStep);
+    send({ type: "layout/resize-split", workspace, path, index, weights });
+    return true;
   };
 
   // ------------------------------------------------------------ visuals (overlay, ghost, zone, line)
@@ -573,7 +748,7 @@ export const attachInput = (options) => {
   };
   let docListeners = null;
   const syncWatch = () => {
-    const want = Boolean(pending || drag || gesture);
+    const want = Boolean(pending || drag || gesture || splitter);
     if (want === watching || !doc.addEventListener) return;
     watching = want;
     docListeners ??= { pointermove: outside(onPointerMove), pointerup: outside(onPointerUp), pointercancel: outside(onPointerCancel) };
@@ -697,8 +872,15 @@ export const attachInput = (options) => {
     // A second pointer (or a lost pointerup) never stacks gestures.
     if (drag) endDrag(false);
     if (gesture) endGesture(false);
+    if (splitter) endSplitter(false);
     clearPending();
     const state = getState();
+
+    const splitterEl = event.target.closest?.("[data-wm-splitter]");
+    if (splitterEl) {
+      startSplitter(splitterEl, event);
+      return;
+    }
 
     const tab = event.target.closest?.("[data-wm-tab]");
     if (tab) {
@@ -797,6 +979,11 @@ export const attachInput = (options) => {
   };
 
   const onPointerMove = (event) => {
+    if (splitter) {
+      if (splitter.pointerId !== undefined && event.pointerId !== undefined && event.pointerId !== splitter.pointerId) return;
+      updateSplitter(event);
+      return;
+    }
     if (gesture) {
       if (gesture.pointerId !== undefined && event.pointerId !== undefined && event.pointerId !== gesture.pointerId) return;
       const pointer = { x: event.clientX, y: event.clientY };
@@ -835,17 +1022,25 @@ export const attachInput = (options) => {
 
   const onPointerUp = (event) => {
     clearPending();
+    if (splitter && (event?.pointerId === undefined || event.pointerId === splitter.pointerId)) endSplitter(true);
     if (gesture) endGesture(true);
     if (drag && (event?.pointerId === undefined || event.pointerId === drag.pointerId)) endDrag(true);
   };
 
   const onPointerCancel = () => {
     clearPending();
+    if (splitter) endSplitter(false);
     if (gesture) endGesture(false);
     if (drag) endDrag(false);
   };
 
   function onKeyDown(event) {
+    if (splitter && event.key === "Escape" && event.type !== "keyup") {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      endSplitter(false);
+      return;
+    }
     const session = drag ?? (gesture?.kind === "floating" ? gesture : null);
     if (!session) return;
     if (event.key === "Escape" && event.type !== "keyup") {
@@ -878,6 +1073,8 @@ export const attachInput = (options) => {
 
   const keymap = keyboard === true ? DEFAULT_MOVE_KEYS : keyboard && typeof keyboard === "object" ? keyboard : null;
   const onRootKeyDown = (event) => {
+    const splitterEl = !drag && !gesture && !splitter ? event.target?.closest?.("[data-wm-splitter]") : null;
+    if (splitterEl && onSplitterKeyDown(splitterEl, event)) return;
     if (!keymap || drag) return;
     const type = keymap[comboOf(event)];
     const id = getState().focus.window;
@@ -946,6 +1143,7 @@ export const attachInput = (options) => {
   return () => {
     if (drag) endDrag(false);
     if (gesture) endGesture(false);
+    if (splitter) endSplitter(false);
     clearPending();
     for (const [type, fn] of Object.entries(listeners)) root.removeEventListener(type, fn);
     if (ownRegion) region.remove();

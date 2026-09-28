@@ -140,15 +140,15 @@
       };
 
       const CATALOG = [
-        { key: "master-stack", label: "master-stack", spec: { type: "master-stack", ratio: 0.6, masterCount: 1, side: "left" }, desc: "masterStack(): the first masterCount windows share the master area; the rest stack in a column." },
-        { key: "columns", label: "columns", spec: { type: "columns" }, desc: "columns(): equal flex weights in a row." },
-        { key: "rows", label: "rows", spec: { type: "rows" }, desc: "rows(): equal flex weights in a column." },
+        { key: "master-stack", label: "master-stack", spec: { type: "master-stack", ratio: 0.6, masterCount: 1, side: "left" }, desc: "masterStack(): the first masterCount windows share the master area; the rest stack in a column. Drag the splitter between them, or focus it and press the arrow key." },
+        { key: "columns", label: "columns", spec: { type: "columns" }, desc: "columns(): equal flex weights in a row, persisted to spec.sizes once you drag a splitter between two of them." },
+        { key: "rows", label: "rows", spec: { type: "rows" }, desc: "rows(): equal flex weights in a column; same splitters as columns, just horizontal." },
         { key: "grid-auto", label: "grid auto", spec: { type: "grid", min: 220 }, desc: "autoGrid(): repeat(auto-fit, minmax(min, 1fr)); CSS decides the column count from the width." },
-        { key: "grid-fixed", label: "grid fixed", spec: { type: "grid", columns: 3 }, desc: "fixedGrid(): a fixed number of equal columns." },
-        { key: "spiral", label: "spiral", spec: { type: "spiral", ratio: 0.55 }, desc: "spiral(): each window splits the remaining space, alternating direction (dwindle)." },
+        { key: "grid-fixed", label: "grid fixed", spec: { type: "grid", columns: 3 }, desc: "fixedGrid(): a fixed number of equal columns (grid tracks are not resizable yet)." },
+        { key: "spiral", label: "spiral", spec: { type: "spiral", ratio: 0.55 }, desc: "spiral(): each window splits the remaining space, alternating direction (dwindle). Each split has its own splitter and its own persisted ratio (spec.ratios)." },
         { key: "monocle", label: "monocle", spec: { type: "monocle" }, desc: "monocle(): a stack; only the focused window is visible, the others stay mounted but hidden and inert." },
         { key: "tabs", label: "tabs", spec: { type: "tabs" }, desc: "tabs(): monocle with tab chrome. Tab buttons are compiled chrome (data-wm-tab), not windows." },
-        { key: "bsp", label: "bsp", spec: { type: "bsp" }, desc: "BSP: a stateful tree kept in workspace state. New windows split the focused one; ratio and rotate-split act on the focused window's split." },
+        { key: "bsp", label: "bsp", spec: { type: "bsp" }, desc: "BSP: a stateful tree kept in workspace state. New windows split the focused one; ratio and rotate-split act on the focused window's split. Every split also renders its own splitter (layout/resize-split), addressed by an L/R path independent of that ratio/rotate-split id addressing." },
         { key: "floating", label: "floating", spec: { type: "floating" }, desc: "floating: the tiled base is empty and every window uses its requested placement. Drag title bars; resize from any edge." },
         { key: "dock", label: "dock", custom: true, spec: { type: "dock", extent: 200 }, desc: "Custom interpreter built from dock(): first window docked left, second docked bottom, the rest in columns." },
         { key: "spotlight", label: "spotlight", custom: true, spec: { type: "spotlight" }, desc: "Custom interpreter built from hybrid() + centered() + fixedGrid(): the focused window floats centered over a grid of the rest." },
