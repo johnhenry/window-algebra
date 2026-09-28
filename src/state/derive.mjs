@@ -20,6 +20,7 @@ import {
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
 import { isVisible, isBlocked, inTiledBase, visibleWindows, urgentWindows } from "./queries.mjs";
+import { MODIFIERS, withModifiers, suppressesGaps } from "./modifiers.mjs";
 
 const activeOf = (ids, focused, spec) => (ids.includes(spec.active) ? spec.active : ids.includes(focused) ? focused : ids[0]);
 
@@ -87,9 +88,11 @@ const presentFloating = (win, state, index) => {
  * @param {object} state
  * @param {object} [options]
  * @param {object} [options.layouts] extra/override layout interpreters keyed by spec type
+ * @param {object} [options.modifiers] extra/override layout modifiers keyed by modifier type (see `MODIFIERS`)
  */
-export const derive = (state, { layouts = {} } = {}) => {
+export const derive = (state, { layouts = {}, modifiers = {} } = {}) => {
   const registry = { ...LAYOUTS, ...layouts };
+  const modifierRegistry = { ...MODIFIERS, ...modifiers };
   const ws = state.workspaces[state.activeWorkspace];
   const focused = state.focus.window;
   // The active workspace's own visible windows, plus any sticky window that
@@ -101,8 +104,12 @@ export const derive = (state, { layouts = {} } = {}) => {
 
   const tiledIds = visible.filter((win) => inTiledBase(state, win)).map((w) => w.id);
 
-  const interpreter = typeof ws.layout === "function" ? ws.layout : registry[ws.layout?.type];
-  if (!interpreter) throw new TypeError(`derive(): no layout interpreter for "${ws.layout?.type}".`);
+  const baseInterpreter = typeof ws.layout === "function" ? ws.layout : registry[ws.layout?.type];
+  if (!baseInterpreter) throw new TypeError(`derive(): no layout interpreter for "${ws.layout?.type}".`);
+  // Layout modifiers (smart-gaps, max-windows, mirror, reflect-x, …) decorate the
+  // base interpreter, xmonad-style; see `state/modifiers.mjs`.
+  const layoutMods = Array.isArray(ws.layout?.modifiers) ? ws.layout.modifiers : [];
+  const interpreter = withModifiers(baseInterpreter, layoutMods, modifierRegistry);
   let base = interpreter(ws.layout, tiledIds, { state, workspace: ws, focused });
   if (!isNode(base)) throw new TypeError(`derive(): layout "${ws.layout?.type}" did not return a layout node.`);
 
@@ -123,9 +130,12 @@ export const derive = (state, { layouts = {} } = {}) => {
   }
 
   const { gap: gapSize, inset: insetSize } = state.config;
+  // `smart-gaps`/`no-gaps` modifiers suppress the configured gap/inset (e.g.
+  // when a single tiled window fills the workspace, or always).
+  const gapless = suppressesGaps(layoutMods, { tiledIds });
   // CSS gap applies per container, so the configured gap wraps every container in the base.
-  if (gapSize) base = transform(base, (node) => (isContainer(node) ? gap({ all: gapSize }, node) : node));
-  if (insetSize) base = inset({ all: insetSize }, base);
+  if (gapSize && !gapless) base = transform(base, (node) => (isContainer(node) ? gap({ all: gapSize }, node) : node));
+  if (insetSize && !gapless) base = inset({ all: insetSize }, base);
 
   // Everything not tiled is layered by the stacking model: the background layer
   // beneath the tiled base, every other layer above it (see `paintOrder`).

@@ -56,6 +56,7 @@ export { createState, createWorkspace, createWindowRecord, LAYERS, ROLES, STATUS
 export { migrate, MIGRATIONS } from "./state/migrate.mjs";
 export { update, reduce, replay, COMMANDS } from "./state/update.mjs";
 export { derive, presentationContext, LAYOUTS } from "./state/derive.mjs";
+export { MODIFIERS, MODIFIER_TYPES, withModifiers, suppressesGaps, applyModifiersToOps, validModifiers } from "./state/modifiers.mjs";
 export {
   DROPS,
   DROP_ZONES,

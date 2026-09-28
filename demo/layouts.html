@@ -84,6 +84,16 @@
             <span><kbd>s</kbd>/<kbd>S</kbd> swap next/prev</span><span><kbd>,</kbd>/<kbd>.</kbd> move before/after</span><span><kbd>Alt</kbd><kbd>Shift</kbd><kbd>←</kbd>/<kbd>→</kbd> move · <kbd>PgUp</kbd>/<kbd>PgDn</kbd> swap (adapter keyboard)</span>
             <span>drag a title bar: swap / insert · <kbd>Shift</kbd>-drag: float / tile · drag tabs to reorder · touch: long-press</span>
           </div>
+          <div class="dragset" id="mods">
+            <span class="title" title="spec.modifiers: [{ type, ... }], applied by the MODIFIERS registry via withModifiers()">Modifiers</span>
+            <label class="inline" title="modifier: smart-gaps — no gap/inset with a single tiled window"><input type="checkbox" id="mod-smart-gaps" /> smart-gaps</label>
+            <label class="inline" title="modifier: no-gaps — never gap/inset the tiled base"><input type="checkbox" id="mod-no-gaps" /> no-gaps</label>
+            <label class="inline" title="modifier: mirror — xmonad Mirror, transposes rows/columns"><input type="checkbox" id="mod-mirror" /> mirror</label>
+            <label class="inline" title="modifier: reflect-x — flip left-right"><input type="checkbox" id="mod-reflect-x" /> reflect-x</label>
+            <label class="inline" title="modifier: reflect-y — flip top-bottom"><input type="checkbox" id="mod-reflect-y" /> reflect-y</label>
+            <label class="inline" title="modifier: max-windows(n) — 0 disables; extra windows share a hidden stack slot">max <input type="number" id="mod-max" min="0" max="8" value="0" style="width: 42px" /></label>
+            <button class="btn small" id="toggle-layout" title="layout/toggle { a, b } (xmonad ToggleLayouts): flips this workspace between master-stack and monocle">⇄ toggle a/b</button>
+          </div>
           <div class="dragset" id="dragset">
             <span class="title" title="config.drag">Drag</span>
             <label class="inline" title="config.drag.tiled">mode <select id="drag-mode"><option>swap-or-insert</option><option>swap</option><option>insert</option><option>off</option></select></label>
@@ -112,7 +122,7 @@
       import {
         createWindowManager, createState, derive, compile, toHTML, presentationContext, LAYOUTS, COMMANDS,
         columns, dock, centered, hybrid, fixedGrid, count, updateRatio, isContainer, isModifier,
-        orderDrops, dropTargetAt, dropZoneAt, previewDrop,
+        orderDrops, dropTargetAt, dropZoneAt, previewDrop, MODIFIERS,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, SWATCHES, isTyping } from "./shared/kit.mjs";
@@ -208,6 +218,21 @@
         const current = currentSpec();
         // Keep tuned options (ratio, etc.) when re-selecting the same kind.
         wm.setLayout(keyOf(current) === key ? current : { ...base });
+      };
+
+      // ------------------------------------------------------------- modifiers
+      // spec.modifiers: [{ type, ... }], interpreted by the MODIFIERS registry
+      // (parallel to LAYOUTS) via withModifiers(); see src/state/modifiers.mjs.
+      const modsOf = () => currentSpec().modifiers ?? [];
+      const hasMod = (type) => modsOf().some((m) => m.type === type);
+      const setMod = (type, on, extra = {}) => {
+        const without = modsOf().filter((m) => m.type !== type);
+        const modifiers = on ? [...without, { type, ...extra }] : without;
+        wm.setLayout({ ...currentSpec(), modifiers });
+      };
+      const toggleLayoutAB = {
+        a: { type: "master-stack", ratio: 0.6, masterCount: 1, side: "left" },
+        b: { type: "monocle" },
       };
 
       const renderOptions = () => {
@@ -335,6 +360,12 @@
         $("#drag-preview").checked = drag.preview;
         $("#drag-float").value = drag.toFloating;
         $("#drag-tile").value = drag.toTiled;
+        $("#mod-smart-gaps").checked = hasMod("smart-gaps");
+        $("#mod-no-gaps").checked = hasMod("no-gaps");
+        $("#mod-mirror").checked = hasMod("mirror");
+        $("#mod-reflect-x").checked = hasMod("reflect-x");
+        $("#mod-reflect-y").checked = hasMod("reflect-y");
+        $("#mod-max").value = modsOf().find((m) => m.type === "max-windows")?.n ?? 0;
         const focused = wm.state.focus.window;
         $("#status").textContent = `${Object.keys(wm.state.windows).length} windows · focused ${focused ?? "none"}${lastRejection ? ` · last rejection: ${lastRejection}` : ""}`;
       };
@@ -387,6 +418,19 @@
       $("#drag-float").onchange = (e) => setDrag({ toFloating: e.target.value });
       $("#drag-tile").onchange = (e) => setDrag({ toTiled: e.target.value });
 
+      $("#mod-smart-gaps").onchange = (e) => setMod("smart-gaps", e.target.checked);
+      $("#mod-no-gaps").onchange = (e) => setMod("no-gaps", e.target.checked);
+      $("#mod-mirror").onchange = (e) => setMod("mirror", e.target.checked);
+      $("#mod-reflect-x").onchange = (e) => setMod("reflect-x", e.target.checked);
+      $("#mod-reflect-y").onchange = (e) => setMod("reflect-y", e.target.checked);
+      $("#mod-max").onchange = (e) => {
+        const n = Number(e.target.value);
+        setMod("max-windows", n > 0, { n });
+      };
+      // layout/toggle { a, b } (xmonad ToggleLayouts): a/b are optional after the
+      // first call — wm.toggleLayout() with no arguments reuses the stored pair.
+      $("#toggle-layout").onclick = () => wm.toggleLayout(toggleLayoutAB.a, toggleLayoutAB.b);
+
       document.addEventListener("keydown", (event) => {
         if (isTyping(event) || event.metaKey || event.ctrlKey || event.altKey) return;
         const digit = "1234567890".indexOf(event.key);
@@ -410,7 +454,7 @@
 
       refresh();
       window.wm = wm;
-      window.gallery = { CATALOG, LAYOUTS, COMMANDS, setLayout };
+      window.gallery = { CATALOG, LAYOUTS, MODIFIERS, COMMANDS, setLayout };
     </script>
   </body>
 </html>

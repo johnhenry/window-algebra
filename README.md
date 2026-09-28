@@ -128,7 +128,7 @@ Built-in commands (see `COMMANDS`):
 - **Drag and drop:** `window/drop`, `window/detach`, `window/swap-next`, `window/swap-previous`, `window/move-before`, `window/move-after`, `window/set-draggable` (and `window/move-to-workspace` takes `follow: true`)
 - **Scratchpad and sticky:** `window/to-scratchpad`, `scratchpad/toggle`, `window/set-sticky`
 - **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`
-- **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`, `layout/resize-split`
+- **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`, `layout/resize-split`, `layout/toggle`
 - **Config:** `config/set`
 - **Rules:** `rules/set`
 
@@ -151,6 +151,8 @@ The policy decisions baked into these commands:
 - **Urgency hints (EWMH/X11-style).** `window/set-urgent { id, urgent }` marks or clears a window's urgency (`urgent` defaults to `true`); `presentationContext(state).urgent` lists the ids in the order they became urgent, and `compile` marks their views `data-wm-urgent` and their tab-strip buttons the same way. Urgency clears automatically when the window is focused (`config.urgency.clearOnFocus`, default `true`) and emits `window/urgent-changed`. `focus/urgent` focuses the oldest urgent window, switching workspace if needed (`focus/redirected` / `workspace/activated` apply as usual); it is rejected (`no-urgent-window`) when nothing is urgent.
 
 Add your own commands with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`.
+
+- **`layout/toggle { a, b, workspace? }`** — xmonad's `ToggleLayouts`: flips a workspace between two layout specs. The current layout is compared to `a` by `type` alone (a BSP tree, a ratio, or `modifiers` may have drifted since); whatever isn't `a` becomes `a`. `a`/`b` are optional after the first call — the pair is stored on the workspace (`toggleLayouts`), so `dispatch({ type: "layout/toggle" })` with no arguments keeps flipping the same two. Toggling into `bsp` seeds its tree the same way `layout/set` does. Rejected as `invalid-layout` when neither a stored pair nor valid `a`/`b` are available, `unknown-workspace` otherwise. The manager exposes `wm.toggleLayout(a, b, workspace?)`.
 
 ## Window rules
 
@@ -257,7 +259,7 @@ The adapter also handles:
 
 ## derive: from state to presentation
 
-`derive(state, { layouts })` returns an `overlay` for the active workspace. The tiled base comes first, and floating windows, dialogs, popovers, and notifications are layered above it in stacking order. Layout specs are plain data (`{ type: "master-stack", ratio }`, `{ type: "bsp", tree }`, `{ type: "grid", min: 300 }`, …). You can add interpreters:
+`derive(state, { layouts, modifiers })` returns an `overlay` for the active workspace. The tiled base comes first, and floating windows, dialogs, popovers, and notifications are layered above it in stacking order. Layout specs are plain data (`{ type: "master-stack", ratio }`, `{ type: "bsp", tree }`, `{ type: "grid", min: 300 }`, …), optionally carrying `modifiers` (see *Layout modifiers*, below). You can add interpreters:
 
 ```js
 derive(state, {
@@ -266,6 +268,38 @@ derive(state, {
   },
 });
 ```
+
+## Layout modifiers
+
+xmonad-style decorators over a layout interpreter, kept serializable: a layout spec may carry `modifiers: [{ type, ... }]`, interpreted by a `MODIFIERS` registry parallel to `LAYOUTS` and applied by `derive` around the base layout (`derive(state, { modifiers })` extends/overrides it, exactly like `{ layouts }`).
+
+```js
+derive(state, {
+  // ws.layout: { type: "columns", modifiers: [{ type: "smart-gaps" }, { type: "mirror" }] }
+});
+```
+
+Built-in modifiers:
+
+- **`smart-gaps`** — no gap/inset around the tiled base when it holds a single window (there is nothing to separate it from).
+- **`no-gaps`** — never gap/inset the tiled base, regardless of window count.
+- **`mirror`** — xmonad's `Mirror`: transposes the layout (every row becomes a column and vice versa).
+- **`reflect-x`** — flips left-right (reverses the children of every row).
+- **`reflect-y`** — flips top-bottom (reverses the children of every column).
+- **`max-windows { n }`** — only the first `n` tiled windows get their own slot from the wrapped layout; the rest share the last slot as a hidden stack (one painted at a time, the others mounted but inert — the same presentation `monocle`/`tabs` already use). The overflow stack shows the focused window when focus lands on one of the hidden ones, otherwise the slot's own window. Every tiled window stays in the tree (just nested), so the tiled set, `paintOrder`, and drops over the flat workspace order all still agree with what's on screen.
+
+Modifiers apply in list order — `withModifiers(interpreter, mods, registry?)` is the underlying combinator, a plain functional decorator: `(spec, ids, context) → tree`, wrapped by each modifier in turn (registry defaults to `MODIFIERS`; use your own to add or override entries). Write your own the same way:
+
+```js
+const MODIFIERS = {
+  center: () => (interpreter) => (spec, ids, context) => centered({}, interpreter(spec, ids, context)),
+};
+derive(state, { modifiers: MODIFIERS });
+```
+
+`mirror`/`reflect-x`/`reflect-y` also remap the affected layout's drop-zone semantics (`applyModifiersToOps`, used by `dropInterpreterFor`), so dragging still matches what got painted — a reflected `columns` layout's `left` zone means what its unreflected `right` zone would have. `smart-gaps`/`no-gaps`/`max-windows` don't change a layout's screen axes, so its drop interpreter is untouched. `suppressesGaps(mods, { tiledIds })` is the pure query `derive` uses to decide whether to skip the configured gap/inset wrap.
+
+Toggle between two full layouts (rather than decorating one) with `layout/toggle` (see *Logical state and commands*) — xmonad's `ToggleLayouts`, distinct from a modifier.
 
 ## compile: from layout tree to CSS
 
