@@ -256,6 +256,7 @@
         <h2 style="margin-bottom: 10px">Keyboard shortcuts</h2>
         <table>
           <tr><td><kbd>Alt</kbd> <kbd>J</kbd> / <kbd>K</kbd></td><td>focus next / previous (focus/next, focus/previous)</td></tr>
+          <tr><td><kbd>F6</kbd> / <kbd>Shift</kbd> <kbd>F6</kbd></td><td>same, via attachInput's keyboard option (desktop-app convention); Tab is trapped inside an open modal dialog</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>Enter</kbd></td><td>toggle floating</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>P</kbd></td><td>promote to master</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>J</kbd> / <kbd>K</kbd></td><td>swap with next / previous tiled window (window/swap-next, window/swap-previous)</td></tr>
@@ -323,8 +324,11 @@
       });
       // present/simulate let the drag preview use this manager's custom layouts and drop interpreters.
       // `wm` supplies getState, dispatch, subscribe, present, simulate and drops;
-      // announce: true adds an aria-live region narrating drags (mirrored in the panel).
-      const inputOptions = { root, wm, announce: true };
+      // announce: true adds an aria-live region narrating drags, focus changes and open/close
+      // (mirrored in the panel). keyboard: {} — a truthy but empty move-keymap, since this page
+      // already binds its own Alt+… move/swap shortcuts below — enables just F6 / Shift+F6
+      // window cycling; independent of the option, Tab is trapped inside an open modal dialog.
+      const inputOptions = { root, wm, announce: true, keyboard: {} };
       let detachInput = attachInput(inputOptions);
       syncChrome(wm, root);
       // Mirror the adapter's (visually hidden) live region in the drag panel.

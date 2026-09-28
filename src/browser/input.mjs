@@ -162,13 +162,21 @@ const comboOf = (event) =>
  *   `{ phase, overlay, state, intent, drop, preview, geometry, point }`. It replaces
  *   the built-in ghost (the zone highlight stays).
  * @param {boolean|Element|((message: string) => void)} [options.announce] opt-in
- *   announcements of drag start, target, drop and cancel (and of moves made by
- *   command when `subscribe` is given): `true` creates a visually hidden
- *   aria-live region inside `root`; an element is used as the region; a
- *   function receives each message.
+ *   announcements of drag start, target, drop and cancel; and, of any command
+ *   dispatched through `send`/`dispatch` (focus changes, window open/close,
+ *   moves, …) — via `subscribe` when given, else straight from the returned
+ *   events: `true` creates a visually hidden aria-live region inside `root`;
+ *   an element is used as the region; a function receives each message.
  * @param {boolean|Record<string, string>} [options.keyboard] opt-in keyboard moving
  *   of the focused window: `true` uses DEFAULT_MOVE_KEYS, or pass a
- *   `{ "Alt+Shift+ArrowLeft": "window/move-before", … }` map
+ *   `{ "Alt+Shift+ArrowLeft": "window/move-before", … }` map. Either form also
+ *   enables F6 / Shift+F6 to cycle WM focus forward/backward (`focus/next` /
+ *   `focus/previous`), the desktop-app convention for moving between windows
+ *   without a mouse. Independent of this option, Tab is trapped within the
+ *   focused window's element whenever that window is modal (`win.modal`):
+ *   Tab past the last focusable element wraps to the first, Shift+Tab past
+ *   the first wraps to the last — background windows are already `inert`
+ *   (see `dom.mjs`) and never receive focus.
  * @param {number} [options.splitterStep] fraction of a split's total weight
  *   an arrow key nudges a focused splitter by (default 0.05)
  * @returns {() => void} detach
@@ -210,7 +218,11 @@ export const attachInput = (options) => {
 
   const viewOf = (target) => target.closest?.("wm-view[data-view]");
   const viewElementFor = (id) => root.querySelector?.(`wm-view[data-view="${id.replace(/["\\]/g, "\\$&")}"]`);
-  const titleOf = (state, id) => state.windows[id]?.title || id;
+  // Remembers every window's last-known title, so an announcement about a
+  // window/closed event (whose id is already gone from state by the time the
+  // event is announced) can still name it instead of falling back to its id.
+  const knownTitles = new Map();
+  const titleOf = (state, id) => state.windows[id]?.title || knownTitles.get(id) || id;
 
   const presentState = present ?? ((state) => ({ render: compile(derive(state), presentationContext(state)) }));
   const dryRun = (command, state) => {
@@ -256,12 +268,21 @@ export const attachInput = (options) => {
         return `${t(event.id)} is now floating.`;
       case "window/workspace-changed":
         return `${t(event.id)} moved to workspace ${event.workspace}.`;
+      // a11y: focus changes and open/close, narrated the same way as drag events
+      // (only via `announce`; nothing here fires unless that option is set).
+      case "window/focused":
+        return event.id ? `${t(event.id)} focused.` : null;
+      case "window/created":
+        return `${t(event.id)} opened.`;
+      case "window/closed":
+        return `${t(event.id)} closed.`;
       default:
         return null;
     }
   };
   const announceEvents = (events = []) => {
     const state = getState();
+    for (const win of Object.values(state.windows)) knownTitles.set(win.id, win.title);
     const messages = events.map((event) => describeEvent(state, event)).filter(Boolean);
     if (messages.length) say(messages.join(" "));
   };
@@ -1136,9 +1157,60 @@ export const attachInput = (options) => {
   // ------------------------------------------------------------ keyboard moving (opt-in)
 
   const keymap = keyboard === true ? DEFAULT_MOVE_KEYS : keyboard && typeof keyboard === "object" ? keyboard : null;
+
+  // ------------------------------------------------------------ focus trap (modal dialogs)
+
+  /** Elements a "Tab" stop could land on; fake/real DOM alike. */
+  const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex], [contenteditable]';
+  const isFocusable = (el) =>
+    el.getAttribute("tabindex") !== "-1" &&
+    !el.hasAttribute("disabled") &&
+    !el.hasAttribute("inert") &&
+    !el.closest?.("[inert]");
+
+  /**
+   * Tab wraps within the focused window's element when that window is modal
+   * (a11y: focus never leaks to whatever lies behind a modal dialog). Returns
+   * true when it handled the key.
+   */
+  const trapModalTab = (event) => {
+    if (event.key !== "Tab" || event.type === "keyup") return false;
+    const state = getState();
+    const id = state.focus.window;
+    const win = id && state.windows[id];
+    if (!win?.modal) return false;
+    const container = viewElementFor(id);
+    if (!container) return false;
+    const focusables = [...container.querySelectorAll(FOCUSABLE)].filter(isFocusable);
+    if (!focusables.length) {
+      event.preventDefault?.();
+      if (!container.hasAttribute("tabindex")) container.setAttribute("tabindex", "-1");
+      container.focus?.({ preventScroll: true });
+      return true;
+    }
+    const active = doc?.activeElement;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (!container.contains?.(active) || (event.shiftKey && active === first) || (!event.shiftKey && active === last)) {
+      event.preventDefault?.();
+      (event.shiftKey ? last : first).focus?.({ preventScroll: true });
+      return true;
+    }
+    return false;
+  };
+
   const onRootKeyDown = (event) => {
     const splitterEl = !drag && !gesture && !splitter ? event.target?.closest?.("[data-wm-splitter]") : null;
     if (splitterEl && onSplitterKeyDown(splitterEl, event)) return;
+    if (!drag && trapModalTab(event)) return;
+    if (keyboard && !drag) {
+      const combo = comboOf(event);
+      if (combo === "F6" || combo === "Shift+F6") {
+        event.preventDefault?.();
+        send({ type: combo === "F6" ? "focus/next" : "focus/previous" });
+        return;
+      }
+    }
     if (!keymap || drag) return;
     const type = keymap[comboOf(event)];
     const id = getState().focus.window;

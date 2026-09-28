@@ -280,6 +280,12 @@ wm-view {
   outline: none;
 }
 wm-view[data-focused] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+/* Motion (the focus ring easing in, a modal settling into place) is opt-out via
+   the OS "reduce motion" setting, never opt-in: nothing animates unless the
+   user hasn't asked for less of it. */
+@media (prefers-reduced-motion: no-preference) {
+  wm-view { transition: border-color 120ms ease, box-shadow 120ms ease; }
+}
 wm-view[data-mode="floating"] { box-shadow: var(--shadow); }
 wm-view[data-mode="floating"][data-focused] { box-shadow: 0 0 0 1px var(--accent), var(--shadow-lg); }
 wm-view[data-wm-blocked] { filter: saturate(0.4) brightness(0.92); cursor: not-allowed; }
