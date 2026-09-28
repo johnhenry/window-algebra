@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Command Console</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: 330px minmax(0, 1fr) 360px; gap: 10px; padding: 10px; min-height: 0; }
+      .col { display: grid; gap: 10px; min-height: 0; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+      .col.left { grid-template-rows: auto minmax(0, 1fr); }
+      .col.mid { grid-template-rows: minmax(0, 1fr) auto; }
+      .col.right { grid-template-rows: auto auto minmax(0, 1fr); }
+      .col.right > .panel:last-child { overflow: auto; }
+      form.composer { display: grid; gap: 6px; padding: 10px 12px; }
+      form.composer label { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+      form.composer label > * { min-width: 0; width: 100%; }
+      form.composer .xy { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      form.composer .xy input { width: 100%; }
+      #raw { width: 100%; height: 86px; }
+      .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+      .rejects { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 12px; }
+      .rejects button { font: 11.5px var(--mono); padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line); background: var(--danger-soft); color: var(--danger); cursor: pointer; }
+      .rejects button:hover { border-color: var(--danger); }
+      table.log-table { width: 100%; border-collapse: collapse; font: 12px/1.45 var(--mono); }
+      table.log-table th { position: sticky; top: 0; background: var(--surface); text-align: left; font: 650 10.5px var(--font); text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 6px 8px; border-bottom: 1px solid var(--line); z-index: 1; }
+      table.log-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      table.log-table td.n { color: var(--faint); text-align: right; width: 36px; }
+      table.log-table td.cmd { width: 38%; overflow-wrap: anywhere; }
+      table.log-table td.cmd b { color: var(--accent); font-weight: 600; }
+      table.log-table td.cmd span { color: var(--muted); }
+      table.log-table tr.rejected td { background: var(--danger-soft); }
+      table.log-table tr.rejected td.cmd b { color: var(--danger); }
+      table.log-table tr.meta td.cmd b { color: var(--warn); }
+      table.log-table tr.noop td.cmd b { color: var(--faint); }
+      .ev { display: inline-block; margin: 0 3px 3px 0; padding: 0 6px; border-radius: 4px; background: var(--ok-soft); color: var(--ok); white-space: nowrap; }
+      .ev.rej { background: var(--danger); color: #fff; }
+      .ef { display: inline-block; margin: 0 3px 3px 0; padding: 0 6px; border-radius: 4px; background: var(--violet-soft); color: var(--violet); white-space: nowrap; }
+      .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+      #preview { height: 220px; border-radius: 8px; margin: 10px 12px; border: 1px solid var(--line); }
+      #preview wm-view { font-size: 11px; }
+      #preview .mini-body { height: 100%; display: grid; place-content: center; text-align: center; font: 600 12px var(--mono); color: var(--wa-color); background: color-mix(in oklab, var(--wa-color) 10%, var(--surface)); padding: 4px; }
+      #preview .mini-body small { display: block; font-weight: 400; color: var(--muted); }
+      .timeline { padding: 8px 12px 12px; display: grid; gap: 6px; }
+      .timeline input[type="range"] { width: 100%; }
+      #ghost { height: 120px; border: 1px dashed var(--line-strong); border-radius: 8px; position: relative; overflow: hidden; background: var(--bg); }
+      #ghost > wm-overlay { width: 100%; height: 100%; }
+      #ghost wm-view { background: color-mix(in oklab, var(--accent) 16%, var(--surface)); border-radius: 4px; border: 1px solid var(--line-strong); font: 10px var(--mono); display: grid !important; place-content: center; color: var(--muted); }
+      #ghost wm-view[data-focused] { border-color: var(--accent); }
+      #ghost wm-tabs button { font-size: 9px; padding: 1px 4px; }
+      .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; padding: 8px 12px 12px; font-size: 12px; }
+      .kv dt { color: var(--faint); font-family: var(--mono); font-size: 11.5px; }
+      .kv dd { margin: 0; font-family: var(--mono); font-size: 11.5px; overflow-wrap: anywhere; }
+      #serialized { width: 100%; height: 90px; font-size: 11px; }
+      .verdict.ok { color: var(--ok); } .verdict.bad { color: var(--danger); }
+      details > summary { cursor: pointer; padding: 8px 12px; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); list-style: none; display: flex; gap: 8px; }
+      details > summary::before { content: "▸"; }
+      details[open] > summary::before { content: "▾"; }
+      details { border-top: 1px solid var(--line); }
+      @media (max-width: 1200px) {
+        body.app { height: auto; min-height: 100dvh; overflow: auto; }
+        main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .col.mid { grid-column: 1 / -1; grid-row: 2; grid-template-rows: 460px auto; }
+      }
+      @media (max-width: 760px) {
+        main { grid-template-columns: minmax(0, 1fr); }
+        .col.mid { grid-row: auto; }
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="site"></header>
+    <main>
+      <section class="col left">
+        <div class="panel">
+          <header>Compose a command <span class="spacer"></span><span class="chip" id="cmd-count"></span></header>
+          <form class="composer" id="composer">
+            <label>type <select id="type"></select></label>
+            <div id="fields" style="display: grid; gap: 6px"></div>
+            <label style="align-items: start">JSON <textarea id="raw" spellcheck="false" aria-label="Command JSON"></textarea></label>
+            <div class="acts">
+              <button class="btn primary" type="submit">Dispatch</button>
+              <button class="btn" type="button" id="dry" title="update(state, command) without committing: pure preview">Dry run</button>
+              <button class="btn" type="button" id="script" title="Dispatch a scripted scenario">Run script</button>
+            </div>
+          </form>
+          <dl class="kv" id="dry-out" hidden></dl>
+        </div>
+        <div class="panel">
+          <header>Rejection gallery <span class="spacer"></span><span class="chip danger">15 reasons</span></header>
+          <div class="scroll">
+            <p class="note" style="margin: 8px 12px 0">Every button sends a command the manager must refuse. It never throws: <code>update</code> returns a <code>command/rejected</code> event and the state is unchanged. (<code>unknown-layout</code> comes from the manager, which knows the interpreter registry.)</p>
+            <div class="rejects" id="rejects"></div>
+            <details>
+              <summary>Constants</summary>
+              <dl class="kv" id="constants"></dl>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="col mid">
+        <div class="panel">
+          <header>
+            Log
+            <span class="filters">
+              <label class="inline"><input type="checkbox" id="f-noop" checked /> no-ops</label>
+              <label class="inline"><input type="checkbox" id="f-moves" /> pointer moves</label>
+            </span>
+            <span class="spacer"></span>
+            <span class="chip" id="log-count">0</span>
+            <button class="btn small ghost" id="clear">clear view</button>
+          </header>
+          <div class="scroll">
+            <table class="log-table">
+              <thead><tr><th>#</th><th>command</th><th>events</th><th>effects</th></tr></thead>
+              <tbody id="log"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <header>Queries on the present state</header>
+          <dl class="kv" id="queries"></dl>
+        </div>
+      </section>
+
+      <section class="col right">
+        <div class="panel">
+          <header>Live state <span class="spacer"></span><span class="chip" id="ws-chip"></span></header>
+          <div id="preview" class="stage"></div>
+        </div>
+        <div class="panel">
+          <header>History & replay</header>
+          <div class="timeline">
+            <div class="acts">
+              <button class="btn small" id="undo">↶ Undo</button>
+              <button class="btn small" id="redo">↷ Redo</button>
+              <button class="btn small" id="verify" title="replay(wm.origin, wm.log) and compare with equals()">Verify replay</button>
+              <button class="btn small" id="rebuild" title="load(replay(origin, log.slice(0, n)))">Restore step</button>
+            </div>
+            <div class="note" id="history-note"></div>
+            <label class="inline" style="width: 100%">step <input type="range" id="scrub" min="0" max="0" value="0" /> <span class="mono" id="scrub-label">0/0</span></label>
+            <div id="ghost" aria-label="Replayed state preview"></div>
+            <div class="note verdict" id="verdict"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <header>Serialize / restore</header>
+          <div class="timeline" style="grid-template-rows: auto auto auto">
+            <div class="acts">
+              <button class="btn small" id="serialize">wm.serialize()</button>
+              <button class="btn small" id="load">wm.load(json)</button>
+              <button class="btn small" id="save-slot" title="Keep a copy in this browser">Save slot</button>
+              <button class="btn small" id="load-slot">Load slot</button>
+            </div>
+            <textarea id="serialized" spellcheck="false" aria-label="Serialized state"></textarea>
+            <div class="note" id="pure-history"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        createWindowManager, createState, createWorkspace, createWindowRecord, update, reduce, replay, derive, compile, toHTML, presentationContext, equals,
+        COMMANDS, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, LAYOUTS,
+        getWindow, activeWorkspace, focusedWindow, windowsIn, isVisible, visibleWindows, childrenOf, modalTarget, isBlocked, blockedWindows, stackingOrder, focusable, descendantsOf,
+        createHistory, record, undo as undoHistory, redo as redoHistory, canUndo, canRedo,
+      } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, lazySurface, immediateScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, storage, SWATCHES, describe } from "./shared/kit.mjs";
+
+      initPage({ current: "./console.html", title: "Command console" });
+
+      // ---------------------------------------------------------------- extensions (custom commands)
+      const extensions = {
+        /** Cascade every floating window of the active workspace. Composes the built-in reducer. */
+        "demo/cascade"(state) {
+          const floating = windowsIn(state).filter((w) => w.mode === "floating");
+          let next = state;
+          floating.forEach((w, i) => (next = reduce(next, { type: "window/move", id: w.id, x: 20 + i * 26, y: 16 + i * 22 })));
+          return { state: next, events: [{ type: "demo/cascaded", count: floating.length }], effects: [{ type: "render" }] };
+        },
+        /** Close every window in the active workspace, collecting the built-in events. */
+        "demo/close-all"(state) {
+          let next = state;
+          const events = [];
+          for (const w of windowsIn(state).filter((w) => !w.parent)) {
+            if (!next.windows[w.id]) continue;
+            const out = update(next, { type: "window/close", id: w.id });
+            next = out.state;
+            events.push(...out.events);
+          }
+          return { state: next, events, effects: [{ type: "render" }, { type: "focus", id: null }] };
+        },
+      };
+      const ALL_COMMANDS = [...COMMANDS, ...Object.keys(extensions)];
+
+      // ---------------------------------------------------------------- manager
+      const colors = new Map();
+      const colorOf = (id) => {
+        if (!colors.has(id)) colors.set(id, SWATCHES[colors.size % SWATCHES.length]);
+        return colors.get(id);
+      };
+      const renderer = createDomRenderer({
+        root: $("#preview"),
+        surfaceFor: (id) =>
+          lazySurface((target) => {
+            target.style.setProperty("--wa-color", colorOf(id));
+            const body = h("div", { class: "mini-body", "data-wm-handle": "move" }, id, h("small", { "data-meta": "" }, ""));
+            target.append(body);
+            return () => body.remove();
+          }),
+      });
+      const initial = createState({ workspaces: ["main", { id: "side", layout: { type: "columns" } }], config: { gap: 4, inset: 4 } });
+      const wm = createWindowManager({ state: initial, extensions, renderer, schedule: immediateScheduler, history: 500, onEffect: () => {} });
+
+      // Every dispatch goes through `run`, so the log sees events *and* effects.
+      let rowNumber = 0;
+      const tbody = $("#log");
+      const addRow = ({ command, events, effects, kind }) => {
+        const isMove = command && (command.type === "window/move" || command.type === "window/resize");
+        const tr = h("tr", { class: kind, "data-move": isMove ? "" : undefined },
+          h("td", { class: "n" }, String(++rowNumber)),
+          h("td", { class: "cmd" }, h("b", {}, command?.type ?? "—"), " ", h("span", {}, command ? describe(command) : "")),
+          h("td", {}, events.map((e) => h("span", { class: `ev ${e.type === "command/rejected" ? "rej" : ""}`, title: JSON.stringify(e) }, e.type === "command/rejected" ? `rejected: ${e.reason}` : e.type))),
+          h("td", {}, effects.map((e) => h("span", { class: "ef", title: JSON.stringify(e) }, e.type === "focus" ? `focus → ${e.id ?? "null"}` : e.type))),
+        );
+        tbody.prepend(tr);
+        while (tbody.children.length > 500) tbody.lastElementChild.remove();
+        applyFilters();
+      };
+      const applyFilters = () => {
+        const noop = $("#f-noop").checked;
+        const moves = $("#f-moves").checked;
+        for (const tr of tbody.children) tr.hidden = (!noop && tr.classList.contains("noop")) || (!moves && tr.hasAttribute("data-move"));
+        $("#log-count").textContent = `${wm.log.length} in wm.log`;
+      };
+      $("#f-noop").onchange = applyFilters;
+      $("#f-moves").onchange = applyFilters;
+      $("#clear").onclick = () => tbody.replaceChildren();
+
+      const run = (command) => {
+        const before = wm.getState();
+        const out = wm.dispatch(command);
+        const rejected = out.events.some((e) => e.type === "command/rejected");
+        addRow({ command, events: out.events, effects: out.effects, kind: rejected ? "rejected" : out.state === before ? "noop" : "" });
+        return out;
+      };
+      attachInput({ root: $("#preview"), getState: wm.getState, dispatch: run });
+
+      // Meta events (undo/redo/load) arrive through subscribe with command === null.
+      wm.subscribe((state, events, command) => {
+        if (command === null) addRow({ command: { type: events[0].type }, events, effects: [{ type: "render" }], kind: "meta" });
+        refresh();
+      });
+
+      // ---------------------------------------------------------------- composer
+      const typeSelect = $("#type");
+      typeSelect.append(
+        h("optgroup", { label: "COMMANDS (built in)" }, COMMANDS.map((c) => h("option", { value: c }, c))),
+        h("optgroup", { label: "extensions" }, Object.keys(extensions).map((c) => h("option", { value: c }, c))),
+      );
+      $("#cmd-count").textContent = `${COMMANDS.length} + ${Object.keys(extensions).length}`;
+
+      const ids = () => Object.keys(wm.getState().windows);
+      const FIELDS = {
+        "window/create": ["newId", "title", "role", "parentOpt", "modal", "mode", "workspaceOpt"],
+        "window/close": ["id"], "window/focus": ["id"], "window/blur": [], "focus/next": [], "focus/previous": [],
+        "window/raise": ["id"], "window/lower": ["id"], "window/set-layer": ["id", "layer"],
+        "window/move": ["id", "xy"], "window/resize": ["id", "wh"], "window/set-mode": ["id", "mode"], "window/toggle-floating": ["id"],
+        "window/minimize": ["id"], "window/maximize": ["id"], "window/fullscreen": ["id"], "window/restore": ["id"],
+        "window/set-title": ["id", "title"], "window/set-constraints": ["id", "constraints"], "window/swap": ["a", "b"], "window/promote": ["id"],
+        "window/move-to-workspace": ["id", "workspace"], "workspace/create": ["newWs", "activate"], "workspace/activate": ["wsId"], "workspace/remove": ["wsId"],
+        "layout/set": ["layout"], "layout/set-ratio": ["ratio"], "layout/rotate-split": ["idOpt"], "config/set": ["config"],
+        "demo/cascade": [], "demo/close-all": [],
+      };
+      let createCounter = 0;
+      const select = (name, options, value) => {
+        const el = h("select", { name }, options.map((o) => h("option", { value: o }, o)));
+        if (value !== undefined) el.value = value;
+        return el;
+      };
+      const field = (label, input) => h("label", {}, label, input);
+      const buildFields = () => {
+        const type = typeSelect.value;
+        const state = wm.getState();
+        const focused = state.focus.window ?? ids()[0] ?? "";
+        const make = {
+          newId: () => field("id", h("input", { type: "text", name: "id", value: `w${++createCounter}` })),
+          title: () => field("title", h("input", { type: "text", name: "title", value: type === "window/create" ? "" : state.windows[focused]?.title ?? "" })),
+          role: () => field("role", select("role", ROLES, "window")),
+          parentOpt: () => field("parent", select("parent", ["", ...ids()], "")),
+          modal: () => field("modal", h("input", { type: "checkbox", name: "modal", style: { width: "auto" } })),
+          mode: () => field("mode", select("mode", type === "window/create" ? ["", "tiled", "floating"] : ["tiled", "floating"], type === "window/create" ? "" : "floating")),
+          workspaceOpt: () => field("workspace", select("workspace", ["", ...state.workspaceOrder], "")),
+          id: () => field("id", select("id", ids(), focused)),
+          idOpt: () => field("id", select("id", ["", ...ids()], focused)),
+          a: () => field("a", select("a", ids(), ids()[0])),
+          b: () => field("b", select("b", ids(), ids()[1] ?? ids()[0])),
+          layer: () => field("layer", select("layer", LAYERS, "top")),
+          xy: () => field("x · y", h("div", { class: "xy" }, h("input", { type: "number", name: "x", value: 40 }), h("input", { type: "number", name: "y", value: 30 }))),
+          wh: () => field("w · h", h("div", { class: "xy" }, h("input", { type: "number", name: "width", value: 220 }), h("input", { type: "number", name: "height", value: 140 }))),
+          constraints: () => field("constraints", h("input", { type: "text", name: "constraints", value: '{"minWidth": 160, "minHeight": 100}' })),
+          workspace: () => field("workspace", select("workspace", state.workspaceOrder, state.workspaceOrder.find((w) => w !== state.activeWorkspace))),
+          wsId: () => field("id", select("id", state.workspaceOrder, state.workspaceOrder.at(-1))),
+          newWs: () => field("id", h("input", { type: "text", name: "id", value: `ws${state.workspaceOrder.length + 1}` })),
+          activate: () => field("activate", h("input", { type: "checkbox", name: "activate", checked: true, style: { width: "auto" } })),
+          layout: () => field("layout", select("layout", [...Object.keys(LAYOUTS)], "bsp")),
+          ratio: () => field("ratio", h("input", { type: "number", name: "ratio", value: 0.65, step: 0.05 })),
+          config: () => field("patch", h("input", { type: "text", name: "config", value: '{"focusRaises": false, "gap": 10}' })),
+        };
+        $("#fields").replaceChildren(...FIELDS[type].map((key) => make[key]()));
+        syncRaw();
+      };
+      const readCommand = () => {
+        const type = typeSelect.value;
+        const command = { type };
+        for (const el of $$("#fields [name]")) {
+          const name = el.name;
+          let value = el.type === "checkbox" ? el.checked : el.value;
+          if (value === "" || value === false) {
+            if (name === "modal" || name === "activate") continue;
+            continue;
+          }
+          if (el.type === "number") value = Number(value);
+          if (name === "constraints") value = JSON.parse(value);
+          if (name === "layout") value = { type: value, ...(value === "grid" ? { min: 120 } : {}) };
+          if (name === "config") {
+            Object.assign(command, JSON.parse(value));
+            continue;
+          }
+          if (name === "parent" && type === "window/create") {
+            command.parent = value;
+            continue;
+          }
+          command[name] = value;
+        }
+        if (type === "window/create" && command.parent && !command.role) command.role = "dialog";
+        return command;
+      };
+      const syncRaw = () => {
+        try {
+          $("#raw").value = JSON.stringify(readCommand());
+        } catch (error) {
+          $("#raw").value = `// ${error.message}`;
+        }
+      };
+      typeSelect.onchange = buildFields;
+      $("#fields").addEventListener("input", syncRaw);
+      $("#fields").addEventListener("change", syncRaw);
+      const rawCommand = () => JSON.parse($("#raw").value);
+
+      $("#composer").onsubmit = (event) => {
+        event.preventDefault();
+        let command;
+        try {
+          command = rawCommand();
+        } catch {
+          command = $("#raw").value; // not JSON: still dispatch it; the core must reject it.
+        }
+        run(command);
+        if (typeSelect.value === "window/create" || typeSelect.value === "workspace/create") buildFields();
+        else syncRaw();
+      };
+
+      // Dry run: the pure core, no commit. Also previews createWindowRecord / createWorkspace.
+      $("#dry").onclick = () => {
+        let command;
+        try {
+          command = rawCommand();
+        } catch (error) {
+          command = null;
+        }
+        const state = wm.getState();
+        const out = update(state, command, extensions);
+        const rows = [
+          ["update() → events", out.events.map((e) => e.type).join(", ") || "none"],
+          ["update() → effects", out.effects.map((e) => e.type + (e.type === "focus" ? `→${e.id}` : "")).join(", ") || "none"],
+          ["state changed", String(out.state !== state)],
+          ["committed", "no (pure preview)"],
+        ];
+        if (command?.type === "window/create" && command.id) rows.push(["createWindowRecord", JSON.stringify(createWindowRecord(command, state))]);
+        if (command?.type === "workspace/create" && command.id) rows.push(["createWorkspace", JSON.stringify(createWorkspace({ id: command.id, layout: command.layout }))]);
+        const dl = $("#dry-out");
+        dl.hidden = false;
+        dl.replaceChildren(...rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
+      };
+
+      // A scripted tour that touches most commands.
+      const SCRIPT = [
+        { type: "window/create", id: "editor", title: "Editor" },
+        { type: "window/create", id: "shell", title: "Shell" },
+        { type: "window/create", id: "docs", title: "Docs" },
+        { type: "window/create", id: "calc", title: "Calc", mode: "floating", placement: { x: 30, y: 20, width: 150, height: 100 } },
+        { type: "layout/set", layout: { type: "bsp" } },
+        { type: "layout/set-ratio", ratio: 0.62, id: "editor" },
+        { type: "layout/rotate-split", id: "docs" },
+        { type: "window/create", id: "confirm", title: "Confirm", role: "dialog", parent: "editor", modal: true, placement: { width: 170, height: 90 } },
+        { type: "window/focus", id: "editor" },
+        { type: "window/close", id: "confirm" },
+        { type: "window/create", id: "scratch", title: "Scratch" },
+        { type: "window/create", id: "scratch-sheet", title: "Sheet", role: "sheet", parent: "scratch", modal: true, placement: { width: 150 } },
+        { type: "window/close", id: "scratch" },
+        { type: "window/swap", a: "editor", b: "docs" },
+        { type: "window/promote", id: "editor" },
+        { type: "window/set-layer", id: "calc", layer: "top" },
+        { type: "demo/cascade" },
+        { type: "window/minimize", id: "shell" },
+        { type: "focus/next" },
+        { type: "window/move-to-workspace", id: "docs", workspace: "side" },
+        { type: "workspace/activate", id: "side" },
+        { type: "workspace/activate", id: "main" },
+        { type: "window/restore", id: "shell" },
+      ];
+      $("#script").onclick = async () => {
+        for (const command of SCRIPT) {
+          run(command);
+          await new Promise((r) => setTimeout(r, 120));
+        }
+      };
+
+      // ---------------------------------------------------------------- rejection gallery
+      const REJECTS = [
+        ["missing-id", { type: "window/create" }],
+        ["duplicate-id", () => ({ type: "window/create", id: ids()[0] ?? "x" })],
+        ["unknown-parent", { type: "window/create", id: "orphan", parent: "nobody" }],
+        ["unknown-workspace", { type: "workspace/activate", id: "mars" }],
+        ["unknown-window", { type: "window/focus", id: "ghost" }],
+        ["unknown-layer", () => ({ type: "window/set-layer", id: ids()[0] ?? "x", layer: "stratosphere" })],
+        ["unknown-mode", () => ({ type: "window/set-mode", id: ids()[0] ?? "x", mode: "sideways" })],
+        ["different-workspaces", () => {
+          const s = wm.getState();
+          const a = Object.values(s.windows).find((w) => w.workspace === "main")?.id ?? "a";
+          const b = Object.values(s.windows).find((w) => w.workspace !== "main")?.id ?? "b";
+          return { type: "window/swap", a, b };
+        }],
+        ["last-workspace", () => {
+          const s = wm.getState();
+          if (s.workspaceOrder.length === 1) return { type: "workspace/remove", id: s.workspaceOrder[0] };
+          // With several workspaces the manager would comply, so show the pure core refusing on a one-workspace state.
+          const command = { type: "workspace/remove", id: "main" };
+          const out = update(createState(), command);
+          addRow({ command: { ...command, note: "pure update(createState(), …)" }, events: out.events, effects: out.effects, kind: "rejected" });
+          return null;
+        }],
+        ["invalid-layout", { type: "layout/set", layout: { kind: "nope" } }],
+        ["unknown-layout", { type: "layout/set", layout: { type: "nope" } }],
+        ["invalid-ratio", { type: "layout/set-ratio", ratio: "wide" }],
+        ["not-bsp", { type: "layout/rotate-split", workspace: "side" }],
+        ["unknown-command", { type: "window/teleport", id: "x" }],
+        ["invalid-command", { kind: "no type field" }],
+      ];
+      $("#rejects").append(
+        ...REJECTS.map(([reason, command]) =>
+          h("button", { type: "button", title: typeof command === "function" ? "built from current state" : JSON.stringify(command), onclick: () => {
+            const built = typeof command === "function" ? command() : command;
+            if (built) run(built);
+          } }, reason),
+        ),
+      );
+
+      // ---------------------------------------------------------------- constants
+      $("#constants").replaceChildren(
+        ...[
+          ["COMMANDS", COMMANDS.join(" ")],
+          ["LAYOUTS", Object.keys(LAYOUTS).join(" ")],
+          ["LAYERS", LAYERS.join(" ")],
+          ["ROLES", ROLES.join(" ")],
+          ["STATUSES", STATUSES.join(" ")],
+          ["DEFAULT_CONFIG", JSON.stringify(DEFAULT_CONFIG)],
+        ].flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]),
+      );
+
+      // ---------------------------------------------------------------- history, replay, serialize
+      $("#undo").onclick = () => wm.undo();
+      $("#redo").onclick = () => wm.redo();
+
+      const ghostRoot = $("#ghost");
+      const ghost = createDomRenderer({ root: ghostRoot, surfaceFor: () => lazySurface((t) => { t.textContent = t.getAttribute("data-view"); return () => (t.textContent = ""); }) });
+      const replayed = (n) => replay(wm.origin, wm.log.slice(0, n), extensions);
+      const renderScrub = () => {
+        const n = Number($("#scrub").value);
+        const state = replayed(n);
+        ghost.commit(compile(derive(state), presentationContext(state), { key: "ghost" }));
+        $("#scrub-label").textContent = `${n}/${wm.log.length}`;
+      };
+      $("#scrub").oninput = renderScrub;
+      $("#verify").onclick = () => {
+        const same = equals(replay(wm.origin, wm.log, extensions), wm.getState());
+        $("#verdict").className = `note verdict ${same ? "ok" : "bad"}`;
+        $("#verdict").textContent = same
+          ? `✓ replay(origin, log) reproduces the present state exactly (${wm.log.length} commands).`
+          : "✗ replay diverged from the present state.";
+      };
+      $("#rebuild").onclick = () => {
+        const n = Number($("#scrub").value);
+        wm.load(replayed(n));
+      };
+
+      $("#serialize").onclick = () => ($("#serialized").value = wm.serialize());
+      $("#load").onclick = () => {
+        try {
+          wm.load($("#serialized").value);
+        } catch (error) {
+          $("#verdict").className = "note verdict bad";
+          $("#verdict").textContent = `load failed: ${error.message}`;
+        }
+      };
+      $("#save-slot").onclick = () => {
+        storage.set("wa-console-slot", wm.serialize());
+        $("#verdict").className = "note verdict ok";
+        $("#verdict").textContent = "Saved to this browser's slot.";
+      };
+      $("#load-slot").onclick = () => {
+        const saved = storage.get("wa-console-slot");
+        if (saved) wm.load(saved);
+        else $("#verdict").textContent = "No saved slot yet.";
+      };
+
+      // The standalone history API, fed by the same commands (independent of the manager).
+      let pure = createHistory(initial, { limit: 1000 });
+      wm.subscribe((state, events, command) => {
+        if (command) pure = record(pure, reduce(pure.present, command, extensions));
+      });
+      const renderPure = () => {
+        $("#pure-history").innerHTML = `Standalone <code>createHistory/record</code>: past ${pure.past.length}, future ${pure.future.length}, canUndo ${canUndo(pure)}, canRedo ${canRedo(pure)}. <a href="#" id="pure-undo">undo</a> · <a href="#" id="pure-redo">redo</a> (pure, does not touch the manager)`;
+        $("#pure-undo").onclick = (e) => { e.preventDefault(); pure = undoHistory(pure); renderPure(); };
+        $("#pure-redo").onclick = (e) => { e.preventDefault(); pure = redoHistory(pure); renderPure(); };
+      };
+
+      // ---------------------------------------------------------------- queries
+      const refresh = () => {
+        const s = wm.getState();
+        const f = s.focus.window;
+        for (const view of $("#preview").querySelectorAll("wm-view")) {
+          const w = s.windows[view.getAttribute("data-view")];
+          const meta = view.querySelector("[data-meta]");
+          if (w && meta) meta.textContent = `${w.mode} · ${w.layer}${w.status !== "normal" ? ` · ${w.status}` : ""}`;
+        }
+        $("#ws-chip").textContent = `workspace: ${s.activeWorkspace} · ${activeWorkspace(s).layout.type}`;
+        const fw = focusedWindow(s);
+        $("#queries").replaceChildren(
+          ...[
+            ["focusedWindow", fw ? `${fw.id} (${fw.role}, ${fw.mode})` : "—"],
+            ["getWindow(focused).placement", fw ? JSON.stringify(getWindow(s, fw.id).placement) : "—"],
+            ["windowsIn(active)", windowsIn(s).map((w) => w.id).join(", ") || "—"],
+            ["visibleWindows", visibleWindows(s).map((w) => w.id).join(", ") || "—"],
+            ["isVisible(each)", Object.keys(s.windows).map((id) => `${id}:${isVisible(s, id) ? "✓" : "✗"}`).join(" ") || "—"],
+            ["focusable", focusable(s).join(", ") || "—"],
+            ["stackingOrder", stackingOrder(s).join(" < ") || "—"],
+            ["blockedWindows", blockedWindows(s).join(", ") || "none"],
+            ["modalTarget(focused)", f ? modalTarget(s, f) : "—"],
+            ["isBlocked(focused)", f ? String(isBlocked(s, f)) : "—"],
+            ["childrenOf / descendantsOf(focused)", f ? `${childrenOf(s, f).map((w) => w.id).join(", ") || "none"} / ${descendantsOf(s, f).join(", ") || "none"}` : "—"],
+            ["focus.history", s.focus.history.join(" → ") || "—"],
+          ].flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]),
+        );
+        $("#undo").disabled = !wm.canUndo;
+        $("#redo").disabled = !wm.canRedo;
+        $("#history-note").textContent = `canUndo ${wm.canUndo} · canRedo ${wm.canRedo} · wm.log has ${wm.log.length} commands since ${wm.origin === initial ? "the initial state" : "the last load()"}.`;
+        const scrub = $("#scrub");
+        const atEnd = Number(scrub.value) === Number(scrub.max);
+        scrub.max = String(wm.log.length);
+        if (atEnd || Number(scrub.value) > wm.log.length) scrub.value = String(wm.log.length);
+        renderScrub();
+        renderPure();
+        applyFilters();
+      };
+
+      buildFields();
+      // Seed a few windows so there is something to command.
+      for (const command of [
+        { type: "window/create", id: "alpha", title: "Alpha" },
+        { type: "window/create", id: "beta", title: "Beta" },
+        { type: "window/create", id: "gamma", title: "Gamma", mode: "floating", placement: { x: 24, y: 24, width: 140, height: 90 } },
+        { type: "window/create", id: "delta", title: "Delta", workspace: "side" },
+      ]) run(command);
+      buildFields();
+      refresh();
+      window.wm = wm;
+      window.consolePage = { run, REJECTS, SCRIPT };
+    </script>
+  </body>
+</html>

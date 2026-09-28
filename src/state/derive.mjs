@@ -4,7 +4,7 @@
  * for tiled windows; the renderer hands the tree to CSS.
  */
 import { view, overlay, place, size, gap, inset, anchor, row, isNode, isContainer } from "../algebra/nodes.mjs";
-import { transform } from "../algebra/transforms.mjs";
+import { transform, mapViews } from "../algebra/transforms.mjs";
 import {
   masterStack,
   columns,
@@ -75,8 +75,9 @@ const presentFloating = (win, state, index) => {
     case "tooltip": {
       const sized = size({ width, height: height ?? "content" }, view(win.id));
       if (anchorTo) {
-        const { side = "bottom", align = "start", offset = 4 } = win.anchor ?? {};
-        return anchor({ to: anchorTo, side, align, offset }, sized);
+        // Every anchor option (inside, x, y, …) passes through; only `to` is resolved here.
+        const { to: _to, side = "bottom", align = "start", offset = 4, ...rest } = win.anchor ?? {};
+        return anchor({ ...rest, to: anchorTo, side, align, offset }, sized);
       }
       return floating({ x, y, width, height }, view(win.id));
     }
@@ -112,6 +113,18 @@ export const derive = (state, { layouts = {} } = {}) => {
   if (!interpreter) throw new TypeError(`derive(): no layout interpreter for "${ws.layout?.type}".`);
   let base = interpreter(ws.layout, tiledIds, { state, workspace: ws, focused });
   if (!isNode(base)) throw new TypeError(`derive(): layout "${ws.layout?.type}" did not return a layout node.`);
+
+  // Size constraints are honoured for tiled windows too: CSS min/max sizes on the view.
+  const constrained = (id) => {
+    const c = state.windows[id]?.constraints ?? {};
+    const picked = Object.fromEntries(
+      ["minWidth", "minHeight", "maxWidth", "maxHeight"].filter((k) => Number.isFinite(c[k])).map((k) => [k, c[k]]),
+    );
+    return Object.keys(picked).length ? picked : null;
+  };
+  if (tiledIds.some(constrained)) {
+    base = mapViews(base, (node) => (tiledIds.includes(node.id) && constrained(node.id) ? size(constrained(node.id), node) : node));
+  }
 
   const { gap: gapSize, inset: insetSize } = state.config;
   // CSS gap applies per container, so the configured gap wraps every container in the base.

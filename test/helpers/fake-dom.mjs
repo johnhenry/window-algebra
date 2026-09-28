@@ -65,9 +65,25 @@ export class FakeElement {
   removeAttribute(name) {
     this.attributes.delete(name);
   }
+  /** Times this element left the document (a real iframe would reload each time). */
+  disconnects = 0;
+  get isConnected() {
+    let node = this;
+    while (node.parentNode) node = node.parentNode;
+    return node === this.ownerDocument.body;
+  }
   #detach(node) {
+    if (node.isConnected) node.disconnects++;
     if (node.parentNode) node.parentNode.childNodes.splice(node.parentNode.childNodes.indexOf(node), 1);
     node.parentNode = null;
+  }
+  /** State-preserving move (Chrome's Element.prototype.moveBefore): both ends must be connected. */
+  moveBefore(node, reference) {
+    if (!node.isConnected || !this.isConnected) throw new Error("HierarchyRequestError: moveBefore needs connected nodes");
+    const before = node.disconnects;
+    this.insertBefore(node, reference);
+    node.disconnects = before;
+    return node;
   }
   insertBefore(node, reference) {
     if (reference && reference.parentNode !== this) {

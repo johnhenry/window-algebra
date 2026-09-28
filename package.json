@@ -21,7 +21,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "demo": "echo 'Serve the repo root with any static server and open /demo/ (ES modules do not load from file://).'"
+    "demo": "echo 'Serve the repo root with any static server and open /demo/ (the example hub). ES modules do not load from file://.'"
   },
   "keywords": [
     "window-manager",

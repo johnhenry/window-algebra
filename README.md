@@ -53,7 +53,20 @@ wm.setLayout({ type: "bsp" });
 wm.undo();
 ```
 
-To run the demo, serve the repository root with any static server and open `/demo/`. ES modules don't load from `file://`.
+## Examples
+
+Serve the repository root with any static server and open `/demo/`. ES modules don't load from `file://`. The hub page links every example and renders a capability checklist (`demo/shared/coverage.mjs`) showing which page exercises each primitive, transform, layout, command, rejection, policy, surface and event.
+
+| Page | What it shows |
+| --- | --- |
+| `playground.html` | Edit a layout tree as JSON or with constructors, apply every transform, read the compiled CSS / `toHTML` / render tree beside a live preview. |
+| `layouts.html` | Every derived layout (plus two custom interpreters) switchable live, small multiples of all of them at once, divider drag via `updateRatio`. |
+| `desktop.html` | Workspaces, floating/tiled, dock panels, the 7 stacking layers, focus vs raise, nested modals with focus redirection, every role, keyboard shortcuts. |
+| `console.html` | Compose any command, a gallery of every rejection, events and effects per dispatch, undo/redo, replay scrubber, serialize/restore. |
+| `surfaces.html` | html, lazy, iframe (`srcdoc`) and canvas surfaces keeping their state while windows move through layouts. |
+| `geometry.html` | Requested vs measured geometry, constraints on tiled windows, container queries, CSS anchors vs the forced JS fallback, geometry helpers. |
+| `ide.html` | A realistic IDE built from the pieces: custom grid-areas layout, tab stacks, command palette, context menus, toasts, three workspaces, session persistence. |
+| `basic.html` | The minimal quick start. |
 
 ## The layout algebra
 
@@ -118,11 +131,12 @@ Built-in commands (see `COMMANDS`):
 
 The policy decisions baked into these commands:
 
-- **Commands versus events.** The manager can say no. A duplicate id, an unknown parent, or a malformed command produces a `command/rejected` event. It never throws.
-- **Requested versus actual geometry.** `window/move` and `window/resize` store the requested placement. `derive` uses it only when a window is floating.
+- **Commands versus events.** The manager can say no. A duplicate id, an unknown parent, or a malformed command produces a `command/rejected` event. It never throws. `createWindowManager` also rejects a `layout/set` or `workspace/create` whose layout type no interpreter knows (`unknown-layout`), since `update` cannot see the interpreter registry.
+- **Requested versus actual geometry.** `window/move` and `window/resize` store the requested placement. `derive` uses it only when a window is floating. Size constraints (`minWidth`, `maxHeight`, …) apply to tiled windows too, as CSS min/max sizes.
 - **Focus is not stacking.** Raising on focus is a policy (`config.focusRaises`). Stacking uses per-layer order: `background`, `normal`, `top`, `modal`, `popover`, `notification`, `system`.
 - **The modal graph.** Focusing a window that has an open modal descendant sends focus to the deepest modal. Blocked windows render with `inert`.
-- **Roles are semantic.** `dialog` anchors to its parent's center, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner. `derive` decides the presentation, not the application.
+- **Roles are semantic.** `dialog` anchors to its parent's center, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner. `derive` decides the presentation, not the application. A window's `anchor` option passes every anchor setting through (`side`, `align`, `offset`, `inside`, `x`, `y`).
+- **The log is replayable.** `wm.log` holds the commands applied since `wm.origin` (the initial state, or the last `load()`); undo and redo keep it in step, so `replay(wm.origin, wm.log)` always equals `wm.getState()`.
 - **BSP is a stateful layout expressed functionally.** Its tree lives in workspace state and is kept in sync as windows are created, closed, floated, or moved.
 
 Add your own commands with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`.
@@ -141,11 +155,11 @@ derive(state, {
 
 ## compile: from layout tree to CSS
 
-`compile(tree, presentationContext(state))` returns a render tree of `{ tag, key, attrs, style, children }`. `toHTML()` serializes it for server rendering or snapshots. View elements are keyed `view:<id>`, so a layout change moves elements instead of recreating them. When a view appears more than once, the extra copies become non-primary projections.
+`compile(tree, presentationContext(state))` returns a render tree of `{ tag, key, attrs, style, children }`. Views are `container-type: size`, except on an axis sized by its content (`height: "content"`), where they fall back to `inline-size` (or no containment) so the content can size them. `toHTML()` serializes it for server rendering or snapshots. View elements are keyed `view:<id>`, so a layout change moves elements instead of recreating them. When a view appears more than once, the extra copies become non-primary projections.
 
 ## Browser adapters
 
-- `createDomRenderer({ root, surfaceFor })` reconciles the keyed DOM, mounts and unmounts surfaces, measures realized geometry with `measure()`, and positions anchors with JS when CSS anchor positioning isn't supported.
+- `createDomRenderer({ root, surfaceFor })` reconciles the keyed DOM, mounts and unmounts surfaces, measures realized geometry with `measure()`, and positions anchors with JS when CSS anchor positioning isn't supported (force it with `anchorFallback: true`; `reposition()` re-runs it). Reconciliation is top-down and moves views with `moveBefore()` where the browser has it, so an iframe, a playing animation or a focused input survives a layout change.
 - `attachInput({ root, getState, dispatch })` turns pointer events into commands. The markup contract is: `data-wm-handle="move"`, `data-wm-handle="resize-se"` (any edge or corner), `data-wm-command="window/close"`, and tab buttons with `data-wm-tab`.
 - Surfaces share one contract, `{ mount(target), unmount() }`. Provided implementations: `htmlSurface`, `lazySurface`, `iframeSurface`, and `canvasSurface` (an html-in-canvas style surface that repaints when its size changes).
 - `createFrameScheduler()` coalesces many commands into one commit per animation frame.

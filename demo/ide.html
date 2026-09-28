@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Algebra Studio</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      body.app { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+      .menubar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--surface); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+      .menubar .app-name { font-weight: 700; margin-right: 6px; display: flex; gap: 6px; align-items: center; }
+      .menubar .app-name i { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--accent), var(--violet)); }
+      .ws { display: inline-flex; gap: 2px; padding: 2px; background: var(--surface-3); border-radius: 7px; }
+      .ws button { font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--muted); padding: 2px 10px; border-radius: 5px; cursor: pointer; }
+      .ws button[aria-pressed="true"] { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.15); }
+      .palette-hint { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+      .palette-hint button { min-width: 220px; justify-content: space-between; color: var(--faint); }
+      .stage-wrap { position: relative; min-height: 0; }
+      #stage { position: absolute; inset: 0; }
+      #stage wm-view { border-radius: 6px; }
+      .divider { position: absolute; z-index: 20; touch-action: none; }
+      .divider.v { width: 10px; margin-left: -5px; cursor: col-resize; }
+      .divider.h { height: 10px; margin-top: -5px; cursor: row-resize; }
+      .divider:hover::after, .divider.dragging::after { content: ""; position: absolute; background: var(--accent); border-radius: 2px; }
+      .divider.v:hover::after, .divider.v.dragging::after { left: 4px; top: 0; bottom: 0; width: 2px; }
+      .divider.h:hover::after, .divider.h.dragging::after { top: 4px; left: 0; right: 0; height: 2px; }
+      .statusbar { display: flex; gap: 14px; align-items: center; padding: 3px 10px; font: 11.5px var(--mono); background: var(--accent); color: var(--accent-fg); overflow-x: auto; white-space: nowrap; }
+      .statusbar span { opacity: 0.92; }
+      .statusbar .spacer { flex: 1; }
+      .statusbar button { font: inherit; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
+      /* explorer */
+      .tree { padding: 6px 0; font-size: 13px; user-select: none; }
+      .tree .dir { padding: 3px 12px; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 650; }
+      .tree .file { display: flex; gap: 8px; align-items: center; padding: 3px 12px 3px 18px; cursor: pointer; white-space: nowrap; }
+      .tree .file:hover { background: var(--surface-3); }
+      .tree .file.open { color: var(--accent); }
+      .tree .file.dirty::after { content: "●"; margin-left: auto; color: var(--warn); font-size: 10px; }
+      .tree .ico { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; font: 700 8.5px var(--mono); color: #fff; flex: none; }
+      .tree .hint { padding: 10px 12px; color: var(--faint); font-size: 11.5px; }
+      @container wm-view (width < 150px) { .tree .name, .tree .dir, .tree .hint { display: none; } .tree .file { padding-left: 12px; justify-content: center; } }
+      /* editor */
+      .editor { display: grid; grid-template-columns: auto minmax(0, 1fr); height: 100%; font: 13px/20px var(--mono); }
+      .editor .gutter { padding: 8px 8px 8px 12px; color: var(--faint); text-align: right; background: var(--surface-2); border-right: 1px solid var(--line); overflow: hidden; user-select: none; white-space: pre; }
+      .editor textarea { border: 0; border-radius: 0; resize: none; padding: 8px 12px; font: inherit; line-height: 20px; background: var(--surface); outline: none; white-space: pre; overflow: auto; tab-size: 2; height: 100%; }
+      @container wm-view (width < 380px) { .editor { grid-template-columns: minmax(0, 1fr); } .editor .gutter { display: none; } }
+      /* terminal */
+      .term { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; font: 12.5px/1.5 var(--mono); background: #0d1117; color: #c9d1d9; }
+      .term .out { overflow: auto; padding: 8px 12px; white-space: pre-wrap; }
+      .term .out .ok { color: #7ee787; } .term .out .err { color: #ff7b72; } .term .out .dim { color: #8b949e; }
+      .term form { display: flex; gap: 8px; padding: 4px 12px 8px; }
+      .term form span { color: #7ee787; }
+      .term input { flex: 1; background: transparent; border: 0; color: inherit; font: inherit; outline: none; min-height: 0; padding: 0; }
+      /* problems */
+      .problems { font-size: 12.5px; }
+      .problems li { display: flex; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+      .problems li:hover { background: var(--surface-3); }
+      .problems .sev { font: 600 11px var(--mono); }
+      .problems .sev.warn { color: var(--warn); } .problems .sev.info { color: var(--accent); }
+      .problems ul { list-style: none; margin: 0; padding: 0; }
+      /* debug panes */
+      .vars { font: 12px/1.7 var(--mono); padding: 8px 12px; }
+      .vars b { color: var(--violet); font-weight: 500; }
+      .vars s { color: var(--ok); text-decoration: none; }
+      .frames li { font: 12px/1.8 var(--mono); padding: 0 12px; list-style: none; }
+      .frames { margin: 0; padding: 6px 0; }
+      .frames li.cur { background: var(--warn-soft); }
+      .review { padding: 12px 14px; font-size: 13px; display: grid; gap: 10px; align-content: start; }
+      .review .c { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface-2); }
+      .review .c b { font-size: 12px; }
+      .diff { font: 12.5px/1.6 var(--mono); padding: 8px 0; white-space: pre; }
+      .diff div { padding: 0 12px; }
+      .diff .add { background: var(--ok-soft); } .diff .del { background: var(--danger-soft); }
+      /* palette */
+      .palette { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+      .palette input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; font-size: 15px; padding: 12px 14px; background: transparent; outline: none; }
+      .palette ul { list-style: none; margin: 0; padding: 4px; overflow: auto; }
+      .palette li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+      .palette li[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+      .palette li small { color: var(--faint); font: 11px var(--mono); }
+      .palette footer { font-size: 11px; color: var(--faint); padding: 6px 12px; border-top: 1px solid var(--line); }
+      .ctx { padding: 4px; display: grid; }
+      .ctx button { font: inherit; font-size: 13px; text-align: left; border: 0; background: none; color: var(--fg); padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+      .ctx button:hover { background: var(--accent-soft); color: var(--accent); }
+      .toast { padding: 10px 12px; font-size: 13px; height: 100%; display: grid; align-content: center; gap: 2px; }
+      .toast span { color: var(--muted); font-size: 12px; }
+      @media (max-width: 760px) {
+        body.app { height: 100dvh; overflow: hidden; }
+        .palette-hint button { min-width: 0; }
+        .palette-hint kbd { display: none; }
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="site"></header>
+    <div class="menubar">
+      <span class="app-name"><i></i>Algebra Studio</span>
+      <span class="ws" id="ws"></span>
+      <button class="btn small ghost" id="toggle-side" title="Toggle explorer (Ctrl+B)">Explorer</button>
+      <button class="btn small ghost" id="toggle-panel" title="Toggle panel (Ctrl+J)">Panel</button>
+      <button class="btn small ghost" id="toggle-preview" title="Toggle preview (Ctrl+\)">Preview</button>
+      <button class="btn small ghost" id="undo" title="Undo layout change">↶</button>
+      <button class="btn small ghost" id="redo" title="Redo layout change">↷</button>
+      <span class="palette-hint"><button class="btn small" id="open-palette">Search commands… <kbd>Ctrl K</kbd></button></span>
+    </div>
+    <div class="stage-wrap" id="wrap">
+      <div id="stage" class="stage"></div>
+    </div>
+    <div class="statusbar" id="status"></div>
+
+    <script type="module">
+      import {
+        createWindowManager, createState, update, derive, grid, row, column, stack, place, size, view, masterStack, visibleWindows, windowsIn, updateRatio,
+      } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, htmlSurface, lazySurface, iframeSurface, canvasSurface, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, focusEffect, storage, currentTheme, isTyping } from "./shared/kit.mjs";
+
+      initPage({ current: "./ide.html", title: "IDE workspace (app)" });
+
+      // ------------------------------------------------------------------ files
+      const DEFAULT_FILES = {
+        "index.html": `<main class="card">\n  <h1>Hello, window-algebra</h1>\n  <p>Edit <code>style.css</code> or <code>app.js</code>, press Ctrl+S, and this preview reloads.</p>\n  <button id="go">Count: 0</button>\n</main>\n`,
+        "style.css": `body {\n  font: 15px/1.5 system-ui, sans-serif;\n  display: grid;\n  place-items: center;\n  min-height: 100vh;\n  margin: 0;\n  background: #f4f6fb;\n}\n.card {\n  padding: 24px 28px;\n  border-radius: 14px;\n  background: white;\n  box-shadow: 0 8px 30px rgb(0 0 0 / 0.12);\n}\nbutton { font: inherit; padding: 6px 14px; }\n`,
+        "app.js": `// TODO: persist the counter\nlet count = 0;\nconst button = document.getElementById("go");\nbutton.addEventListener("click", () => {\n  count++;\n  button.textContent = \`Count: \${count}\`;\n  console.log("clicked", count);\n});\n`,
+        "README.md": `# Algebra Studio\n\nEvery pane here is a window managed by window-algebra.\nThe "ide" layout is a custom interpreter built from grid, place, stack and size.\n\n- Ctrl+K: command palette\n- Ctrl+S: save (updates preview + problems)\n- Ctrl+J / Ctrl+B / Ctrl+\\: toggle panel / explorer / preview\n- Alt+1..3: workspaces\n`,
+        "wm.config.json": `{\n  "gap": 6,\n  "inset": 6,\n  "focusRaises": true\n}\n`,
+      };
+      const saved = (() => {
+        try {
+          return JSON.parse(storage.get("wa-ide-session") ?? "null");
+        } catch {
+          return null;
+        }
+      })();
+      const files = new Map(Object.entries(saved?.files ?? DEFAULT_FILES));
+      const drafts = new Map(); // unsaved edits
+      const ICON = { html: ["#e34c26", "<>"], css: ["#2965f1", "#"], js: ["#c9a400", "JS"], md: ["#6b6f80", "M"], json: ["#1f9d74", "{}"] };
+      const ext = (path) => path.split(".").pop();
+
+      // ------------------------------------------------------------------ layouts (custom interpreters)
+      const lastIn = (state, list) => [...state.focus.history].reverse().find((id) => list.includes(id)) ?? list[0];
+      const layouts = {
+        /** grid areas + place + tab stacks: side | main (editors ⟷ preview) / panel */
+        ide: (spec, ids, { state }) => {
+          const by = (slot) => ids.filter((id) => state.windows[id]?.data?.slot === slot);
+          const editors = by("editor");
+          const [explorer] = by("explorer");
+          const [preview] = by("preview");
+          const panel = [...by("terminal"), ...by("problems")];
+          const others = ids.filter((id) => !["editor", "explorer", "preview", "terminal", "problems"].includes(state.windows[id]?.data?.slot));
+          const r = spec.ratio ?? 0.42;
+          const editorStack = editors.length ? stack({ active: lastIn(state, editors), chrome: "tabs" }, ...editors.map(view)) : null;
+          const mainParts = [editorStack && size({ weight: Math.round((1 - r) * 100) / 100 }, editorStack), preview && size({ weight: Math.round(r * 100) / 100 }, view(preview)), ...others.map(view)].filter(Boolean);
+          const main = mainParts.length ? row({}, ...mainParts) : row({});
+          const panelNode = panel.length ? stack({ active: lastIn(state, panel), chrome: "tabs" }, ...panel.map(view)) : null;
+          return grid(
+            {
+              // CSS min(): the sidebar never takes more than a third of a narrow screen.
+              columns: explorer ? [`min(${spec.sidebar ?? 220}px, 30%)`, "minmax(0, 1fr)"] : ["minmax(0, 1fr)"],
+              rows: panelNode ? ["minmax(0, 1fr)", `${spec.panel ?? 190}px`] : ["minmax(0, 1fr)"],
+              areas: explorer ? (panelNode ? ["side main", "side panel"] : ["side main"]) : panelNode ? ["main", "panel"] : ["main"],
+            },
+            explorer && place({ area: "side" }, view(explorer)),
+            place({ area: "main" }, main),
+            panelNode && place({ area: "panel" }, panelNode),
+          );
+        },
+        /** grid template areas for the debugger */
+        debug: (spec, ids, { state }) => {
+          const slot = (name) => ids.find((id) => state.windows[id]?.data?.slot === name);
+          const cells = [["flame", "flame"], ["vars", "vars"], ["frames", "frames"], ["console", "console"]]
+            .map(([name, area]) => slot(name) && place({ area }, view(slot(name))))
+            .filter(Boolean);
+          return grid({ columns: [2, 1], rows: [1, 1, "150px"], areas: ["flame vars", "flame frames", "console console"] }, ...cells);
+        },
+      };
+
+      // ------------------------------------------------------------------ extension command
+      const extensions = {
+        /** Open a file: focus its editor if open, otherwise create one (composes built-in commands). */
+        "ide/open-file"(state, { path }) {
+          const existing = Object.values(state.windows).find((w) => w.data?.slot === "editor" && w.data.path === path);
+          if (existing) return update(state, { type: "window/focus", id: existing.id });
+          const id = `edit:${path}`;
+          const out = update(state, { type: "window/create", id, title: path, workspace: "code", data: { slot: "editor", path } });
+          if (state.activeWorkspace !== "code") {
+            const focus = update(out.state, { type: "window/focus", id });
+            return { state: focus.state, events: [...out.events, ...focus.events], effects: [...out.effects, ...focus.effects] };
+          }
+          return out;
+        },
+      };
+
+      // ------------------------------------------------------------------ surfaces (built from window data, so restored sessions rebuild them)
+      const surfaceCache = new Map();
+      const surfaceFor = (id) => {
+        if (surfaceCache.has(id)) return surfaceCache.get(id);
+        const win = wm.getState().windows[id];
+        if (!win) return undefined;
+        const surface = buildSurface(win);
+        if (surface) surfaceCache.set(id, surface);
+        return surface;
+      };
+      const chromeless = (render) => lazySurface(render);
+
+      const lint = () => {
+        const out = [];
+        for (const [path, text] of files) {
+          text.split("\n").forEach((line, i) => {
+            if (/TODO/.test(line)) out.push({ sev: "info", path, line: i + 1, msg: `TODO: ${line.split("TODO:")[1]?.trim() ?? ""}` });
+            if (/console\.log/.test(line)) out.push({ sev: "warn", path, line: i + 1, msg: "Unexpected console.log" });
+          });
+        }
+        if (ext("wm.config.json") === "json") {
+          try {
+            JSON.parse(files.get("wm.config.json") ?? "{}");
+          } catch (error) {
+            out.push({ sev: "warn", path: "wm.config.json", line: 1, msg: error.message });
+          }
+        }
+        return out;
+      };
+
+      const previewDoc = () =>
+        `<!doctype html><html><head><meta charset="utf-8"><style>${files.get("style.css") ?? ""}</style></head><body>${files.get("index.html") ?? ""}<script>${(files.get("app.js") ?? "").replace(/<\/script/g, "<\\/script")}<\/script></body></html>`;
+      let previewFrame = null;
+
+      const terminals = new Map();
+      const buildSurface = (win) => {
+        const { slot, path } = win.data ?? {};
+        const actions = ["float", "max", "close"];
+        switch (slot) {
+          case "explorer":
+            return windowSurface({ id: win.id, title: "Explorer", color: "var(--swatch-8)", actions: ["min"], body: (el) => {
+              const render = () => {
+                const openPaths = new Set(Object.values(wm.getState().windows).filter((w) => w.data?.slot === "editor").map((w) => w.data.path));
+                el.replaceChildren(
+                  h("div", { class: "tree" },
+                    h("div", { class: "dir" }, "project"),
+                    [...files.keys()].map((p) => {
+                      const [color, label] = ICON[ext(p)] ?? ["#888", "?"];
+                      return h("div", { class: `file${openPaths.has(p) ? " open" : ""}${drafts.has(p) ? " dirty" : ""}`, "data-path": p, title: p }, h("span", { class: "ico", style: { background: color } }, label), h("span", { class: "name" }, p));
+                    }),
+                    h("div", { class: "hint" }, "Click to open · right-click for more"),
+                  ),
+                );
+              };
+              render();
+              el.addEventListener("click", (e) => {
+                const file = e.target.closest("[data-path]");
+                if (file) openFile(file.dataset.path);
+              });
+              el.addEventListener("contextmenu", (e) => {
+                const file = e.target.closest("[data-path]");
+                if (!file) return;
+                e.preventDefault();
+                contextMenu(file.dataset.path, e.clientX, e.clientY);
+              });
+              const off = wm.subscribe(() => requestAnimationFrame(render));
+              el._refresh = render;
+              return off;
+            } });
+          case "editor":
+            return windowSurface({ id: win.id, title: path, color: (ICON[ext(path)] ?? ["var(--faint)"])[0], actions, body: (el) => {
+              const text = drafts.get(path) ?? files.get(path) ?? "";
+              const gutter = h("div", { class: "gutter" });
+              const area = h("textarea", { spellcheck: "false", "aria-label": path, wrap: "off" });
+              area.value = text;
+              const lines = () => (gutter.textContent = Array.from({ length: area.value.split("\n").length }, (_, i) => i + 1).join("\n"));
+              lines();
+              area.addEventListener("scroll", () => (gutter.scrollTop = area.scrollTop));
+              area.addEventListener("input", () => {
+                lines();
+                const dirty = area.value !== files.get(path);
+                if (dirty) drafts.set(path, area.value);
+                else drafts.delete(path);
+                const title = `${dirty ? "● " : ""}${path}`;
+                if (wm.getState().windows[win.id]?.title !== title) wm.dispatch({ type: "window/set-title", id: win.id, title });
+              });
+              area.addEventListener("keyup", () => updateCursor(area));
+              area.addEventListener("click", () => updateCursor(area));
+              el.append(h("div", { class: "editor" }, gutter, area));
+            } });
+          case "preview": {
+            const frame = iframeSurface("about:blank", { attributes: { srcdoc: previewDoc(), title: "Preview" } });
+            const inner = h("div", { style: { height: "100%" } });
+            frame.mount(inner);
+            previewFrame = inner.firstElementChild;
+            return windowSurface({ id: win.id, title: "Preview", color: "var(--swatch-6)", actions, body: (el) => el.append(inner) });
+          }
+          case "terminal":
+            return windowSurface({ id: win.id, title: "Terminal", color: "var(--swatch-2)", actions: ["min", "float", "max"], body: (el) => {
+              const out = terminals.get(win.id) ?? h("div", { class: "out" });
+              terminals.set(win.id, out);
+              if (!out.childNodes.length) print(out, "Algebra Studio terminal. Type `help`.", "dim");
+              const input = h("input", { "aria-label": "Terminal input", autocomplete: "off" });
+              const form = h("form", {}, h("span", {}, "$"), input);
+              form.onsubmit = (e) => {
+                e.preventDefault();
+                runTerminal(out, input.value);
+                input.value = "";
+              };
+              el.append(h("div", { class: "term" }, out, form));
+            } });
+          case "problems":
+            return windowSurface({ id: win.id, title: "Problems", color: "var(--swatch-3)", actions: ["min", "float", "max"], body: (el) => {
+              const render = () => {
+                const items = lint();
+                el.replaceChildren(h("div", { class: "problems" }, h("ul", {}, items.length ? items.map((p) => h("li", { onclick: () => openFile(p.path) }, h("span", { class: `sev ${p.sev}` }, p.sev), h("span", {}, `${p.path}:${p.line}`), h("span", { style: { color: "var(--muted)" } }, p.msg))) : h("li", {}, "No problems."))));
+                const n = items.length;
+                const title = `Problems (${n})`;
+                if (wm.getState().windows[win.id] && wm.getState().windows[win.id].title !== title) queueMicrotask(() => wm.dispatch({ type: "window/set-title", id: win.id, title }));
+              };
+              render();
+              el._refresh = render;
+              document.addEventListener("ide-saved", render);
+              return () => document.removeEventListener("ide-saved", render);
+            } });
+          case "flame":
+            return windowSurface({ id: win.id, title: "Flame graph (canvas)", color: "var(--swatch-5)", actions, body: (el) => {
+              const c = canvasSurface((canvas, { width, height, ratio }) => {
+                const ctx = canvas.getContext("2d");
+                ctx.scale(ratio, ratio);
+                const dark = currentTheme() === "dark";
+                ctx.fillStyle = dark ? "#181c22" : "#fff";
+                ctx.fillRect(0, 0, width, height);
+                const rowH = 22;
+                const frames = [["main", 0, 1], ["dispatch", 0.02, 0.96], ["update", 0.04, 0.55], ["derive", 0.6, 0.35], ["applyFocus", 0.06, 0.22], ["compile", 0.62, 0.3], ["modalTarget", 0.08, 0.12], ["commit", 0.64, 0.24], ["reconcile", 0.65, 0.2], ["moveBefore", 0.7, 0.07]];
+                const depth = [0, 1, 2, 2, 3, 3, 4, 4, 5, 6];
+                frames.forEach(([name, x, w], i) => {
+                  const hue = 20 + (i * 23) % 50;
+                  ctx.fillStyle = `hsl(${hue} 80% ${dark ? 45 : 60}%)`;
+                  const y = height - (depth[i] + 1) * rowH - 6;
+                  ctx.fillRect(8 + x * (width - 16), y, Math.max(2, w * (width - 16) - 2), rowH - 2);
+                  ctx.fillStyle = "#111";
+                  ctx.font = "11px ui-monospace, monospace";
+                  if (w * width > 60) ctx.fillText(name, 12 + x * (width - 16), y + 15);
+                });
+                ctx.fillStyle = dark ? "#9aa3b0" : "#5d6673";
+                ctx.fillText(`${Math.round(width)}×${Math.round(height)} — repaints on resize`, 10, 16);
+              });
+              c.mount(el);
+              return () => c.unmount();
+            } });
+          case "vars":
+            return windowSurface({ id: win.id, title: "Variables", color: "var(--swatch-4)", actions, body: (el) => {
+              const render = () => {
+                const s = wm.getState();
+                el.replaceChildren(h("div", { class: "vars" }, ...[
+                  ["activeWorkspace", JSON.stringify(s.activeWorkspace)],
+                  ["focus.window", JSON.stringify(s.focus.window)],
+                  ["windows", `Object(${Object.keys(s.windows).length})`],
+                  ["visible", `[${visibleWindows(s).map((w) => w.id).join(", ")}]`],
+                  ["config.gap", String(s.config.gap)],
+                  ["layout", JSON.stringify(s.workspaces[s.activeWorkspace].layout.type)],
+                ].map(([k, v]) => h("div", {}, h("b", {}, k), " = ", h("s", {}, v)))));
+              };
+              render();
+              return wm.subscribe(() => requestAnimationFrame(render));
+            } });
+          case "frames":
+            return windowSurface({ id: win.id, title: "Call stack", color: "var(--swatch-7)", actions, body: (el) => el.append(h("ul", { class: "frames" }, ["applyFocus  update.mjs:396", "handlers.window/focus  update.mjs:492", "update  update.mjs:787", "dispatch  manager.mjs:53", "onPointerDown  input.mjs:26"].map((f, i) => h("li", { class: i === 0 ? "cur" : "" }, f)))) });
+          case "console":
+            return windowSurface({ id: win.id, title: "Debug console", color: "var(--swatch-2)", actions: ["float", "max"], body: (el) => {
+              const out = h("div", { class: "out" });
+              print(out, "> wm.getState().focus", "dim");
+              print(out, JSON.stringify(wm.getState().focus), "ok");
+              el.append(h("div", { class: "term" }, out));
+            } });
+          case "diff":
+            return windowSurface({ id: win.id, title: win.title, color: "var(--swatch-1)", actions, body: (el) => el.append(h("div", { class: "diff" }, [
+              ["", "const renderer = createDomRenderer({ root });"], ["del", "-  parent.insertBefore(element, reference);"], ["add", "+  if (parent.moveBefore && element.isConnected)"], ["add", "+    parent.moveBefore(element, reference);"], ["add", "+  else parent.insertBefore(element, reference);"], ["", "   previous = element;"],
+            ].map(([k, t]) => h("div", { class: k }, t)))) });
+          case "discussion":
+            return windowSurface({ id: win.id, title: "Discussion", color: "var(--swatch-4)", actions, body: (el) => el.append(h("div", { class: "review" },
+              h("div", { class: "c" }, h("b", {}, "reviewer"), h("div", {}, "Does the top-down reconcile keep iframes alive when a view moves into a brand-new container?")),
+              h("div", { class: "c" }, h("b", {}, "author"), h("div", {}, "Yes: containers are placed first, then views move with moveBefore(). See the Surfaces example.")),
+              h("button", { class: "btn small", onclick: () => toast("Approved", "Review submitted") }, "Approve"),
+            )) });
+          case "palette":
+            return windowSurface({ id: win.id, bare: true, body: (el) => buildPalette(el, win.id) });
+          case "ctx":
+            return windowSurface({ id: win.id, bare: true, body: (el) => buildContext(el, win.id, win.data.path) });
+          case "toast":
+            return windowSurface({ id: win.id, bare: true, body: (el) => {
+              el.append(h("div", { class: "toast" }, h("strong", {}, win.title), h("span", {}, win.data.text)));
+              const t = setTimeout(() => wm.getState().windows[win.id] && wm.close(win.id), 3200);
+              return () => clearTimeout(t);
+            } });
+          default:
+            return undefined;
+        }
+      };
+
+      // ------------------------------------------------------------------ manager
+      const root = $("#stage");
+      const renderer = createDomRenderer({ root, surfaceFor });
+      const initialState = () => {
+        let state = createState({
+          workspaces: [
+            { id: "code", layout: { type: "ide", sidebar: 220, panel: 190, ratio: 0.42 } },
+            { id: "debug", layout: { type: "debug" } },
+            { id: "review", layout: { type: "master-stack", ratio: 0.62, masterCount: 2 } },
+          ],
+          config: { gap: 6, inset: 6, defaultPlacement: { x: 80, y: 60, width: 520, height: 340 } },
+        });
+        const make = (command) => (state = update(state, { focus: false, ...command }, extensions).state);
+        make({ type: "window/create", id: "explorer", title: "Explorer", data: { slot: "explorer" } });
+        for (const path of ["index.html", "style.css", "app.js"]) make({ type: "ide/open-file", path });
+        make({ type: "window/create", id: "preview", title: "Preview", data: { slot: "preview" } });
+        make({ type: "window/create", id: "terminal", title: "Terminal", data: { slot: "terminal" } });
+        make({ type: "window/create", id: "problems", title: "Problems", data: { slot: "problems" } });
+        make({ type: "window/create", id: "flame", title: "Flame graph", workspace: "debug", data: { slot: "flame" } });
+        make({ type: "window/create", id: "vars", title: "Variables", workspace: "debug", data: { slot: "vars" } });
+        make({ type: "window/create", id: "frames", title: "Call stack", workspace: "debug", data: { slot: "frames" } });
+        make({ type: "window/create", id: "dbg-console", title: "Debug console", workspace: "debug", data: { slot: "console" } });
+        make({ type: "window/create", id: "diff-a", title: "dom.mjs (base)", workspace: "review", data: { slot: "diff" } });
+        make({ type: "window/create", id: "diff-b", title: "dom.mjs (head)", workspace: "review", data: { slot: "diff" } });
+        make({ type: "window/create", id: "discussion", title: "Discussion", workspace: "review", data: { slot: "discussion" } });
+        state = update(state, { type: "window/focus", id: "edit:app.js" }).state;
+        return state;
+      };
+      let restored = null;
+      try {
+        restored = saved?.state ? JSON.parse(saved.state) : null;
+        // Transient windows are not worth restoring.
+        if (restored) for (const [id, w] of Object.entries(restored.windows)) if (["palette", "ctx", "toast"].includes(w.data?.slot)) restored = update(restored, { type: "window/close", id }).state;
+        // A saved session must still derive with today's interpreters.
+        if (restored) for (const ws of restored.workspaceOrder) derive({ ...restored, activeWorkspace: ws }, { layouts });
+      } catch {
+        restored = null;
+      }
+      const wm = createWindowManager({
+        state: restored ?? initialState(),
+        layouts,
+        extensions,
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 200,
+        onEffect: focusEffect(() => renderer),
+      });
+      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      syncChrome(wm, root);
+      wm.render();
+
+      // Persist the session (layout topology is just data) plus file contents.
+      let persistTimer;
+      wm.subscribe(() => {
+        clearTimeout(persistTimer);
+        persistTimer = setTimeout(() => storage.set("wa-ide-session", JSON.stringify({ state: wm.serialize(), files: Object.fromEntries(files) })), 400);
+      });
+
+      // ------------------------------------------------------------------ actions
+      const S = () => wm.getState();
+      const openFile = (path) => wm.dispatch({ type: "ide/open-file", path });
+      const toggleSlot = (id) => {
+        const win = S().windows[id];
+        if (!win) return;
+        if (win.workspace !== S().activeWorkspace) return wm.moveToWorkspace(id, S().activeWorkspace);
+        if (win.status === "minimized") return wm.focus(id);
+        wm.minimize(id);
+      };
+      const togglePanel = () => {
+        const panel = ["terminal", "problems"].filter((id) => S().windows[id]);
+        const anyVisible = panel.some((id) => S().windows[id].status !== "minimized");
+        panel.forEach((id) => (anyVisible ? wm.minimize(id) : wm.restore(id)));
+        if (!anyVisible && panel[0]) wm.focus(panel[0]);
+      };
+      const save = () => {
+        const id = S().focus.window;
+        const path = S().windows[id]?.data?.path;
+        const dirtyPaths = path && drafts.has(path) ? [path] : [...drafts.keys()];
+        if (!dirtyPaths.length) return toast("Nothing to save", "All files are saved.");
+        for (const p of dirtyPaths) {
+          files.set(p, drafts.get(p));
+          drafts.delete(p);
+          const win = Object.values(S().windows).find((w) => w.data?.path === p);
+          if (win) wm.dispatch({ type: "window/set-title", id: win.id, title: p });
+        }
+        if (previewFrame) previewFrame.setAttribute("srcdoc", previewDoc());
+        if (dirtyPaths.includes("wm.config.json")) {
+          try {
+            const cfg = JSON.parse(files.get("wm.config.json"));
+            wm.dispatch({ type: "config/set", ...cfg });
+          } catch (error) {
+            toast("Config not applied", error.message);
+          }
+        }
+        document.dispatchEvent(new Event("ide-saved"));
+        toast(`Saved ${dirtyPaths.join(", ")}`, "Preview reloaded, problems re-linted.");
+      };
+      let toastN = 0;
+      const toast = (title, text) => {
+        const id = `toast-${++toastN}`;
+        wm.create({ id, title, role: "notification", focus: false, placement: { width: 300, height: 62 }, data: { slot: "toast", text } });
+      };
+      const closeTransients = () => Object.values(S().windows).filter((w) => ["palette", "ctx"].includes(w.data?.slot)).forEach((w) => wm.close(w.id));
+
+      // Context menu at the pointer: a menu without a visible parent falls back to its requested placement.
+      const contextMenu = (path, x, y) => {
+        closeTransients();
+        const origin = root.getBoundingClientRect();
+        wm.create({ id: "ctx", title: "Menu", role: "menu", placement: { x: x - origin.left, y: y - origin.top, width: 210, height: 150 }, data: { slot: "ctx", path } });
+      };
+      const buildContext = (el, id, path) => {
+        const item = (label, fn) => h("button", { type: "button", onclick: () => { wm.close(id); fn(); } }, label);
+        el.append(h("div", { class: "ctx", role: "menu" },
+          item(`Open ${path}`, () => openFile(path)),
+          item("Open as floating window", () => {
+            openFile(path);
+            const win = Object.values(S().windows).find((w) => w.data?.path === path);
+            if (win && win.mode !== "floating") wm.toggleFloating(win.id);
+          }),
+          item("Send editor to “review”", () => {
+            openFile(path);
+            const win = Object.values(S().windows).find((w) => w.data?.path === path);
+            if (win) wm.moveToWorkspace(win.id, "review");
+          }),
+          item("Reveal in terminal", () => {
+            const out = terminals.get("terminal");
+            if (out) print(out, `$ ls -l ${path}\n-rw-r--r--  ${(files.get(path) ?? "").length} bytes  ${path}`, "");
+            wm.focus("terminal");
+          }),
+        ));
+      };
+      document.addEventListener("pointerdown", (event) => {
+        if (!S().windows.ctx) return;
+        if (event.target.closest?.('wm-view[data-view="ctx"]')) return;
+        wm.close("ctx");
+      }, true);
+
+      // ------------------------------------------------------------------ command palette (modal dialog)
+      const COMMAND_LIST = () => [
+        ...[...files.keys()].map((p) => ({ label: `Open ${p}`, hint: "file", run: () => openFile(p) })),
+        { label: "Save", hint: "Ctrl+S", run: save },
+        { label: "Toggle terminal panel", hint: "Ctrl+J", run: togglePanel },
+        { label: "Toggle explorer", hint: "Ctrl+B", run: () => toggleSlot("explorer") },
+        { label: "Toggle preview", hint: "Ctrl+\\", run: () => toggleSlot("preview") },
+        { label: "Workspace: code", hint: "Alt+1", run: () => wm.activateWorkspace("code") },
+        { label: "Workspace: debug", hint: "Alt+2", run: () => wm.activateWorkspace("debug") },
+        { label: "Workspace: review", hint: "Alt+3", run: () => wm.activateWorkspace("review") },
+        { label: "Float / dock focused window", hint: "window/toggle-floating", run: () => lastFocus && wm.toggleFloating(lastFocus) },
+        { label: "Maximize / restore focused window", hint: "window/maximize", run: () => lastFocus && (S().windows[lastFocus]?.status === "maximized" ? wm.restore(lastFocus) : wm.maximize(lastFocus)) },
+        { label: "Close focused editor", hint: "Alt+W", run: () => lastFocus && S().windows[lastFocus]?.data?.slot === "editor" && wm.close(lastFocus) },
+        { label: "New untitled file", hint: "file", run: newFile },
+        { label: "Undo layout change", hint: "wm.undo()", run: () => wm.undo() },
+        { label: "Wider preview", hint: "layout/set-ratio", run: () => wm.setRatio((S().workspaces.code.layout.ratio ?? 0.42) + 0.08, { workspace: "code" }) },
+        { label: "Narrower preview", hint: "layout/set-ratio", run: () => wm.setRatio((S().workspaces.code.layout.ratio ?? 0.42) - 0.08, { workspace: "code" }) },
+        { label: "Reset session", hint: "clears saved state", run: resetSession },
+      ];
+      let lastFocus = null;
+      wm.subscribe((state) => {
+        const f = state.focus.window;
+        if (f && !["palette", "ctx"].includes(state.windows[f]?.data?.slot)) lastFocus = f;
+      });
+      const openPalette = () => {
+        if (S().windows.palette) return wm.focus("palette");
+        closeTransients();
+        wm.create({ id: "palette", title: "Command palette", role: "dialog", modal: true, placement: { width: 520, height: 340 }, data: { slot: "palette" } });
+      };
+      const buildPalette = (el, id) => {
+        const input = h("input", { placeholder: "Type a command or file name…", "aria-label": "Command" });
+        const list = h("ul", { role: "listbox" });
+        let index = 0;
+        let matches = [];
+        const render = () => {
+          const q = input.value.toLowerCase();
+          matches = COMMAND_LIST().filter((c) => c.label.toLowerCase().includes(q));
+          index = Math.min(index, Math.max(0, matches.length - 1));
+          list.replaceChildren(...matches.map((c, i) => h("li", { role: "option", "aria-selected": String(i === index), onclick: () => exec(c) }, h("span", {}, c.label), h("small", {}, c.hint))));
+        };
+        const exec = (c) => {
+          wm.close(id);
+          c?.run();
+        };
+        input.addEventListener("input", () => ((index = 0), render()));
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowDown") { index = Math.min(matches.length - 1, index + 1); render(); e.preventDefault(); }
+          if (e.key === "ArrowUp") { index = Math.max(0, index - 1); render(); e.preventDefault(); }
+          if (e.key === "Enter") exec(matches[index]);
+          if (e.key === "Escape") wm.close(id);
+        });
+        render();
+        el.append(h("div", { class: "palette" }, input, list, h("footer", {}, "role: dialog · layer: modal · centered by derive (no parent)")));
+        requestAnimationFrame(() => input.focus());
+      };
+
+      let untitled = 0;
+      function newFile() {
+        const path = `untitled-${++untitled}.js`;
+        files.set(path, "// new file\n");
+        openFile(path);
+      }
+      function resetSession() {
+        storage.set("wa-ide-session", "null");
+        location.reload();
+      }
+
+      // ------------------------------------------------------------------ terminal
+      function print(out, text, cls) {
+        out.append(h("div", { class: cls }, text));
+        out.scrollTop = out.scrollHeight;
+      }
+      const runTerminal = (out, line) => {
+        const [cmd, ...args] = line.trim().split(/\s+/);
+        print(out, `$ ${line}`, "dim");
+        const s = S();
+        const commands = {
+          help: () => print(out, "help, ls, cat <file>, open <file>, wm, layout <type>, ws <name>, float, clear", ""),
+          ls: () => print(out, [...files.keys()].join("  "), ""),
+          cat: () => print(out, files.get(args[0]) ?? `cat: ${args[0]}: no such file`, files.has(args[0]) ? "" : "err"),
+          open: () => (files.has(args[0]) ? openFile(args[0]) : print(out, `open: ${args[0]}: no such file`, "err")),
+          wm: () => print(out, `workspace ${s.activeWorkspace} · ${Object.keys(s.windows).length} windows · focused ${lastFocus}\nlog: ${wm.log.length} commands · undo: ${wm.canUndo}`, "ok"),
+          layout: () => {
+            const out2 = wm.setLayout(args[0] === "ide" ? { type: "ide", sidebar: 220, panel: 190, ratio: 0.42 } : { type: args[0] });
+            const rej = out2.events.find((e) => e.type === "command/rejected");
+            print(out, rej ? `rejected: ${rej.reason}` : `layout → ${args[0]}`, rej ? "err" : "ok");
+          },
+          ws: () => {
+            const r = wm.activateWorkspace(args[0]).events.find((e) => e.type === "command/rejected");
+            print(out, r ? `rejected: ${r.reason}` : `workspace → ${args[0]}`, r ? "err" : "ok");
+          },
+          float: () => lastFocus && wm.toggleFloating(lastFocus),
+          clear: () => out.replaceChildren(),
+        };
+        if (!cmd) return;
+        (commands[cmd] ?? (() => print(out, `${cmd}: command not found`, "err")))();
+      };
+
+      // ------------------------------------------------------------------ dividers (updateRatio for the preview split, px for the sidebar)
+      const wrap = $("#wrap");
+      const vSide = h("div", { class: "divider v", title: "Drag to resize the explorer" });
+      const vPreview = h("div", { class: "divider v", title: "Drag to resize the preview (updateRatio → layout/set-ratio)" });
+      const hPanel = h("div", { class: "divider h", title: "Drag to resize the panel" });
+      wrap.append(vSide, vPreview, hPanel);
+      const placeDividers = () => {
+        const s = S();
+        const onCode = s.activeWorkspace === "code" && s.workspaces.code.layout.type === "ide";
+        const g = wm.measure();
+        const vis = (id) => onCode && g[id] && s.windows[id]?.status === "normal" && s.windows[id]?.mode === "tiled";
+        const editor = Object.values(s.windows).find((w) => w.data?.slot === "editor" && g[w.id] && w.mode === "tiled" && w.status === "normal" && w.workspace === "code");
+        const show = (el, on, style) => {
+          el.style.display = on ? "block" : "none";
+          if (on) Object.assign(el.style, style);
+        };
+        show(vSide, vis("explorer"), g.explorer && { left: `${g.explorer.x + g.explorer.width + 3}px`, top: `${g.explorer.y}px`, height: `${g.explorer.height}px` });
+        show(vPreview, vis("preview") && editor, g.preview && { left: `${g.preview.x - 3}px`, top: `${g.preview.y}px`, height: `${g.preview.height}px` });
+        const panelId = ["terminal", "problems"].find((id) => vis(id) && g[id].height > 0 && s.windows[id].status === "normal");
+        show(hPanel, !!panelId, panelId && { top: `${g[panelId].y - 3 - 30}px`, left: `${g[panelId].x}px`, width: `${g[panelId].width}px` });
+      };
+      const drag = (el, onMove) => {
+        el.addEventListener("pointerdown", (event) => {
+          el.setPointerCapture(event.pointerId);
+          el.classList.add("dragging");
+          const start = { x: event.clientX, y: event.clientY, layout: S().workspaces.code.layout, width: root.clientWidth };
+          const move = (e) => onMove(start, e);
+          const up = () => {
+            el.classList.remove("dragging");
+            el.removeEventListener("pointermove", move);
+            el.removeEventListener("pointerup", up);
+          };
+          el.addEventListener("pointermove", move);
+          el.addEventListener("pointerup", up);
+        });
+      };
+      drag(vSide, (start, e) => wm.setLayout({ ...S().workspaces.code.layout, sidebar: Math.max(120, Math.min(420, Math.round(start.layout.sidebar + e.clientX - start.x))) }, "code"));
+      drag(hPanel, (start, e) => wm.setLayout({ ...S().workspaces.code.layout, panel: Math.max(90, Math.min(460, Math.round(start.layout.panel - (e.clientY - start.y)))) }, "code"));
+      drag(vPreview, (start, e) => {
+        const total = start.width - start.layout.sidebar;
+        // Dragging right shrinks the preview: invert the pointer axis.
+        wm.setRatio(updateRatio({ ratio: start.layout.ratio ?? 0.42, origin: { x: -start.x, y: 0 }, total }, { x: -e.clientX, y: 0 }, "x"), { workspace: "code" });
+      });
+      new ResizeObserver(() => requestAnimationFrame(placeDividers)).observe(root);
+
+      // ------------------------------------------------------------------ chrome: workspaces, status bar
+      const cursor = { line: 1, col: 1 };
+      const updateCursor = (area) => {
+        const before = area.value.slice(0, area.selectionStart).split("\n");
+        cursor.line = before.length;
+        cursor.col = before.at(-1).length + 1;
+        renderStatus();
+      };
+      const renderWs = () => {
+        const s = S();
+        $("#ws").replaceChildren(...s.workspaceOrder.map((ws, i) => h("button", { type: "button", "aria-pressed": String(ws === s.activeWorkspace), title: `Alt+${i + 1}`, onclick: () => wm.activateWorkspace(ws) }, ws)));
+      };
+      const renderStatus = () => {
+        const s = S();
+        const f = s.windows[lastFocus];
+        $("#status").replaceChildren(
+          h("span", {}, `⎇ ${s.activeWorkspace}`),
+          h("span", {}, `layout: ${s.workspaces[s.activeWorkspace].layout.type}`),
+          h("span", {}, `focus: ${f ? f.title || f.id : "—"}`),
+          f?.data?.slot === "editor" ? h("span", {}, `Ln ${cursor.line}, Col ${cursor.col}`) : "",
+          h("span", {}, `${drafts.size} unsaved`),
+          h("span", { class: "spacer" }),
+          h("span", {}, `${windowsIn(s).length} windows · ${wm.log.length} commands`),
+          h("button", { type: "button", onclick: resetSession, title: "Forget the saved session" }, "reset session"),
+        );
+      };
+      wm.subscribe(() => {
+        renderWs();
+        requestAnimationFrame(() => {
+          renderStatus();
+          placeDividers();
+        });
+      });
+      renderWs();
+      requestAnimationFrame(() => {
+        renderStatus();
+        placeDividers();
+      });
+
+      $("#toggle-side").onclick = () => toggleSlot("explorer");
+      $("#toggle-panel").onclick = togglePanel;
+      $("#toggle-preview").onclick = () => toggleSlot("preview");
+      $("#open-palette").onclick = openPalette;
+      $("#undo").onclick = () => wm.undo();
+      $("#redo").onclick = () => wm.redo();
+
+      // ------------------------------------------------------------------ keyboard
+      document.addEventListener("keydown", (event) => {
+        const mod = event.ctrlKey || event.metaKey;
+        if (mod && (event.key === "k" || event.key === "K" || (event.shiftKey && (event.key === "p" || event.key === "P")))) {
+          event.preventDefault();
+          return openPalette();
+        }
+        if (mod && (event.key === "s" || event.key === "S")) {
+          event.preventDefault();
+          return save();
+        }
+        if (mod && (event.key === "j" || event.key === "J")) {
+          event.preventDefault();
+          return togglePanel();
+        }
+        if (mod && (event.key === "b" || event.key === "B")) {
+          event.preventDefault();
+          return toggleSlot("explorer");
+        }
+        if (mod && event.key === "\\") {
+          event.preventDefault();
+          return toggleSlot("preview");
+        }
+        if (event.altKey && /^Digit[1-3]$/.test(event.code)) {
+          event.preventDefault();
+          return wm.activateWorkspace(S().workspaceOrder[Number(event.code.slice(5)) - 1]);
+        }
+        if (event.altKey && event.code === "KeyW") {
+          event.preventDefault();
+          if (lastFocus && S().windows[lastFocus]?.data?.slot === "editor") wm.close(lastFocus);
+          return;
+        }
+        if (event.key === "Escape") closeTransients();
+        if (!isTyping(event) && mod && (event.key === "z" || event.key === "Z")) {
+          event.preventDefault();
+          event.shiftKey ? wm.redo() : wm.undo();
+        }
+      });
+
+      if (restored) queueMicrotask(() => toast("Session restored", "Layout, windows and files came back from this browser. Use “reset session” to start over."));
+      else queueMicrotask(() => toast("Welcome to Algebra Studio", "Press Ctrl+K for the command palette."));
+      window.wm = wm;
+      window.ide = { openFile, save, openPalette, togglePanel, toggleSlot, files, drafts, renderer, contextMenu, runTerminal, terminals };
+    </script>
+  </body>
+</html>

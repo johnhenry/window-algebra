@@ -3,150 +3,194 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>window-algebra demo</title>
+    <title>window-algebra Examples</title>
+    <link rel="stylesheet" href="./shared/style.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #f4f4f1;
-        --fg: #1d1d1b;
-        --panel: #ffffff;
-        --muted: #6b6b66;
-        --accent: #2f6fdb;
-        --line: #d6d6cf;
-        font: 14px/1.4 system-ui, sans-serif;
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: center; padding: 12px 0 28px; }
+      .hero h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.02em; margin-bottom: 10px; }
+      .hero p { color: var(--muted); font-size: 15px; margin: 0 0 14px; max-width: 58ch; }
+      .pipeline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font: 12px var(--mono); }
+      .pipeline span { padding: 3px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+      .pipeline span.pure { border-color: color-mix(in oklab, var(--ok) 50%, var(--line)); }
+      .pipeline span.fx { border-color: color-mix(in oklab, var(--violet) 50%, var(--line)); }
+      .pipeline b { color: var(--faint); font-weight: 400; }
+      .pipeline-legend { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; gap: 14px; }
+      .pipeline-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+      #live { height: 260px; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+      #live wm-view { border-radius: 7px; transition: none; }
+      #live .tile { height: 100%; display: grid; place-content: center; text-align: center; font: 600 12px var(--mono); color: var(--wa-color); background: color-mix(in oklab, var(--wa-color) 12%, var(--surface)); }
+      .live-caption { font: 12px var(--mono); color: var(--muted); margin-top: 6px; display: flex; justify-content: space-between; gap: 8px; }
+      h2.section { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 34px 0 12px; display: flex; align-items: center; gap: 10px; }
+      h2.section .spacer { flex: 1; }
+      .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+      .card { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: inherit; transition: border-color 0.15s, transform 0.15s; }
+      .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+      .card h3 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+      .card h3 .n { font: 600 11px var(--mono); color: var(--faint); }
+      .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+      .card .foot { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+      .card .foot .open { margin-left: auto; color: var(--accent); font-size: 13px; font-weight: 600; }
+      .card .tags { display: flex; flex-wrap: wrap; gap: 3px; }
+      .card .tags code { font-size: 11px; padding: 0 5px; border-radius: 4px; background: var(--surface-3); color: var(--muted); }
+      .card.app { border-color: color-mix(in oklab, var(--violet) 45%, var(--line)); }
+      .summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .bar { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; width: 220px; }
+      .bar i { display: block; height: 100%; background: var(--ok); }
+      .matrix { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
+      .group { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+      .group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+      .group ul { list-style: none; margin: 0; padding: 4px 0; }
+      .group li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 3px 12px; font-size: 12.5px; align-items: center; }
+      .group li .label { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+      .group li.missing .label { color: var(--danger); }
+      .group li .pages { display: flex; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+      .group li .pages a { font: 600 10px var(--mono); text-decoration: none; padding: 1px 4px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); }
+      .filter { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .filter input { width: 220px; }
+      footer { margin-top: 40px; color: var(--faint); font-size: 12.5px; }
+      @media (max-width: 860px) {
+        .hero { grid-template-columns: minmax(0, 1fr); }
+        .cards, .matrix { grid-template-columns: minmax(0, 1fr); }
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #161615;
-          --fg: #ecece8;
-          --panel: #22221f;
-          --muted: #9a9a93;
-          --line: #3a3a36;
-          --accent: #6f9ef0;
-        }
-      }
-      * { box-sizing: border-box; }
-      body { margin: 0; height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--fg); }
-      nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: center; }
-      nav button, nav select { font: inherit; padding: 4px 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 6px; }
-      nav .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
-      #desktop { position: relative; min-height: 0; }
-      #desktop > wm-overlay { width: 100%; height: 100%; }
-      wm-view { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-      wm-view[data-focused] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-      wm-view[data-mode="floating"] { box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); }
-      wm-view[inert] { filter: grayscale(0.7) brightness(0.85); }
-      wm-tabs { gap: 2px; padding: 0 0 4px; }
-      wm-tabs button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 6px 6px 0 0; padding: 4px 12px; }
-      wm-tabs button[aria-selected="true"] { border-color: var(--accent); }
-      .win { display: grid; grid-template-rows: auto 1fr; height: 100%; }
-      .win header { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); cursor: default; user-select: none; }
-      [data-mode="floating"] .win header { cursor: move; }
-      .win header strong { flex: 1; }
-      .win header button { font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; }
-      .win .body { padding: 12px; overflow: auto; color: var(--muted); }
-      .grip { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; }
-      /* Windows are size containers: content adapts via container queries. */
-      @container wm-view (width < 260px) { .win .body .detail { display: none; } }
+      @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
     </style>
   </head>
   <body>
-    <nav>
-      <button id="new">New window</button>
-      <button id="float">Toggle floating</button>
-      <button id="dialog">Modal dialog</button>
-      <button id="close">Close</button>
-      <span class="sep"></span>
-      <select id="layout" aria-label="Layout">
-        <option value="master-stack">master-stack</option>
-        <option value="bsp">bsp</option>
-        <option value="columns">columns</option>
-        <option value="rows">rows</option>
-        <option value="grid">grid (auto-fit)</option>
-        <option value="spiral">spiral</option>
-        <option value="tabs">tabs</option>
-        <option value="monocle">monocle</option>
-        <option value="floating">floating</option>
-      </select>
-      <label>ratio <input id="ratio" type="range" min="0.2" max="0.8" step="0.05" value="0.5" /></label>
-      <span class="sep"></span>
-      <button id="undo">Undo</button>
-      <button id="redo">Redo</button>
-      <button id="next">Focus next</button>
-    </nav>
-    <div id="desktop"></div>
+    <header class="site"></header>
+    <div class="wrap">
+      <section class="hero">
+        <div>
+          <h1>window-algebra examples</h1>
+          <p>A functional window manager: a pure <code>update</code>, a small layout algebra, and CSS as the layout solver. These pages exercise every primitive, transform, layout, command, policy, surface and event in the library. The coverage matrix below is computed from what each page declares.</p>
+          <div class="pipeline" aria-label="Pipeline">
+            <span class="fx">command</span><b>→</b><span class="pure">update</span><b>→</b><span class="pure">state</span><b>→</b><span class="pure">derive</span><b>→</b><span class="pure">layout tree</span><b>→</b><span class="pure">compile</span><b>→</b><span class="pure">CSS</span><b>→</b><span class="fx">DOM</span><b>→</b><span class="fx">measure</span>
+          </div>
+          <div class="pipeline-legend"><span><i style="background: var(--ok)"></i>pure (runs in Node)</span><span><i style="background: var(--violet)"></i>effectful edge</span></div>
+        </div>
+        <div>
+          <div id="live" class="stage" aria-label="Live demo cycling through layouts"></div>
+          <div class="live-caption"><span id="live-layout">master-stack</span><button class="btn small ghost" id="live-toggle">pause</button></div>
+        </div>
+      </section>
+
+      <h2 class="section">Examples <span class="spacer"></span><span class="chip" id="page-count"></span></h2>
+      <div class="cards" id="cards"></div>
+
+      <h2 class="section">Capability checklist <span class="spacer"></span></h2>
+      <div class="summary" style="margin-bottom: 12px">
+        <span class="bar"><i id="bar"></i></span>
+        <span id="covered" class="chip ok"></span>
+        <span id="missing" class="chip danger"></span>
+        <span class="spacer" style="flex: 1"></span>
+        <span class="filter"><input type="text" id="filter" placeholder="Filter capabilities…" aria-label="Filter capabilities" /><label class="inline"><input type="checkbox" id="only-missing" /> only uncovered</label></span>
+      </div>
+      <div class="matrix" id="matrix"></div>
+
+      <footer>Run <code>npm test</code> for the library suite. Serve the repository root with any static server; ES modules do not load from <code>file://</code>.</footer>
+    </div>
 
     <script type="module">
-      import { createWindowManager, createState, BASE_CSS } from "../src/index.mjs";
-      import { createDomRenderer, attachInput, lazySurface, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, lazySurface, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, SWATCHES } from "./shared/kit.mjs";
+      import { CHECKLIST, PAGES } from "./shared/coverage.mjs";
 
-      const style = document.createElement("style");
-      style.textContent = BASE_CSS;
-      document.head.append(style);
+      initPage({ current: "./index.html" });
 
-      const root = document.getElementById("desktop");
-      const surfaces = createSurfaceRegistry();
-      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
-      const wm = createWindowManager({
-        state: createState({ config: { gap: 6, inset: 6 } }),
-        renderer,
-        schedule: createFrameScheduler(),
-        history: 200,
+      // ---------------------------------------------------------------- live hero
+      const live = $("#live");
+      const renderer = createDomRenderer({
+        root: live,
+        surfaceFor: (id) =>
+          lazySurface((target) => {
+            target.style.setProperty("--wa-color", SWATCHES[Number(id.slice(1)) % SWATCHES.length]);
+            const tile = h("div", { class: "tile" }, id);
+            target.append(tile);
+            return () => tile.remove();
+          }),
       });
-      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
-
-      let counter = 0;
-      const makeSurface = (id, title) =>
-        lazySurface((target) => {
-          target.innerHTML = `
-            <div class="win">
-              <header data-wm-handle="move">
-                <strong></strong>
-                <button data-wm-command="window/toggle-floating" title="Float">⧉</button>
-                <button data-wm-command="window/close" title="Close">×</button>
-              </header>
-              <div class="body">
-                <p>${id}</p>
-                <p class="detail">Resize me: this line hides below 260px via a container query.</p>
-              </div>
-            </div>
-            <div class="grip" data-wm-handle="resize-se"></div>`;
-          target.querySelector("strong").textContent = title;
-        });
-
-      const open = (options = {}) => {
-        const id = options.id ?? `w${++counter}`;
-        const title = options.title ?? `Window ${counter}`;
-        surfaces.set(id, makeSurface(id, title));
-        wm.create({ id, title, ...options });
-        return id;
+      const wm = createWindowManager({ state: createState({ config: { gap: 6, inset: 6 } }), renderer, schedule: createFrameScheduler() });
+      for (let i = 1; i <= 5; i++) wm.create({ id: `w${i}`, title: `w${i}` });
+      const cycle = [
+        { type: "master-stack", ratio: 0.6 }, { type: "bsp" }, { type: "grid", min: 110 }, { type: "spiral", ratio: 0.55 },
+        { type: "columns" }, { type: "tabs" }, { type: "rows" },
+      ];
+      let step = 0;
+      let paused = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const tick = () => {
+        if (paused || document.hidden) return;
+        step = (step + 1) % cycle.length;
+        wm.setLayout(cycle[step]);
+        wm.focusNext();
+        $("#live-layout").textContent = `layout/set → ${cycle[step].type}`;
+      };
+      setInterval(tick, 2200);
+      $("#live-toggle").textContent = paused ? "play" : "pause";
+      $("#live-toggle").onclick = () => {
+        paused = !paused;
+        $("#live-toggle").textContent = paused ? "play" : "pause";
       };
 
-      open({ title: "Editor" });
-      open({ title: "Terminal" });
-      open({ title: "Browser" });
+      // ---------------------------------------------------------------- cards
+      const byId = new Map(CHECKLIST.map((item) => [item.id, item]));
+      $("#page-count").textContent = `${PAGES.length} pages`;
+      $("#cards").append(
+        ...PAGES.map((page, index) => {
+          const covered = [...new Set(page.covers)].filter((id) => byId.has(id));
+          const groups = [...new Set(covered.map((id) => byId.get(id).group))];
+          return h("a", { class: `card${page.href.includes("ide") ? " app" : ""}`, href: page.href },
+            h("h3", {}, h("span", { class: "n" }, String(index + 1).padStart(2, "0")), page.title),
+            h("div", { style: { display: "grid", gap: "8px", alignContent: "start" } },
+              h("p", {}, page.blurb),
+              h("div", { class: "tags" }, covered.slice(0, 14).map((id) => h("code", {}, id)), covered.length > 14 ? h("code", {}, `+${covered.length - 14} more`) : ""),
+            ),
+            h("div", { class: "foot" }, h("span", { class: "chip accent" }, `${covered.length} capabilities`), h("span", { class: "chip" }, `${groups.length} areas`), h("span", { class: "open" }, "Open →")),
+          );
+        }),
+      );
 
-      const focused = () => wm.state.focus.window;
-      document.getElementById("new").onclick = () => open();
-      document.getElementById("float").onclick = () => focused() && wm.toggleFloating(focused());
-      document.getElementById("close").onclick = () => focused() && wm.close(focused());
-      document.getElementById("dialog").onclick = () => {
-        const parent = focused();
-        if (!parent) return;
-        const id = open({ role: "dialog", parent, modal: true, title: "Confirm", placement: { width: 280, height: 160 } });
-        wm.setMode(id, "floating");
-      };
-      document.getElementById("layout").onchange = (event) => {
-        const type = event.target.value;
-        wm.setLayout(type === "grid" ? { type, min: 280 } : { type, ratio: Number(document.getElementById("ratio").value) });
-      };
-      document.getElementById("ratio").oninput = (event) => wm.setRatio(Number(event.target.value));
-      document.getElementById("undo").onclick = () => wm.undo();
-      document.getElementById("redo").onclick = () => wm.redo();
-      document.getElementById("next").onclick = () => wm.focusNext();
+      // ---------------------------------------------------------------- matrix
+      const coveredBy = new Map(CHECKLIST.map((item) => [item.id, []]));
+      PAGES.forEach((page) => {
+        for (const id of new Set(page.covers)) {
+          if (!coveredBy.has(id)) console.warn(`coverage: ${page.href} declares unknown capability "${id}"`);
+          else coveredBy.get(id).push(page);
+        }
+      });
+      const total = CHECKLIST.length;
+      const covered = CHECKLIST.filter((item) => coveredBy.get(item.id).length).length;
+      $("#bar").style.width = `${(covered / total) * 100}%`;
+      $("#covered").textContent = `${covered} / ${total} covered`;
+      $("#missing").textContent = `${total - covered} uncovered`;
+      $("#missing").hidden = covered === total;
 
-      // Expose for tinkering in devtools.
-      window.wm = wm;
+      const renderMatrix = () => {
+        const q = $("#filter").value.toLowerCase();
+        const onlyMissing = $("#only-missing").checked;
+        const groups = [...new Set(CHECKLIST.map((item) => item.group))];
+        $("#matrix").replaceChildren(
+          ...groups.map((group) => {
+            const items = CHECKLIST.filter((item) => item.group === group);
+            const shown = items.filter((item) => (!q || item.label.toLowerCase().includes(q) || item.id.includes(q)) && (!onlyMissing || !coveredBy.get(item.id).length));
+            if (!shown.length) return "";
+            const done = items.filter((item) => coveredBy.get(item.id).length).length;
+            return h("section", { class: "group" },
+              h("h3", {}, h("span", {}, group), h("span", {}, `${done}/${items.length}`)),
+              h("ul", {}, shown.map((item) => {
+                const pages = coveredBy.get(item.id);
+                return h("li", { class: pages.length ? "" : "missing" },
+                  h("span", { class: "label" }, item.label),
+                  h("span", { class: "pages" }, pages.length ? pages.map((p) => h("a", { href: p.href, title: p.title }, p.short)) : h("span", { class: "chip danger" }, "uncovered")),
+                );
+              })),
+            );
+          }),
+        );
+      };
+      $("#filter").oninput = renderMatrix;
+      $("#only-missing").onchange = renderMatrix;
+      renderMatrix();
     </script>
   </body>
 </html>

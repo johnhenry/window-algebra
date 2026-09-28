@@ -6,7 +6,7 @@
  */
 import { createState } from "./state/create.mjs";
 import { update } from "./state/update.mjs";
-import { derive, presentationContext } from "./state/derive.mjs";
+import { derive, presentationContext, LAYOUTS } from "./state/derive.mjs";
 import { createHistory, record, undo as undoHistory, redo as redoHistory, canUndo, canRedo } from "./state/history.mjs";
 import { compile } from "./css/compile.mjs";
 import { immediateScheduler } from "./browser/scheduler.mjs";
@@ -32,7 +32,12 @@ export const createWindowManager = ({
 } = {}) => {
   let history = createHistory(initial, { limit: typeof historyOption === "number" ? historyOption : 100 });
   const listeners = new Set();
-  const log = [];
+  // The command log mirrors history: undo moves the last entry aside and redo
+  // puts it back, so `replay(wm.origin, wm.log)` always equals the present
+  // state. A `load()` is recorded as a marker that starts a new origin.
+  let entries = [];
+  let undone = [];
+  const lastLoad = () => entries.findLastIndex((entry) => entry.load !== undefined);
 
   const getState = () => history.present;
 
@@ -50,11 +55,30 @@ export const createWindowManager = ({
     for (const listener of listeners) listener(getState(), events, command);
   };
 
+  /**
+   * `update` is pure and cannot see the interpreter registry, so the manager
+   * refuses layout specs no interpreter can derive (otherwise every later
+   * render would throw).
+   */
+  const unknownLayout = (command) => {
+    if (command?.type !== "layout/set" && command?.type !== "workspace/create") return false;
+    const layout = command.layout;
+    if (!layout || typeof layout === "function" || typeof layout.type !== "string") return false;
+    return !(layout.type in LAYOUTS) && !(layouts && layout.type in layouts);
+  };
+
   const dispatch = (command) => {
-    const out = update(getState(), command, extensions);
+    const out = unknownLayout(command)
+      ? {
+          state: getState(),
+          events: [{ type: "command/rejected", command: command.type, id: command.id, reason: "unknown-layout" }],
+          effects: [],
+        }
+      : update(getState(), command, extensions);
     if (out.state !== getState()) {
       history = historyOption ? record(history, out.state) : { ...history, present: out.state };
-      log.push(command);
+      entries.push({ command });
+      undone = [];
     }
     const wm = api;
     for (const effect of out.effects) {
@@ -65,10 +89,12 @@ export const createWindowManager = ({
     return out;
   };
 
-  const travel = (fn) => {
+  const travel = (fn, direction) => {
     const before = getState();
     history = fn(history);
     if (getState() !== before) {
+      if (direction < 0 && entries.length) undone.unshift(entries.pop());
+      if (direction > 0 && undone.length) entries.push(undone.shift());
       render();
       notify([{ type: "history/changed" }], null);
     }
@@ -90,9 +116,14 @@ export const createWindowManager = ({
     /** Derived presentation tree and compiled render tree for the current state. */
     present,
     render,
-    /** Commands applied so far (for replay/sync). */
+    /** Commands applied since `origin` (for replay/sync); undone commands are excluded. */
     get log() {
-      return [...log];
+      return entries.slice(lastLoad() + 1).map((entry) => entry.command);
+    },
+    /** The state `log` replays from: the initial state, or the last loaded one. */
+    get origin() {
+      const index = lastLoad();
+      return index === -1 ? initial : entries[index].load;
     },
     /** Realized geometry, if the renderer can measure. */
     measure: () => renderer?.measure?.() ?? {},
@@ -121,8 +152,8 @@ export const createWindowManager = ({
     setLayout: (layout, workspace) => dispatch({ type: "layout/set", layout, workspace }),
     setRatio: (ratio, options = {}) => dispatch({ ...options, type: "layout/set-ratio", ratio }),
 
-    undo: () => travel(undoHistory),
-    redo: () => travel(redoHistory),
+    undo: () => travel(undoHistory, -1),
+    redo: () => travel(redoHistory, 1),
     get canUndo() {
       return canUndo(history);
     },
@@ -136,6 +167,8 @@ export const createWindowManager = ({
     load(state) {
       const next = typeof state === "string" ? JSON.parse(state) : state;
       history = historyOption ? record(history, next) : { ...history, present: next };
+      entries.push({ load: next });
+      undone = [];
       render();
       notify([{ type: "state/loaded" }], null);
       return next;

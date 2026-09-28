@@ -1,0 +1,202 @@
+/**
+ * The capability checklist for window-algebra, and which example page
+ * exercises each item. The hub page (index.html) renders this as a matrix.
+ */
+
+const items = (group, list) => list.map(([id, label]) => ({ group, id, label: label ?? id }));
+
+export const CHECKLIST = [
+  ...items("Primitives", [
+    ["view"], ["row"], ["column"], ["grid"], ["stack"], ["overlay"],
+    ["place"], ["size"], ["gap"], ["inset"], ["anchor"],
+    ["container/modifier", "generic container() / modifier()"],
+    ["predicates", "isNode / isContainer / isModifier / isView"],
+    ["kinds", "NODE_KINDS / CONTAINER_KINDS / MODIFIER_KINDS"],
+    ["validate"], ["fromJSON"],
+  ]),
+  ...items("Transforms", [
+    ["mirror"], ["flip"], ["rotate"], ["reverse"], ["mapViews"], ["replace"], ["remove"], ["swap"],
+    ["transform"], ["walk"], ["fold"], ["views"], ["find"], ["count"], ["equals"],
+  ]),
+  ...items("Derived layouts", [
+    ["masterStack"], ["columns"], ["rows"], ["monocle"], ["tabs"], ["autoGrid"], ["fixedGrid"], ["spiral"],
+    ["bsp", "BSP (stateful, in workspace state)"],
+    ["bsp-fns", "bspLeaf / bspSplit / bspInsert / bspRemove / bspSetRatio / bspRotate / bspIds / bspFrom / bspToLayout"],
+    ["floating-layout", "floating layout type (everything floats)"],
+    ["floating"], ["centered"], ["dock"], ["hybrid"],
+    ["custom-layout", "custom layout interpreters (derive layouts option)"],
+  ]),
+  ...items("Commands", [
+    ["window/create"], ["window/close"], ["window/focus"], ["window/blur"], ["focus/next"], ["focus/previous"],
+    ["window/raise"], ["window/lower"], ["window/set-layer"], ["window/move"], ["window/resize"], ["window/set-mode"],
+    ["window/toggle-floating"], ["window/minimize"], ["window/maximize"], ["window/fullscreen"], ["window/restore"],
+    ["window/set-title"], ["window/set-constraints"], ["window/swap"], ["window/promote"], ["window/move-to-workspace"],
+    ["workspace/create"], ["workspace/activate"], ["workspace/remove"],
+    ["layout/set"], ["layout/set-ratio"], ["layout/rotate-split"], ["config/set"],
+    ["extensions", "custom command handlers (extensions)"],
+  ]),
+  ...items("Rejections", [
+    ["missing-id"], ["duplicate-id"], ["unknown-parent"], ["unknown-workspace"], ["unknown-window"], ["unknown-layer"],
+    ["unknown-mode"], ["different-workspaces"], ["last-workspace"], ["invalid-layout"], ["unknown-layout", "unknown-layout (manager)"], ["invalid-ratio"], ["not-bsp"],
+    ["unknown-command"], ["invalid-command"],
+  ]),
+  ...items("Policies", [
+    ["focus-raises", "focus vs raise (config.focusRaises)"],
+    ["layers", "7 stacking layers"],
+    ["modal-graph", "modal graph: nested modals, focus redirection"],
+    ["blocked-inert", "blocked windows render inert"],
+    ["cascade-close", "close cascades to child windows"],
+    ["refocus", "refocus from focus history"],
+    ["focus-restores", "focus restores a minimized window / switches workspace"],
+    ["roles", "roles: dialog, sheet, popover, menu, tooltip, panel, notification"],
+    ["requested-actual", "requested vs actual geometry"],
+    ["tiled-constraints", "constraints honoured for tiled windows"],
+    ["gap-inset-config", "config gap / inset"],
+    ["projections", "duplicate views become projections"],
+  ]),
+  ...items("Events & effects", [
+    ["events", "all event types rendered"],
+    ["effect-render", "render effect"],
+    ["effect-focus", "focus effect (onEffect)"],
+    ["subscribe"],
+  ]),
+  ...items("State & history", [
+    ["createState"], ["createWorkspace"], ["createWindowRecord"],
+    ["constants", "LAYERS / ROLES / STATUSES / DEFAULT_CONFIG / COMMANDS / LAYOUTS"],
+    ["update"], ["reduce"], ["replay"], ["derive"], ["presentationContext"],
+    ["queries", "queries (focusable, modalTarget, stackingOrder, …)"],
+    ["undo-redo", "undo / redo (manager)"],
+    ["history-fns", "createHistory / record / undo / redo / canUndo / canRedo"],
+    ["serialize", "serialize / load"],
+    ["log-replay", "command log + replay from log"],
+  ]),
+  ...items("CSS compiler", [
+    ["compile"], ["toHTML"], ["styleText"], ["tracks"], ["px"], ["anchorName"], ["BASE_CSS"],
+    ["flex-weights", "flex weights"], ["grid-tracks", "grid tracks & areas"],
+    ["anchor-css", "CSS anchor positioning"], ["container-queries", "container queries in views"],
+    ["stack-inert", "stack: inactive children hidden + inert"],
+  ]),
+  ...items("Browser", [
+    ["createDomRenderer"], ["keyed-dom", "keyed reconcile keeps elements"],
+    ["measure", "measure() actual geometry"], ["elementFor"], ["styleOf"], ["destroy"],
+    ["anchor-fallback", "JS anchor fallback (forced)"],
+    ["attachInput"], ["drag-move", "drag to move"], ["resize-edges", "resize from all 8 edges"],
+    ["command-buttons", "data-wm-command buttons"], ["tab-buttons", "tab chrome buttons"], ["snap", "snap to grid"],
+    ["htmlSurface"], ["lazySurface"], ["iframeSurface"], ["canvasSurface"], ["createSurfaceRegistry"],
+    ["state-preserving", "surfaces keep mounted state across layouts"],
+    ["createFrameScheduler"], ["immediateScheduler"],
+  ]),
+  ...items("Manager & geometry", [
+    ["createWindowManager"], ["present", "wm.present()"], ["keyboard", "keyboard shortcuts"],
+    ["rect-helpers", "geometry: rect / intersects / intersection / union / clamp / inset / constrainSize …"],
+    ["drag-fns", "createDrag / updateDrag / createResize / updateResize / EDGES"],
+    ["updateRatio", "updateRatio (divider drag)"],
+  ]),
+];
+
+export const PAGES = [
+  {
+    href: "./playground.html",
+    short: "Playground",
+    title: "Layout-algebra playground",
+    blurb: "Edit a layout tree as JSON or with constructors, apply every transform, and read the compiled CSS beside a live preview.",
+    covers: [
+      "view", "row", "column", "grid", "stack", "overlay", "place", "size", "gap", "inset", "anchor",
+      "container/modifier", "predicates", "kinds", "validate", "fromJSON",
+      "mirror", "flip", "rotate", "reverse", "mapViews", "replace", "remove", "swap", "transform", "walk", "fold", "views", "find", "count", "equals",
+      "masterStack", "columns", "rows", "monocle", "tabs", "autoGrid", "fixedGrid", "spiral", "bsp-fns", "floating", "centered", "dock", "hybrid",
+      "compile", "toHTML", "styleText", "tracks", "px", "anchorName", "BASE_CSS", "flex-weights", "grid-tracks", "anchor-css", "stack-inert",
+      "projections", "createDomRenderer", "keyed-dom", "styleOf", "elementFor", "lazySurface", "container-queries",
+    ],
+  },
+  {
+    href: "./layouts.html",
+    short: "Layouts",
+    title: "Derived-layout gallery",
+    blurb: "Every derived layout, switchable live, plus small multiples of all of them at once. Add, remove, swap and promote windows; drag dividers.",
+    covers: [
+      "masterStack", "columns", "rows", "monocle", "tabs", "autoGrid", "fixedGrid", "spiral", "bsp", "bsp-fns", "floating-layout", "custom-layout",
+      "dock", "centered", "hybrid",
+      "window/create", "window/close", "window/swap", "window/promote", "focus/next", "focus/previous", "layout/set", "layout/set-ratio", "layout/rotate-split",
+      "config/set", "gap-inset-config", "derive", "compile", "toHTML", "present", "updateRatio", "tab-buttons", "createFrameScheduler",
+      "createWindowManager", "attachInput", "createDomRenderer", "createSurfaceRegistry", "lazySurface", "keyboard", "flex-weights", "grid-tracks",
+      "stack-inert", "not-bsp",
+    ],
+  },
+  {
+    href: "./desktop.html",
+    short: "Desktop",
+    title: "Tiling desktop",
+    blurb: "Workspaces, floating and tiled windows, dock panels, 7 stacking layers, focus-vs-raise, nested modals with focus redirection, every role, and keyboard shortcuts.",
+    covers: [
+      "window/create", "window/close", "window/focus", "window/blur", "focus/next", "focus/previous", "window/raise", "window/lower", "window/set-layer",
+      "window/move", "window/resize", "window/toggle-floating", "window/minimize", "window/maximize", "window/fullscreen", "window/restore",
+      "window/set-title", "window/move-to-workspace", "window/promote", "workspace/create", "workspace/activate", "workspace/remove", "layout/set", "config/set",
+      "focus-raises", "layers", "modal-graph", "blocked-inert", "cascade-close", "refocus", "focus-restores", "roles", "gap-inset-config",
+      "queries", "effect-focus", "subscribe", "keyboard", "drag-move", "resize-edges", "command-buttons", "snap", "anchor-css", "custom-layout", "dock",
+      "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "lazySurface", "undo-redo", "tab-buttons",
+    ],
+  },
+  {
+    href: "./console.html",
+    short: "Console",
+    title: "Command console",
+    blurb: "Issue any of the 29 commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
+    covers: [
+      ...[
+        "window/create", "window/close", "window/focus", "window/blur", "focus/next", "focus/previous", "window/raise", "window/lower", "window/set-layer",
+        "window/move", "window/resize", "window/set-mode", "window/toggle-floating", "window/minimize", "window/maximize", "window/fullscreen", "window/restore",
+        "window/set-title", "window/set-constraints", "window/swap", "window/promote", "window/move-to-workspace", "workspace/create", "workspace/activate",
+        "workspace/remove", "layout/set", "layout/set-ratio", "layout/rotate-split", "config/set", "extensions",
+      ],
+      "missing-id", "duplicate-id", "unknown-parent", "unknown-workspace", "unknown-window", "unknown-layer", "unknown-mode", "different-workspaces",
+      "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command",
+      "events", "effect-render", "effect-focus", "subscribe", "update", "reduce", "replay", "undo-redo", "history-fns", "serialize", "log-replay",
+      "createState", "createWorkspace", "createWindowRecord", "constants", "derive", "presentationContext", "queries", "createWindowManager",
+      "compile", "createDomRenderer", "immediateScheduler", "equals", "cascade-close", "modal-graph", "refocus",
+    ],
+  },
+  {
+    href: "./surfaces.html",
+    short: "Surfaces",
+    title: "Surfaces",
+    blurb: "html, lazy, iframe (srcdoc) and canvas surfaces keep their mounted state while windows travel through layouts; a mount/unmount log shows the lifecycle.",
+    covers: [
+      "htmlSurface", "lazySurface", "iframeSurface", "canvasSurface", "createSurfaceRegistry", "state-preserving", "keyed-dom", "elementFor",
+      "layout/set", "window/swap", "window/toggle-floating", "window/minimize", "window/restore", "window/fullscreen", "window/focus",
+      "createDomRenderer", "createFrameScheduler", "createWindowManager", "attachInput", "tabs", "bsp", "masterStack", "spiral", "monocle",
+    ],
+  },
+  {
+    href: "./geometry.html",
+    short: "Geometry",
+    title: "Requested vs actual geometry",
+    blurb: "Requested placements drawn against measured rectangles, constraints on tiled windows, container-query responsive content, anchors with the JS fallback forced, and geometry helpers.",
+    covers: [
+      "requested-actual", "tiled-constraints", "measure", "window/move", "window/resize", "window/set-constraints", "container-queries",
+      "anchor-css", "anchor-fallback", "anchor", "anchorName", "rect-helpers", "drag-fns", "snap", "createFrameScheduler",
+      "drag-move", "resize-edges", "roles", "styleOf", "createDomRenderer", "destroy", "createWindowManager", "attachInput", "px",
+      "window/toggle-floating",
+    ],
+  },
+  {
+    href: "./ide.html",
+    short: "IDE",
+    title: "IDE workspace (app)",
+    blurb: "A realistic app: file tree, editor tabs, terminal, live preview iframe, command palette, context menus, toasts, problems panel, three workspaces, and session persistence.",
+    covers: [
+      "custom-layout", "grid-tracks", "stack-inert", "roles", "keyboard", "serialize", "undo-redo",
+      "workspace/activate", "window/create", "window/close", "window/focus", "window/set-title", "window/toggle-floating", "window/maximize", "window/restore",
+      "layout/set", "layout/set-ratio", "config/set", "iframeSurface", "lazySurface", "canvasSurface", "state-preserving", "effect-focus",
+      "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "container-queries", "updateRatio", "extensions",
+      "window/move-to-workspace", "focus-restores", "subscribe",
+    ],
+  },
+  {
+    href: "./basic.html",
+    short: "Basic",
+    title: "Quick start",
+    blurb: "The original minimal demo: a handful of windows, a layout switcher, undo/redo. The shortest path through the API.",
+    covers: ["createWindowManager", "attachInput", "lazySurface", "layout/set", "layout/set-ratio", "window/toggle-floating", "undo-redo", "focus/next", "modal-graph"],
+  },
+];

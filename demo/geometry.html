@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Geometry Lab</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 0; }
+      .work { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+      .stage-wrap { position: relative; margin: 10px; min-height: 0; overflow: hidden; border-radius: 10px; }
+      #stage { position: absolute; inset: 0; width: var(--stage-w, 100%); border-radius: 10px; outline: 1px solid var(--line); }
+      #marks { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+      .mark { position: absolute; box-sizing: border-box; border-radius: 6px; }
+      .mark.req { border: 2px dashed var(--warn); }
+      .mark.req.ignored { border-color: color-mix(in oklab, var(--warn) 45%, transparent); }
+      .mark.act { border: 2px solid var(--accent); }
+      .mark.overlap { background: repeating-linear-gradient(45deg, color-mix(in oklab, var(--danger) 30%, transparent) 0 6px, transparent 6px 12px); border: 1px solid var(--danger); }
+      .mark.union { border: 1px dotted var(--violet); }
+      .mark .tag { position: absolute; left: 4px; top: -18px; font: 600 10.5px var(--mono); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+      .mark.req .tag { background: var(--warn); color: #fff; top: auto; bottom: -18px; }
+      .mark.act .tag { background: var(--accent); color: var(--accent-fg); }
+      .mark.overlap .tag { background: var(--danger); color: #fff; }
+      .dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+      .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); align-items: center; }
+      .legend i { display: inline-block; width: 18px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+      aside { min-width: 0; border-left: 1px solid var(--line); background: var(--surface); overflow: auto; }
+      aside section { border-bottom: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 8px; }
+      aside h2 { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+      aside h2 .spacer { flex: 1; }
+      .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .grid4 input { width: 100%; }
+      .grid4 label, .field { font-size: 11px; color: var(--faint); display: grid; gap: 2px; }
+      .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      table.data td, table.data th { padding: 4px 6px; font-size: 11.5px; }
+      table.data td.bad { color: var(--danger); font-weight: 600; }
+      pre.code { max-height: 120px; font-size: 11px; }
+      /* Container-query responsive card inside each window */
+      .card { height: 100%; display: grid; grid-template-columns: 1fr; grid-template-rows: auto 1fr; gap: 8px; padding: 10px; font-size: 12.5px; }
+      .card .head { display: flex; align-items: center; gap: 8px; }
+      .card .icon { width: 28px; height: 28px; border-radius: 8px; background: var(--wa-color); flex: none; }
+      .card .bp { font: 600 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--surface-3); color: var(--muted); }
+      .card .bp::after { content: "wide ≥ 420px"; }
+      .card .chart { display: flex; align-items: flex-end; gap: 4px; min-height: 0; max-height: 220px; align-self: end; height: 100%; }
+      .card .chart i { flex: 1; background: color-mix(in oklab, var(--wa-color) 60%, transparent); border-radius: 3px 3px 0 0; }
+      .card .stats { display: none; }
+      .card .size { font: 11px var(--mono); color: var(--faint); }
+      @container wm-view (width >= 420px) {
+        .card { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }
+        .card .head { grid-column: 1 / -1; }
+        .card .stats { display: grid; align-content: start; gap: 4px; color: var(--muted); }
+      }
+      @container wm-view (width < 420px) { .card .bp::after { content: "medium 240–420px"; } }
+      @container wm-view (width < 240px) {
+        .card { grid-template-rows: auto; place-content: center; text-align: center; }
+        .card .chart, .card .title-text, .card .size { display: none; }
+        .card .head { flex-direction: column; }
+        .card .bp::after { content: "narrow < 240px"; }
+      }
+      @container wm-view (height < 120px) { .card .chart { display: none; } }
+      .pill { padding: 6px 10px; font-size: 12px; font-weight: 600; height: 100%; display: flex; align-items: center; gap: 6px; }
+      .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--wa-color); }
+      @media (max-width: 1000px) {
+        main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(520px, 72dvh) auto; }
+        aside { border-left: 0; border-top: 1px solid var(--line); }
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="site"></header>
+    <main>
+      <section class="work">
+        <div class="toolbar">
+          <span class="legend">
+            <span><i style="border: 2px dashed var(--warn)"></i>requested (state)</span>
+            <span><i style="border: 2px solid var(--accent)"></i>actual (measure())</span>
+            <span><i style="background: repeating-linear-gradient(45deg, var(--danger) 0 3px, transparent 3px 6px)"></i>intersection()</span>
+            <span><i style="border: 1px dotted var(--violet)"></i>union()</span>
+          </span>
+          <span class="sep"></span>
+          <label class="inline">stage width <input type="range" id="stage-w" min="35" max="100" value="100" /></label>
+          <label class="inline"><input type="checkbox" id="show-marks" checked /> overlays</label>
+        </div>
+        <div class="stage-wrap" id="wrap">
+          <div id="stage" class="stage"></div>
+          <div id="marks"></div>
+        </div>
+      </section>
+      <aside>
+        <section>
+          <h2>Request geometry <span class="spacer"></span><select id="target" aria-label="Window"></select></h2>
+          <div class="grid4">
+            <label>x <input type="number" id="rx" /></label>
+            <label>y <input type="number" id="ry" /></label>
+            <label>width <input type="number" id="rw" /></label>
+            <label>height <input type="number" id="rh" /></label>
+          </div>
+          <div class="row">
+            <button class="btn small primary" id="request">window/resize (with x, y)</button>
+            <button class="btn small" id="toggle-mode">toggle tiled ⇄ floating</button>
+          </div>
+          <div class="grid4">
+            <label>minWidth <input type="number" id="cminw" placeholder="—" /></label>
+            <label>minHeight <input type="number" id="cminh" placeholder="—" /></label>
+            <label>maxWidth <input type="number" id="cmaxw" placeholder="—" /></label>
+            <label>maxHeight <input type="number" id="cmaxh" placeholder="—" /></label>
+          </div>
+          <div class="row"><button class="btn small" id="constrain">window/set-constraints</button><span class="note" id="flow"></span></div>
+        </section>
+        <section>
+          <h2>Requested vs actual</h2>
+          <table class="data">
+            <thead><tr><th>window</th><th>mode</th><th>requested</th><th>actual</th><th>Δ</th></tr></thead>
+            <tbody id="table"></tbody>
+          </table>
+          <div class="note">Tiled windows ignore their requested placement (CSS decides), but their min/max constraints become CSS min/max sizes. Shrink the stage to watch constraints win over flex.</div>
+        </section>
+        <section>
+          <h2>Anchor positioning <span class="spacer"></span><span class="chip" id="anchor-mode"></span></h2>
+          <div class="row">
+            <label class="inline"><input type="checkbox" id="fallback" /> force JS fallback</label>
+            <select id="side" aria-label="side"><option>right</option><option>bottom</option><option>top</option><option>left</option></select>
+            <select id="align" aria-label="align"><option>center</option><option>start</option><option>end</option></select>
+            <button class="btn small" id="reanchor">re-anchor</button>
+          </div>
+          <div class="note">The tooltip is anchored to <code>editor</code> with <code>anchor({ to, side, align, offset })</code>. The fallback destroys the renderer and creates a new one with <code>anchorFallback: true</code>, which strips the CSS anchor declarations and computes <code>left/top</code> in JS.</div>
+          <pre class="code" id="anchor-style"></pre>
+        </section>
+        <section>
+          <h2>Geometry & input primitives</h2>
+          <div class="row">
+            <button class="btn small" id="sim-drag" title="createDrag/updateDrag along a synthetic path">Simulate drag</button>
+            <button class="btn small" id="sim-resize" title="createResize/updateResize from every edge in EDGES">Resize every edge</button>
+            <button class="btn small" id="offscreen">Throw off-screen</button>
+            <button class="btn small" id="clamp" title="geometry.clamp(rect, stage, { keepVisible })">Clamp back</button>
+            <label class="inline"><input type="checkbox" id="snap" /> snap 20</label>
+          </div>
+          <div class="row">
+            <button class="btn small" id="stress" title="300 window/move commands in one task">Stress: 300 moves</button>
+            <span class="note" id="stress-out"></span>
+          </div>
+          <div class="note" id="hover">Hover the stage: <code>contains()</code> finds the window under the pointer.</div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { createWindowManager, createState, geometry, createDrag, updateDrag, createResize, updateResize, EDGES, anchorName, px } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, fmtRect } from "./shared/kit.mjs";
+
+      initPage({ current: "./geometry.html", title: "Requested vs actual geometry" });
+      const { rect, intersects, intersection, union, clamp, contains, center, translate, inset, equalRects, constrainSize } = geometry;
+
+      const root = $("#stage");
+      const surfaces = createSurfaceRegistry();
+      const card = (label) => (el) => {
+        el.append(
+          h("div", { class: "card" },
+            h("div", { class: "head" }, h("span", { class: "icon" }), h("strong", { class: "title-text" }, label), h("span", { class: "bp" })),
+            h("div", { class: "chart" }, [38, 62, 45, 80, 55, 92, 70].map((v) => h("i", { style: { height: `${v}%` } }))),
+            h("div", { class: "stats" }, h("div", {}, "Container queries on ", h("code", {}, "wm-view"), " switch this card between three layouts."), h("div", { class: "size", "data-size": "" })),
+          ),
+        );
+      };
+      const defs = [
+        ["editor", "Editor (tiled)", "var(--swatch-1)", {}],
+        ["inspector", "Inspector (tiled, minWidth 320)", "var(--swatch-2)", { constraints: { minWidth: 320 } }],
+        ["preview", "Preview (tiled)", "var(--swatch-6)", {}],
+        ["palette", "Palette (floating)", "var(--swatch-4)", { mode: "floating", placement: { x: 60, y: 70, width: 300, height: 190 }, constraints: { minWidth: 180, minHeight: 110, maxWidth: 520 } }],
+        ["notes", "Notes (floating)", "var(--swatch-3)", { mode: "floating", placement: { x: 250, y: 160, width: 220, height: 170 } }],
+      ];
+      for (const [id, title, color] of defs) surfaces.set(id, windowSurface({ id, title, color, body: card(title), actions: ["float", "close"] }));
+      surfaces.set("tip", windowSurface({ id: "tip", bare: true, color: "var(--swatch-5)", body: (el) => el.append(h("div", { class: "pill" }, "anchored tooltip")) }));
+
+      // A swappable renderer: the manager only needs { commit, measure }.
+      let renderer;
+      let commits = 0;
+      const makeRenderer = (anchorFallback) => {
+        renderer?.destroy();
+        renderer = createDomRenderer({ root, surfaceFor: surfaces, anchorFallback });
+      };
+      makeRenderer(undefined);
+      const wm = createWindowManager({
+        state: createState({ layout: { type: "master-stack", ratio: 0.5 }, config: { gap: 8, inset: 8 } }),
+        renderer: { commit: (tree) => (commits++, renderer.commit(tree)), measure: () => renderer.measure() },
+        schedule: createFrameScheduler(),
+      });
+      let detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      syncChrome(wm, root);
+      for (const [id, title, , options] of defs) wm.create({ id, title, ...options });
+      const anchorTip = () => {
+        if (wm.state.windows.tip) wm.close("tip");
+        wm.create({ id: "tip", title: "Tip", role: "tooltip", parent: "editor", focus: false, placement: { width: 150, height: 34 }, anchor: { to: "editor", side: $("#side").value, align: $("#align").value, offset: 6 } });
+      };
+      anchorTip();
+      wm.focus("palette");
+
+      // ---------------------------------------------------------------- measuring & drawing
+      const marks = $("#marks");
+      const lastRequest = new Map(); // id → the rect the user asked for (before constraints)
+      let lastDrawn = {};
+      const draw = () => {
+        const state = wm.getState();
+        const actual = wm.measure();
+        const stageRect = rect(0, 0, root.clientWidth, root.clientHeight);
+        const show = $("#show-marks").checked;
+        const nodes = [];
+        const box = (r, cls, tag) => {
+          const el = h("div", { class: `mark ${cls}`, style: { left: px(r.x), top: px(r.y), width: px(r.width), height: px(r.height) } });
+          if (tag) el.append(h("span", { class: "tag" }, tag));
+          nodes.push(el);
+        };
+        const rows = [];
+        for (const win of Object.values(state.windows)) {
+          const a = actual[win.id];
+          const tiled = win.mode === "tiled" && win.role === "window";
+          const req = win.role === "tooltip" ? null : win.placement;
+          if (show && req && win.id !== "tip" && (!tiled || win.id === target.value)) box(req, `req ${tiled ? "ignored" : ""}`, tiled ? `${win.id}: requested (ignored)` : `${win.id}: requested`);
+          if (show && a) {
+            box(a, "act", `${win.id} ${Math.round(a.width)}×${Math.round(a.height)}`);
+            const c = center(a);
+            nodes.push(h("div", { class: "dot", style: { left: px(c.x), top: px(c.y) } }));
+          }
+          const asked = lastRequest.get(win.id);
+          const delta = a && req ? Math.round(Math.abs(a.width - req.width) + Math.abs(a.height - req.height) + Math.abs(a.x - req.x) + Math.abs(a.y - req.y)) : null;
+          rows.push(h("tr", {},
+            h("td", {}, win.id),
+            h("td", {}, win.role === "window" ? win.mode : win.role),
+            h("td", { class: "mono", title: asked ? `asked ${fmtRect(asked)}; constraints clamp to the stored placement` : "" }, req ? fmtRect(req) : "anchor", asked && !equalRects(asked, { ...req }) ? h("div", { style: { color: "var(--danger)" } }, `asked ${fmtRect(asked)}`) : ""),
+            h("td", { class: "mono" }, a ? fmtRect(a) : "—"),
+            h("td", { class: `num ${delta > 2 ? "bad" : ""}` }, delta === null ? "—" : String(delta)),
+          ));
+          // Report inside the card too.
+          const sizeEl = renderer.elementFor(win.id)?.querySelector("[data-size]");
+          if (sizeEl && a) sizeEl.textContent = `actual ${Math.round(a.width)}×${Math.round(a.height)} · clamp stage ${stageRect.width}×${stageRect.height}`;
+        }
+        // Overlaps between floating windows (intersects / intersection / union).
+        const floats = Object.values(state.windows).filter((w) => w.mode === "floating" && w.role === "window" && actual[w.id]);
+        for (let i = 0; i < floats.length; i++) {
+          for (let j = i + 1; j < floats.length; j++) {
+            const A = actual[floats[i].id];
+            const B = actual[floats[j].id];
+            if (show && intersects(A, B)) {
+              const o = intersection(A, B);
+              box(o, "overlap", `overlap ${Math.round(o.width)}×${Math.round(o.height)}`);
+            }
+            if (show) box(union(A, B), "union");
+          }
+        }
+        marks.replaceChildren(...nodes);
+        $("#table").replaceChildren(...rows);
+        lastDrawn = actual;
+        renderAnchorInfo();
+      };
+      wm.subscribe(() => requestAnimationFrame(() => requestAnimationFrame(draw)));
+      new ResizeObserver(() => requestAnimationFrame(draw)).observe(root);
+      $("#show-marks").onchange = draw;
+
+      // Keep the marks layer aligned with the stage's own origin.
+      $("#stage-w").oninput = (event) => {
+        $("#wrap").style.setProperty("--stage-w", `${event.target.value}%`);
+        marks.style.width = `${event.target.value}%`;
+      };
+
+      // ---------------------------------------------------------------- request panel
+      const target = $("#target");
+      const fillTargets = () => {
+        const keep = target.value;
+        target.replaceChildren(...Object.keys(wm.state.windows).filter((id) => id !== "tip").map((id) => h("option", { value: id }, id)));
+        target.value = wm.state.windows[keep] ? keep : wm.state.focus.window && wm.state.focus.window !== "tip" ? wm.state.focus.window : target.options[0]?.value;
+      };
+      const fillFields = () => {
+        const win = wm.state.windows[target.value];
+        if (!win) return;
+        $("#rx").value = win.placement.x;
+        $("#ry").value = win.placement.y;
+        $("#rw").value = win.placement.width;
+        $("#rh").value = win.placement.height;
+        $("#cminw").value = win.constraints.minWidth ?? "";
+        $("#cminh").value = win.constraints.minHeight ?? "";
+        $("#cmaxw").value = win.constraints.maxWidth ?? "";
+        $("#cmaxh").value = win.constraints.maxHeight ?? "";
+        $("#toggle-mode").textContent = win.mode === "tiled" ? "make floating" : "make tiled";
+      };
+      target.onchange = fillFields;
+      fillTargets();
+      fillFields();
+      wm.subscribe((state, events) => {
+        if (events.some((e) => e.type === "window/focused" && e.id !== "tip")) target.value = state.focus.window;
+        fillTargets();
+        fillFields();
+      });
+
+      $("#request").onclick = () => {
+        const id = target.value;
+        const asked = rect(Number($("#rx").value), Number($("#ry").value), Number($("#rw").value), Number($("#rh").value));
+        lastRequest.set(id, asked);
+        const preview = constrainSize(asked, wm.state.windows[id].constraints);
+        $("#flow").textContent = `constrainSize → ${Math.round(preview.width)}×${Math.round(preview.height)}`;
+        wm.dispatch({ type: "window/resize", id, ...asked });
+      };
+      $("#toggle-mode").onclick = () => wm.toggleFloating(target.value);
+      $("#constrain").onclick = () => {
+        const read = (el) => (el.value === "" ? undefined : Number(el.value));
+        const constraints = { minWidth: read($("#cminw")), minHeight: read($("#cminh")), maxWidth: read($("#cmaxw")), maxHeight: read($("#cmaxh")) };
+        wm.dispatch({ type: "window/set-constraints", id: target.value, constraints });
+      };
+
+      // ---------------------------------------------------------------- anchors
+      const renderAnchorInfo = () => {
+        const el = renderer.elementFor("tip");
+        $("#anchor-mode").textContent = renderer.anchorFallback ? "JS fallback" : "CSS anchor positioning";
+        $("#anchor-mode").className = `chip ${renderer.anchorFallback ? "warn" : "ok"}`;
+        const a = lastDrawn.tip;
+        const lines = [`anchorName("editor") = ${anchorName("editor")}`, `styleOf("view:tip"):`];
+        const style = renderer.styleOf("view:tip") ?? "";
+        for (const decl of style.split("; ").filter((d) => /position|anchor|left|top|margin|self/.test(d))) lines.push(`  ${decl}`);
+        if (renderer.anchorFallback && el) lines.push(`  (inline) left: ${el.style.left}; top: ${el.style.top}`);
+        if (a) lines.push(`actual: ${fmtRect(a)}`);
+        $("#anchor-style").textContent = lines.join("\n");
+      };
+      $("#fallback").onchange = (event) => {
+        makeRenderer(event.target.checked ? true : undefined);
+        detach();
+        detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: $("#snap").checked ? 20 : undefined });
+        wm.render();
+        requestAnimationFrame(() => requestAnimationFrame(draw));
+      };
+      $("#reanchor").onclick = anchorTip;
+      $("#side").onchange = anchorTip;
+      $("#align").onchange = anchorTip;
+
+      // ---------------------------------------------------------------- primitives
+      const animate = (steps, fn, ms = 16) =>
+        new Promise((resolve) => {
+          let i = 0;
+          const tick = () => {
+            fn(i);
+            if (++i <= steps) setTimeout(tick, ms);
+            else resolve();
+          };
+          tick();
+        });
+      $("#sim-drag").onclick = async () => {
+        const id = "notes";
+        if (wm.state.windows[id]?.mode !== "floating") return;
+        const start = wm.state.windows[id].placement;
+        const drag = createDrag({ origin: { x: 0, y: 0 }, bounds: start });
+        const snap = $("#snap").checked ? 20 : undefined;
+        await animate(60, (i) => {
+          const t = (i / 60) * Math.PI * 2;
+          const pointer = { x: Math.sin(t) * 140, y: (1 - Math.cos(t)) * 60 };
+          wm.dispatch({ type: "window/move", id, ...updateDrag(drag, pointer, { snap }) });
+        });
+      };
+      $("#sim-resize").onclick = async () => {
+        const id = "palette";
+        if (wm.state.windows[id]?.mode !== "floating") return;
+        for (const edge of EDGES) {
+          const bounds = wm.state.windows[id].placement;
+          const op = createResize({ origin: { x: 0, y: 0 }, bounds, edge, constraints: wm.state.windows[id].constraints });
+          const dir = { x: edge.includes("e") ? 1 : edge.includes("w") ? -1 : 0, y: edge.includes("s") ? 1 : edge.includes("n") ? -1 : 0 };
+          $("#flow").textContent = `edge ${edge}`;
+          await animate(12, (i) => wm.dispatch({ type: "window/resize", id, ...updateResize(op, { x: dir.x * i * 3, y: dir.y * i * 3 }) }), 20);
+          await animate(12, (i) => wm.dispatch({ type: "window/resize", id, ...updateResize(op, { x: dir.x * (36 - i * 3), y: dir.y * (36 - i * 3) }) }), 20);
+        }
+        $("#flow").textContent = `resized from all ${EDGES.length} edges`;
+      };
+      $("#offscreen").onclick = () => {
+        const win = wm.state.windows.notes;
+        if (win?.mode !== "floating") return;
+        const moved = translate(win.placement, root.clientWidth, 400);
+        wm.move("notes", moved.x, moved.y);
+      };
+      $("#clamp").onclick = () => {
+        const stage = inset(rect(0, 0, root.clientWidth, root.clientHeight), 8);
+        for (const win of Object.values(wm.state.windows)) {
+          if (win.mode !== "floating" || win.role !== "window") continue;
+          const next = clamp(win.placement, stage, { keepVisible: 60 });
+          if (!equalRects(next, win.placement)) wm.move(win.id, next.x, next.y);
+        }
+      };
+      $("#snap").onchange = (event) => {
+        detach();
+        detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: event.target.checked ? 20 : undefined });
+      };
+      $("#stress").onclick = () => {
+        const before = commits;
+        const win = wm.state.windows.notes;
+        const t0 = performance.now();
+        for (let i = 0; i < 300; i++) wm.move("notes", win.placement.x + (i % 30), win.placement.y);
+        const dispatchMs = performance.now() - t0;
+        $("#stress-out").textContent = `300 dispatches in ${dispatchMs.toFixed(1)} ms, waiting for the frame…`;
+        const report = () => {
+          if (commits === before) return setTimeout(report, 50);
+          $("#stress-out").textContent = `300 dispatches in ${dispatchMs.toFixed(1)} ms → ${commits - before} DOM commit${commits - before === 1 ? "" : "s"} (createFrameScheduler)`;
+        };
+        setTimeout(report, 50);
+      };
+
+      root.addEventListener("pointermove", (event) => {
+        const origin = root.getBoundingClientRect();
+        const point = { x: event.clientX - origin.left, y: event.clientY - origin.top };
+        const hits = Object.entries(lastDrawn).filter(([, r]) => contains(r, point)).map(([id]) => id);
+        $("#hover").innerHTML = `pointer ${Math.round(point.x)},${Math.round(point.y)} · <code>contains()</code>: ${hits.join(", ") || "stage"}`;
+      });
+
+      requestAnimationFrame(() => requestAnimationFrame(draw));
+      window.wm = wm;
+      window.geometryPage = { get renderer() { return renderer; }, draw, get commits() { return commits; } };
+    </script>
+  </body>
+</html>

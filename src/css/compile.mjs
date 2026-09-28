@@ -303,6 +303,12 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
         "container-name": "wm-view",
         ...style,
       });
+      // Size containment ignores content, so an axis sized by its content
+      // ("content", "fit-content", …) must not be contained: fall back to
+      // inline-size containment (height from content) or none (width from content).
+      const fromContent = (value) => value === "max-content" || value === "min-content" || value === "fit-content";
+      if (fromContent(style.width)) style["container-type"] = "normal";
+      else if (fromContent(style.height)) style["container-type"] = "inline-size";
       if (anchored.has(id) && occurrence === 1) style["anchor-name"] = anchorName(id);
       Object.assign(attrs, { "data-view": id });
       if (occurrence > 1) attrs["data-view-projection"] = String(occurrence);

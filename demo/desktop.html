@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tiling Desktop</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr); min-height: 0; }
+      .desk { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
+      .ws-tabs { display: inline-flex; gap: 2px; padding: 2px; background: var(--surface-3); border-radius: 8px; }
+      .ws-tabs button { font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--muted); padding: 3px 8px 3px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+      .ws-tabs button[aria-pressed="true"] { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.15); }
+      .ws-tabs .count { font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
+      .ws-tabs .rm { opacity: 0; font-size: 12px; color: var(--faint); padding: 0 2px; border-radius: 3px; }
+      .ws-tabs button:hover .rm { opacity: 1; }
+      .ws-tabs .rm:hover { color: var(--danger); }
+      #stage { margin: 8px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+      .taskbar { display: flex; gap: 4px; padding: 6px 8px; background: var(--surface); border-top: 1px solid var(--line); overflow-x: auto; align-items: center; min-height: 42px; }
+      .taskbar button { font: inherit; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 6px; cursor: pointer; max-width: 200px; white-space: nowrap; }
+      .taskbar button span.t { overflow: hidden; text-overflow: ellipsis; }
+      .taskbar button[data-focused="true"] { border-color: var(--accent); background: var(--accent-soft); }
+      .taskbar button[data-status="minimized"] { opacity: 0.6; border-style: dashed; }
+      .taskbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+      .taskbar .hint { margin-left: auto; color: var(--faint); font-size: 12px; white-space: nowrap; }
+      aside { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; min-height: 0; }
+      aside section { border-bottom: 1px solid var(--line); }
+      aside h2 { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 12px 4px; display: flex; align-items: center; gap: 6px; }
+      aside h2 .spacer { flex: 1; }
+      .layers { padding: 2px 12px 10px; display: grid; gap: 3px; font-size: 12.5px; }
+      .layer { display: grid; grid-template-columns: 88px 1fr; gap: 6px; align-items: start; }
+      .layer .name { font: 11px var(--mono); color: var(--faint); padding-top: 3px; }
+      .layer .ids { display: flex; flex-wrap: wrap; gap: 3px; min-height: 22px; }
+      .wid { font: 11.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--surface-3); border: 1px solid transparent; cursor: pointer; }
+      .wid.focused { border-color: var(--accent); color: var(--accent); }
+      .wid.blocked { background: var(--warn-soft); color: var(--warn); }
+      .wid.min { opacity: 0.5; }
+      .graph { padding: 2px 12px 10px; font: 12px/1.7 var(--mono); }
+      .graph .node { white-space: nowrap; }
+      .graph .modal { color: var(--warn); }
+      .graph .arrow { color: var(--faint); }
+      .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; padding: 2px 12px 10px; font-size: 12.5px; }
+      .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+      .events { max-height: 220px; overflow: auto; }
+      .spawn { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 12px 10px; }
+      /* Window bodies */
+      .info { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+      .info .facts { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+      .info .acts { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 0; }
+      .info textarea { margin: 8px 10px 10px; width: calc(100% - 20px); height: calc(100% - 16px); min-height: 40px; resize: none; font-family: var(--font); font-size: 13px; background: var(--surface-2); border-color: var(--line); }
+      .info .lower { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+      @container wm-view (width < 300px) { .info .acts .opt { display: none; } }
+      @container wm-view (height < 170px) { .info textarea { display: none; } }
+      .dialog-body { padding: 14px 16px; display: grid; gap: 12px; align-content: start; height: 100%; }
+      .dialog-body p { margin: 0; color: var(--muted); font-size: 13px; }
+      .dialog-body .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+      .menu { padding: 4px; display: grid; }
+      .menu button { font: inherit; font-size: 13px; text-align: left; border: 0; background: none; color: var(--fg); padding: 6px 10px; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+      .menu button:hover { background: var(--accent-soft); color: var(--accent); }
+      .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+      .menu kbd { font-size: 10.5px; }
+      .tooltip { padding: 8px 10px; font-size: 12.5px; }
+      .toast { padding: 10px 12px; display: grid; gap: 2px; font-size: 13px; height: 100%; align-content: center; }
+      .toast strong { font-size: 13px; }
+      .toast span { color: var(--muted); font-size: 12px; }
+      .toast.rejected strong { color: var(--danger); }
+      .clock { height: 100%; display: grid; place-content: center; text-align: center; }
+      .clock .time { font: 600 26px/1 var(--mono); color: var(--wa-color); }
+      .clock .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+      .sysbar { height: 100%; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; font-weight: 600; color: var(--danger); }
+      .sysbar::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--danger); animation: pulse 1.2s infinite; }
+      @keyframes pulse { 50% { opacity: 0.25; } }
+      wm-view[data-view^="sys"] { border-radius: 99px; }
+      #help { position: fixed; inset: 0; display: none; place-items: center; background: rgb(0 0 0 / 0.45); z-index: 100; padding: 16px; }
+      #help.open { display: grid; }
+      #help .card { background: var(--surface); border-radius: 12px; padding: 18px 20px; max-width: 560px; width: 100%; box-shadow: var(--shadow-lg); max-height: 90dvh; overflow: auto; }
+      #help table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      #help td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+      #help td:first-child { white-space: nowrap; padding-right: 16px; }
+      @media (max-width: 980px) {
+        main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(560px, 78dvh) auto; }
+        aside { border-left: 0; border-top: 1px solid var(--line); }
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="site"></header>
+    <main>
+      <section class="desk">
+        <div class="toolbar">
+          <span class="ws-tabs" id="workspaces" role="group" aria-label="Workspaces"></span>
+          <button class="btn small ghost" id="ws-add" title="workspace/create (activate)">+ Workspace</button>
+          <span class="sep"></span>
+          <select id="layout" aria-label="Layout for this workspace">
+            <option value="master-stack">master-stack</option>
+            <option value="sidebar">sidebar (dock)</option>
+            <option value="bsp">bsp</option>
+            <option value="columns">columns</option>
+            <option value="grid">grid</option>
+            <option value="tabs">tabs</option>
+            <option value="monocle">monocle</option>
+            <option value="floating">floating</option>
+          </select>
+          <label class="inline" title="config.focusRaises: focusing a window also raises it within its layer"><input type="checkbox" id="focus-raises" checked /> focus raises</label>
+          <label class="inline" title="attachInput({ snap }): floating moves snap to a 16px grid"><input type="checkbox" id="snap" /> snap 16px</label>
+          <span class="sep"></span>
+          <button class="btn small" id="undo" title="Undo (Alt+Z)">↶ Undo</button>
+          <button class="btn small" id="redo" title="Redo (Alt+Shift+Z)">↷ Redo</button>
+          <button class="btn small ghost" id="help-open" title="Keyboard shortcuts (?)">⌨ Shortcuts</button>
+        </div>
+        <div id="stage" class="stage"></div>
+        <div class="taskbar" id="taskbar"></div>
+      </section>
+      <aside>
+        <section>
+          <h2>Spawn</h2>
+          <div class="spawn">
+            <button class="btn small primary" data-spawn="app">App window</button>
+            <button class="btn small" data-spawn="floating">Floating</button>
+            <button class="btn small" data-spawn="dialog" title="Modal dialog on the focused window">Modal dialog</button>
+            <button class="btn small" data-spawn="chain" title="Three nested modals">Nested modals ×3</button>
+            <button class="btn small" data-spawn="sheet">Sheet</button>
+            <button class="btn small" data-spawn="menu">Menu</button>
+            <button class="btn small" data-spawn="popover">Popover</button>
+            <button class="btn small" data-spawn="tooltip">Tooltip</button>
+            <button class="btn small" data-spawn="notification">Notification</button>
+            <button class="btn small" data-spawn="panel" title="role: panel → layer top">Panel</button>
+            <button class="btn small" data-spawn="background" title="layer: background">Background win</button>
+            <button class="btn small" data-spawn="system" title="layer: system">System overlay</button>
+          </div>
+        </section>
+        <section>
+          <h2>Focus <span class="spacer"></span><span class="chip" id="focus-chip">—</span></h2>
+          <dl class="kv" id="focus"></dl>
+        </section>
+        <section>
+          <h2>Stacking layers <span class="spacer"></span><span class="chip">bottom → top</span></h2>
+          <div class="layers" id="layers"></div>
+        </section>
+        <section>
+          <h2>Modal graph <span class="spacer"></span><span class="chip warn" id="blocked-chip">0 blocked</span></h2>
+          <div class="graph" id="graph"></div>
+        </section>
+        <section>
+          <h2>Events <span class="spacer"></span><button class="btn small ghost" id="clear-events">clear</button></h2>
+          <div class="events"><ul class="log" id="events"></ul></div>
+        </section>
+      </aside>
+    </main>
+
+    <div id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="card">
+        <h2 style="margin-bottom: 10px">Keyboard shortcuts</h2>
+        <table>
+          <tr><td><kbd>Alt</kbd> <kbd>J</kbd> / <kbd>K</kbd></td><td>focus next / previous (focus/next, focus/previous)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Enter</kbd></td><td>toggle floating</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>P</kbd></td><td>promote to master</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>raise / lower within its layer</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>T</kbd></td><td>toggle "always on top" (window/set-layer top ⇄ normal)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>M</kbd> · <kbd>X</kbd> · <kbd>F</kbd></td><td>minimize · maximize/restore · fullscreen/restore</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>W</kbd></td><td>close (cascades to child windows)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>N</kbd> · <kbd>D</kbd></td><td>new window · modal dialog on focused</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>1</kbd>–<kbd>9</kbd></td><td>activate workspace</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>1</kbd>–<kbd>9</kbd></td><td>move focused window to workspace</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Z</kbd> / <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>Z</kbd></td><td>undo / redo</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>B</kbd></td><td>blur (window/blur)</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>close focused transient (menu, dialog, …) or leave fullscreen</td></tr>
+          <tr><td><kbd>?</kbd></td><td>this sheet</td></tr>
+        </table>
+        <p class="note">Double-click a title to rename it (window/set-title). Drag title bars of floating windows; resize from any edge or corner.</p>
+        <div style="text-align: right; margin-top: 8px"><button class="btn" id="help-close">Close</button></div>
+      </div>
+    </div>
+
+    <script type="module">
+      import {
+        createWindowManager, createState, LAYERS, dock, masterStack,
+        focusable, modalTarget, blockedWindows, stackingOrder, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
+      } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, focusEffect, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
+
+      initPage({ current: "./desktop.html", title: "Tiling desktop" });
+
+      // ---------------------------------------------------------------- manager
+      const root = $("#stage");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const layouts = {
+        // dock() sugar: the first tiled window becomes a fixed-width sidebar.
+        sidebar: (spec, ids) => (ids.length < 2 ? masterStack({}, ids) : dock({ side: "left", extent: spec.extent ?? 240 }, ids[0], masterStack({ ratio: 0.6 }, ids.slice(1)))),
+      };
+      const wm = createWindowManager({
+        state: createState({
+          workspaces: [
+            { id: "main", layout: { type: "master-stack", ratio: 0.58 } },
+            { id: "web", layout: { type: "sidebar", extent: 220 } },
+            { id: "chat", layout: { type: "tabs" } },
+          ],
+          config: { gap: 8, inset: 8, defaultPlacement: { x: 60, y: 50, width: 420, height: 280 } },
+        }),
+        layouts,
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 300,
+        onEffect: focusEffect(() => renderer),
+      });
+      let detachInput = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      syncChrome(wm, root);
+
+      const S = () => wm.getState();
+      const focusedId = () => S().focus.window;
+
+      // ---------------------------------------------------------------- window kinds
+      const notes = new Map(); // survives remounts (fullscreen / workspace switch unmount surfaces)
+      const clocks = new Set();
+
+      const factText = (win) => [
+        ["role", win.role], ["mode", win.mode], ["layer", win.layer], ["status", win.status], ["ws", win.workspace],
+      ];
+
+      const BODIES = {
+        app: (id) => (el) => {
+          const facts = h("div", { class: "facts", "data-facts": "" });
+          const area = h("textarea", { placeholder: "Notes survive remounts (kept outside the surface)…", "aria-label": "Notes" });
+          area.value = notes.get(id) ?? "";
+          area.oninput = () => notes.set(id, area.value);
+          el.append(
+            h("div", { class: "info" },
+              facts,
+              h("div", { class: "lower" },
+                h("div", { class: "acts" },
+                  h("button", { class: "btn small", onclick: () => spawn("dialog", { parent: id }) }, "Dialog"),
+                  h("button", { class: "btn small", onclick: (e) => spawn("menu", { parent: id }) }, "Menu ▾"),
+                  h("button", { class: "btn small opt", onclick: () => spawn("popover", { parent: id }) }, "Popover"),
+                  h("button", { class: "btn small opt", onclick: () => spawn("tooltip", { parent: id }) }, "Tooltip"),
+                ),
+                area,
+              ),
+            ),
+          );
+        },
+        dialog: (id) => (el) => {
+          const win = S().windows[id];
+          el.append(
+            h("div", { class: "dialog-body" },
+              h("p", {}, `A modal child of `, h("code", {}, win.parent), `. Its parent and ancestors are inert; focusing them is redirected here (or to a deeper modal).`),
+              h("div", { class: "acts" },
+                h("button", { class: "btn small", onclick: () => wm.focus(win.parent) }, "Focus parent →"),
+                h("button", { class: "btn small", onclick: () => spawn("dialog", { parent: id }) }, "Nested modal"),
+                h("button", { class: "btn small", onclick: () => spawn("sheet", { parent: id }) }, "Sheet"),
+                h("button", { class: "btn small primary", "data-wm-command": "window/close" }, "OK"),
+              ),
+            ),
+          );
+        },
+        sheet: (id) => (el) => {
+          el.append(
+            h("div", { class: "dialog-body" },
+              h("strong", {}, "Save changes?"),
+              h("p", {}, "role: sheet — anchored inside the top edge of its parent, height: content."),
+              h("div", { class: "acts" }, h("button", { class: "btn small", "data-wm-command": "window/close" }, "Cancel"), h("button", { class: "btn small primary", "data-wm-command": "window/close" }, "Save")),
+            ),
+          );
+        },
+        menu: (id) => (el) => {
+          const win = S().windows[id];
+          const target = win.parent;
+          const item = (label, fn, key) => h("button", { type: "button", onclick: () => { wm.close(id); fn(); } }, label, key ? h("kbd", {}, key) : "");
+          const others = S().workspaceOrder.filter((ws) => ws !== S().windows[target]?.workspace);
+          el.append(
+            h("div", { class: "menu", role: "menu" },
+              item("Rename…", () => startRename(target)),
+              item("Toggle floating", () => wm.toggleFloating(target), "⌥↵"),
+              item("Always on top", () => toggleOnTop(target), "⌥T"),
+              item("Minimize", () => wm.minimize(target), "⌥M"),
+              h("hr"),
+              ...others.map((ws) => item(`Move to “${ws}”`, () => wm.moveToWorkspace(target, ws))),
+              h("hr"),
+              item("Close", () => wm.close(target), "⌥W"),
+            ),
+          );
+        },
+        popover: (id) => (el) => {
+          el.append(h("div", { class: "tooltip" }, h("strong", {}, "Popover"), h("div", { class: "note" }, "role: popover · layer: popover · anchored to its parent's right edge. Click elsewhere to dismiss.")));
+        },
+        tooltip: (id) => (el) => {
+          el.append(h("div", { class: "tooltip" }, "Tooltip anchored above its parent"));
+          const timer = setTimeout(() => S().windows[id] && wm.close(id), 2500);
+          return () => clearTimeout(timer);
+        },
+        notification: (id, extra = {}) => (el) => {
+          el.append(h("div", { class: `toast ${extra.kind ?? ""}` }, h("strong", {}, extra.title ?? "Notification"), h("span", {}, extra.text ?? "role: notification, stacked in the corner.")));
+          const timer = setTimeout(() => S().windows[id] && wm.close(id), extra.ttl ?? 5000);
+          return () => clearTimeout(timer);
+        },
+        panel: (id) => (el) => {
+          const time = h("div", { class: "time" });
+          const tick = () => (time.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+          tick();
+          const timer = setInterval(tick, 1000);
+          el.append(h("div", { class: "clock" }, time, h("div", { class: "sub" }, "role: panel · layer: top")));
+          return () => clearInterval(timer);
+        },
+        system: () => (el) => el.append(h("div", { class: "sysbar" }, "Recording — layer: system")),
+      };
+
+      let seq = 0;
+      const KIND_OPTIONS = {
+        app: {},
+        floating: { mode: "floating" },
+        dialog: { role: "dialog", modal: true, placement: { width: 380, height: 190 } },
+        sheet: { role: "sheet", modal: true, placement: { width: 340 } },
+        menu: { role: "menu", placement: { width: 200, height: 250 }, anchorSide: { side: "bottom", align: "start", offset: 2 } },
+        popover: { role: "popover", placement: { width: 220, height: 96 }, anchorSide: { side: "right", align: "start", offset: 6 } },
+        tooltip: { role: "tooltip", placement: { width: 210, height: 36 }, anchorSide: { side: "top", align: "center", offset: 6 } },
+        notification: { role: "notification", placement: { width: 300, height: 64 }, focus: false },
+        panel: { role: "panel", placement: { x: 24, y: 24, width: 190, height: 110 } },
+        background: { mode: "floating", layer: "background", placement: { x: 140, y: 120, width: 360, height: 240 } },
+        system: { role: "panel", layer: "system", placement: { x: 24, y: 24, width: 230, height: 34 }, focus: false },
+      };
+      const TITLES = { app: "App", floating: "Floating", dialog: "Dialog", sheet: "Sheet", menu: "Menu", popover: "Popover", tooltip: "Tooltip", notification: "Notice", panel: "Clock", background: "Wallpaper app", system: "Recorder" };
+
+      const spawn = (kind, options = {}) => {
+        const n = ++seq;
+        const bodyKind = kind === "floating" || kind === "background" ? "app" : kind;
+        const id = `${kind === "background" ? "bg" : kind === "system" ? "sys" : kind}-${n}`;
+        const { anchorSide, ...base } = KIND_OPTIONS[kind];
+        const needsParent = ["dialog", "sheet", "menu", "popover", "tooltip"].includes(kind);
+        const parent = options.parent ?? (needsParent ? focusedId() : undefined);
+        if (needsParent && !parent) {
+          toast("Nothing focused", `A ${kind} needs a parent window — focus one first.`, "rejected");
+          return null;
+        }
+        const title = options.title ?? `${TITLES[kind]} ${n}`;
+        const bare = ["menu", "popover", "tooltip", "notification", "system"].includes(kind);
+        const actions = kind === "dialog" || kind === "sheet" ? ["close"] : kind === "panel" ? ["close"] : ["min", "max", "float", "close"];
+        surfaces.set(id, windowSurface({ id, title, color: SWATCHES[n % SWATCHES.length], actions, bare, body: BODIES[bodyKind](id, options.extra) }));
+        const placement = { ...(base.placement ?? {}) };
+        if (kind === "floating" || kind === "app") Object.assign(placement, { x: 60 + (n % 7) * 28, y: 40 + (n % 7) * 24 });
+        // Nested modals shrink with depth so the whole chain stays visible.
+        if (kind === "dialog") {
+          let depth = 0;
+          for (let p = parent; S().windows[p]?.modal; p = S().windows[p].parent) depth++;
+          Object.assign(placement, { width: 400 - depth * 44, height: 200 - depth * 22 });
+        }
+        // Policy from *actual* geometry: anchor outside the parent when there is
+        // room (CSS flips if needed), otherwise inside its top-left / top edge.
+        let anchorOptions = anchorSide;
+        if (parent && (kind === "menu" || kind === "tooltip")) {
+          const r = wm.measure()[parent];
+          const stage = root.getBoundingClientRect();
+          const roomBelow = r ? stage.height - (r.y + r.height) : 0;
+          const roomAbove = r ? r.y : 0;
+          if (kind === "menu" && roomBelow < placement.height + 8) anchorOptions = { side: "top", align: "start", inside: true };
+          if (kind === "tooltip" && roomAbove < placement.height + 8) anchorOptions = { side: "top", align: "center", inside: true };
+        }
+        wm.create({ id, title, ...base, placement, ...(parent ? { parent } : {}), ...(anchorOptions && parent ? { anchor: { to: parent, ...anchorOptions } } : {}) });
+        return id;
+      };
+
+      const toast = (title, text, kind = "", ttl) => {
+        const n = ++seq;
+        const id = `note-${n}`;
+        surfaces.set(id, windowSurface({ id, title, bare: true, body: BODIES.notification(id, { title, text, kind, ttl }) }));
+        wm.create({ id, title, ...KIND_OPTIONS.notification });
+      };
+
+      const toggleOnTop = (id) => {
+        const win = S().windows[id];
+        if (win) wm.dispatch({ type: "window/set-layer", id, layer: win.layer === "top" ? "normal" : "top" });
+      };
+
+      // ---------------------------------------------------------------- initial scene
+      spawn("app", { title: "Editor" });
+      spawn("app", { title: "Terminal" });
+      spawn("app", { title: "Browser" });
+      spawn("floating", { title: "Calculator" });
+      spawn("panel");
+      wm.activateWorkspace("web");
+      spawn("app", { title: "Bookmarks" });
+      spawn("app", { title: "Docs" });
+      spawn("app", { title: "Search" });
+      wm.activateWorkspace("chat");
+      spawn("app", { title: "#general" });
+      spawn("app", { title: "#random" });
+      spawn("app", { title: "@alex" });
+      wm.activateWorkspace("main");
+      wm.focus("app-1");
+
+      // ---------------------------------------------------------------- rename (window/set-title)
+      const startRename = (id) => {
+        const el = renderer.elementFor(id)?.querySelector("[data-wa-title]");
+        if (!el) return;
+        el.contentEditable = "plaintext-only";
+        el.focus();
+        getSelection().selectAllChildren(el);
+        const finish = (commit) => {
+          el.contentEditable = "false";
+          el.removeEventListener("keydown", onKey);
+          el.removeEventListener("blur", onBlur);
+          if (commit) wm.dispatch({ type: "window/set-title", id, title: el.textContent.trim() || id });
+          else el.textContent = S().windows[id]?.title ?? id;
+        };
+        const onKey = (e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") { e.preventDefault(); finish(true); }
+          if (e.key === "Escape") finish(false);
+        };
+        const onBlur = () => finish(true);
+        el.addEventListener("keydown", onKey);
+        el.addEventListener("blur", onBlur);
+      };
+      root.addEventListener("dblclick", (event) => {
+        const title = event.target.closest("[data-wa-title]");
+        if (title) startRename(title.closest("wm-view").getAttribute("data-view"));
+      });
+
+      // Transients (menus, popovers) close on outside pointerdown.
+      document.addEventListener("pointerdown", (event) => {
+        const inside = event.target.closest?.("wm-view[data-role]");
+        for (const win of visibleWindows(S())) {
+          if (win.role !== "menu" && win.role !== "popover") continue;
+          if (inside && (inside.getAttribute("data-view") === win.id)) continue;
+          if (event.target.closest?.("[data-spawn]")) continue;
+          wm.close(win.id);
+        }
+      }, true);
+
+      // ---------------------------------------------------------------- toolbar
+      const renderWorkspaces = () => {
+        const state = S();
+        $("#workspaces").replaceChildren(
+          ...state.workspaceOrder.map((ws, index) =>
+            h("button", { type: "button", "aria-pressed": String(ws === state.activeWorkspace), "data-ws": ws, title: `Alt+${index + 1}` },
+              ws,
+              h("span", { class: "count" }, String(windowsIn(state, ws).filter((w) => w.role === "window").length)),
+              h("span", { class: "rm", "data-rm": ws, title: `workspace/remove ${ws}` }, "×"),
+            ),
+          ),
+        );
+        const layout = activeWorkspace(state).layout;
+        $("#layout").value = layout.type;
+        $("#focus-raises").checked = state.config.focusRaises;
+      };
+      $("#workspaces").addEventListener("click", (event) => {
+        const rm = event.target.closest("[data-rm]");
+        if (rm) return wm.dispatch({ type: "workspace/remove", id: rm.dataset.rm });
+        const button = event.target.closest("[data-ws]");
+        if (button) wm.activateWorkspace(button.dataset.ws);
+      });
+      let wsCounter = 0;
+      $("#ws-add").onclick = () => wm.createWorkspace(`ws-${++wsCounter}`, { activate: true, layout: { type: "bsp" } });
+      $("#layout").onchange = (event) => {
+        const type = event.target.value;
+        wm.setLayout(type === "grid" ? { type, min: 260 } : type === "sidebar" ? { type, extent: 220 } : { type, ratio: 0.58 });
+      };
+      $("#focus-raises").onchange = (event) => wm.dispatch({ type: "config/set", focusRaises: event.target.checked });
+      $("#snap").onchange = (event) => {
+        detachInput();
+        detachInput = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: event.target.checked ? 16 : undefined });
+      };
+      $("#undo").onclick = () => wm.undo();
+      $("#redo").onclick = () => wm.redo();
+      $$("[data-spawn]").forEach((button) => {
+        button.onclick = () => {
+          const kind = button.dataset.spawn;
+          if (kind === "chain") {
+            let parent = focusedId();
+            if (!parent) return toast("Nothing focused", "Focus a window first.", "rejected");
+            for (let i = 0; i < 3; i++) parent = spawn("dialog", { parent, title: `Modal depth ${i + 1}` });
+            return;
+          }
+          if (kind === "notification") return toast(`Notification ${seq + 1}`, "Stacked bottom-right by derive; auto-closes in 5s.");
+          spawn(kind);
+        };
+      });
+      $("#help-open").onclick = () => $("#help").classList.add("open");
+      $("#help-close").onclick = () => $("#help").classList.remove("open");
+      $("#help").onclick = (event) => event.target === $("#help") && $("#help").classList.remove("open");
+
+      // ---------------------------------------------------------------- taskbar + inspector
+      const colorFor = (id) => renderer.elementFor(id)?.style.getPropertyValue("--wa-color") || "var(--faint)";
+      const renderTaskbar = () => {
+        const state = S();
+        const wins = windowsIn(state).filter((w) => w.role === "window" || w.role === "panel");
+        $("#taskbar").replaceChildren(
+          ...wins.map((win) =>
+            h("button", {
+              type: "button",
+              "data-status": win.status,
+              "data-focused": String(win.id === state.focus.window),
+              title: `${win.id} · ${win.status}${isBlocked(state, win.id) ? " · blocked" : ""}`,
+              onclick: () => (win.id === state.focus.window && win.status !== "minimized" ? wm.minimize(win.id) : wm.focus(win.id)),
+            }, h("span", { class: "dot", style: { "--c": colorFor(win.id) } }), h("span", { class: "t" }, win.title || win.id), win.status !== "normal" ? h("span", { class: "chip" }, win.status) : ""),
+          ),
+          h("span", { class: "hint" }, "click: focus (restores) · click focused: minimize"),
+        );
+      };
+
+      const widChip = (state, id) => {
+        const win = state.windows[id];
+        return h("span", {
+          class: `wid${id === state.focus.window ? " focused" : ""}${isBlocked(state, id) ? " blocked" : ""}${win?.status === "minimized" ? " min" : ""}`,
+          title: `${id}: click to focus, shift-click to raise, alt-click to lower`,
+          onclick: (e) => (e.shiftKey ? wm.raise(id) : e.altKey ? wm.lower(id) : wm.focus(id)),
+        }, id);
+      };
+
+      const renderInspector = () => {
+        const state = S();
+        const focused = focusedWindow(state);
+        $("#focus-chip").textContent = focused ? focused.id : "none";
+        $("#focus").replaceChildren(
+          ...[
+            ["focused", focused ? `${focused.id} (${focused.role})` : "—"],
+            ["focus history", state.focus.history.slice(-6).join(" → ") || "—"],
+            ["focusable", focusable(state).join(", ") || "—"],
+            ["requested", focused ? fmtRect(focused.placement) : "—"],
+            ["actual", focused ? fmtRect(wm.measure()[focused.id]) : "—"],
+          ].flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]),
+        );
+        $("#layers").replaceChildren(
+          ...[...LAYERS].reverse().map((layer) =>
+            h("div", { class: "layer" }, h("span", { class: "name" }, layer), h("span", { class: "ids" }, (state.stack[layer] ?? []).filter((id) => state.windows[id]?.workspace === state.activeWorkspace).map((id) => widChip(state, id)))),
+          ),
+          h("div", { class: "note", style: { fontSize: "11.5px", marginTop: "4px" } }, `stackingOrder(): ${stackingOrder(state).length} windows across all workspaces. Shift-click raises, Alt-click lowers.`),
+        );
+        // Modal graph: roots are windows without parents in the active workspace.
+        const blocked = blockedWindows(state);
+        $("#blocked-chip").textContent = `${blocked.length} blocked`;
+        const lines = [];
+        const visit = (id, depth) => {
+          const win = state.windows[id];
+          const target = modalTarget(state, id);
+          lines.push(
+            h("div", { class: "node", style: { paddingLeft: `${depth * 14}px` } },
+              depth ? h("span", { class: "arrow" }, "└ ") : "",
+              widChip(state, id),
+              win.modal ? h("span", { class: "modal" }, " modal") : h("span", { class: "arrow" }, ` ${win.role}`),
+              target !== id ? h("span", { class: "arrow" }, ` ⇒ focus goes to ${target}`) : "",
+            ),
+          );
+          childrenOf(state, id).forEach((child) => visit(child.id, depth + 1));
+        };
+        windowsIn(state).filter((w) => !w.parent && (childrenOf(state, w.id).length || w.modal)).forEach((w) => visit(w.id, 0));
+        $("#graph").replaceChildren(...(lines.length ? lines : [h("div", { class: "note" }, "No child windows. Spawn a dialog or the nested-modal chain.")]));
+      };
+
+      // Live facts inside app windows.
+      const renderFacts = () => {
+        const state = S();
+        for (const el of root.querySelectorAll("[data-facts]")) {
+          const id = el.closest("wm-view").getAttribute("data-view");
+          const win = state.windows[id];
+          if (!win) continue;
+          el.replaceChildren(
+            ...factText(win).map(([k, v]) => h("span", { class: `chip ${k === "layer" && v !== "normal" ? "violet" : k === "status" && v !== "normal" ? "warn" : ""}` }, `${k}: ${v}`)),
+            descendantsOf(state, id).length ? h("span", { class: "chip accent" }, `${descendantsOf(state, id).length} child`) : "",
+          );
+        }
+      };
+
+      const events = createLog($("#events"), { max: 120 });
+      $("#clear-events").onclick = () => events.clear();
+
+      wm.subscribe((state, evts, command) => {
+        for (const event of evts) {
+          if (event.type === "command/rejected") {
+            events.add("rejected", event.command, event.reason);
+            queueMicrotask(() => toast(`Rejected: ${event.command}`, `reason: ${event.reason}`, "rejected", 3500));
+          } else events.add("event", event.type, describe(event));
+        }
+        renderWorkspaces();
+        requestAnimationFrame(() => {
+          renderTaskbar();
+          renderInspector();
+          renderFacts();
+        });
+      });
+      renderWorkspaces();
+      requestAnimationFrame(() => {
+        renderTaskbar();
+        renderInspector();
+        renderFacts();
+      });
+
+      // ---------------------------------------------------------------- keyboard
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "?" && !isTyping(event)) return $("#help").classList.toggle("open");
+        const id = focusedId();
+        const win = id && S().windows[id];
+        if (event.key === "Escape") {
+          if ($("#help").classList.contains("open")) return $("#help").classList.remove("open");
+          if (!win) return;
+          if (win.status === "fullscreen") return wm.restore(id);
+          if (win.role !== "window" && win.role !== "panel") return wm.close(id);
+          return;
+        }
+        if (!event.altKey || event.metaKey || event.ctrlKey) return;
+        const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+        if (digit) {
+          const ws = S().workspaceOrder[Number(digit) - 1];
+          event.preventDefault();
+          if (!ws) return;
+          if (event.shiftKey && id) return wm.moveToWorkspace(id, ws);
+          return wm.activateWorkspace(ws);
+        }
+        const actions = {
+          KeyJ: () => wm.focusNext(),
+          KeyK: () => wm.focusPrevious(),
+          Enter: () => id && wm.toggleFloating(id),
+          KeyP: () => id && wm.promote(id),
+          ArrowUp: () => id && wm.raise(id),
+          ArrowDown: () => id && wm.lower(id),
+          KeyT: () => id && toggleOnTop(id),
+          KeyM: () => id && wm.minimize(id),
+          KeyX: () => id && (win.status === "maximized" ? wm.restore(id) : wm.maximize(id)),
+          KeyF: () => id && (win.status === "fullscreen" ? wm.restore(id) : wm.fullscreen(id)),
+          KeyW: () => id && wm.close(id),
+          KeyN: () => spawn("app"),
+          KeyD: () => spawn("dialog"),
+          KeyZ: () => (event.shiftKey ? wm.redo() : wm.undo()),
+          KeyB: () => wm.blur(),
+        };
+        const fn = actions[event.code];
+        if (!fn) return;
+        event.preventDefault();
+        fn();
+      });
+
+      window.wm = wm;
+      window.desktop = { spawn, toast, renderer };
+    </script>
+  </body>
+</html>

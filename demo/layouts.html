@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Layout Gallery</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+      .work { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+      .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; background: var(--surface-3); border-radius: 8px; }
+      .seg button { font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--muted); padding: 3px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+      .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.15); font-weight: 600; }
+      .seg button .custom { color: var(--violet); font-size: 10px; margin-left: 3px; }
+      .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); min-height: 40px; }
+      .opts .desc { color: var(--muted); font-size: 12.5px; flex: 1 1 260px; }
+      .stage-wrap { position: relative; min-height: 0; padding: 10px; }
+      #stage { height: 100%; border-radius: 10px; }
+      #divider { position: absolute; width: 12px; margin-left: -6px; cursor: col-resize; z-index: 10; display: none; touch-action: none; }
+      #divider::after { content: ""; position: absolute; left: 5px; top: 50%; height: 44px; margin-top: -22px; width: 2px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+      #divider:hover::after, #divider.dragging::after { opacity: 1; height: 80px; margin-top: -40px; }
+      aside { border-left: 1px solid var(--line); background: var(--surface); display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.7fr); min-height: 0; }
+      aside h2 { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+      aside h2 .spacer { flex: 1; }
+      .thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 12px; overflow: auto; align-content: start; }
+      .thumb { display: grid; gap: 3px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; font: inherit; color: var(--muted); font-size: 11px; }
+      .thumb .mini { aspect-ratio: 4 / 3; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); position: relative; overflow: hidden; }
+      .thumb[aria-pressed="true"] .mini { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+      .thumb[aria-pressed="true"] { color: var(--accent); font-weight: 600; }
+      /* Thumbnails render at a virtual 640×480 and are scaled down to fit. */
+      .mini > wm-overlay { width: 640px; height: 480px; transform: scale(var(--s, 0.15)); transform-origin: 0 0; position: absolute; left: 0; top: 0; }
+      .mini wm-view { border-radius: 10px; border: 0; box-shadow: none; background: color-mix(in oklab, var(--c) 50%, var(--surface)); }
+      .mini wm-view[data-focused] { background: var(--c); box-shadow: none; }
+      .mini wm-view[data-mode="floating"] { box-shadow: 0 0 0 6px var(--bg); }
+      .mini wm-tabs { height: 40px; padding: 0; gap: 6px; }
+      .mini wm-tabs button { font-size: 0; padding: 0; flex: 1; height: 32px; border: 0; border-radius: 8px; background: var(--line-strong); }
+      .mini wm-tabs button[aria-selected="true"] { background: var(--accent); box-shadow: none; }
+      #tree { font: 11.5px/1.5 var(--mono); padding: 8px 12px; margin: 0; overflow: auto; white-space: pre; color: var(--muted); }
+      #tree b { color: var(--accent); font-weight: 600; }
+      #tree i { color: var(--violet); font-style: normal; }
+      #tree u { color: var(--ok); text-decoration: none; }
+      .win-body { user-select: none; height: 100%; display: grid; place-content: center; text-align: center; gap: 4px; background: color-mix(in oklab, var(--wa-color) 9%, var(--surface)); }
+      .win-body .n { font-size: 32px; font-weight: 700; color: var(--wa-color); line-height: 1; }
+      .win-body .pos { font: 11px var(--mono); color: var(--muted); }
+      @container wm-view (height < 110px) { .win-body .n { font-size: 18px; } .win-body .pos { display: none; } }
+      .keys { font-size: 12px; color: var(--muted); padding: 6px 12px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+      @media (max-width: 980px) {
+        main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(480px, 70dvh) auto; }
+        aside { border-left: 0; border-top: 1px solid var(--line); grid-template-rows: auto auto auto; }
+        .thumbs { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+        #tree { max-height: 260px; }
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="site"></header>
+    <main>
+      <section class="work">
+        <div class="toolbar">
+          <span class="seg" id="seg" role="group" aria-label="Layout"></span>
+        </div>
+        <div class="opts" id="opts"></div>
+        <div class="stage-wrap" id="wrap">
+          <div id="stage" class="stage"></div>
+          <div id="divider" title="Drag to change the ratio (updateRatio → layout/set-ratio)"></div>
+        </div>
+      </section>
+      <aside>
+        <div>
+          <div class="toolbar" style="border-bottom: 1px solid var(--line)">
+            <button class="btn small primary" id="add">+ Window</button>
+            <button class="btn small" id="close">Close</button>
+            <button class="btn small" id="promote" title="window/promote">Promote</button>
+            <button class="btn small" id="swap" title="window/swap with the next window">Swap →</button>
+            <button class="btn small" id="prev" title="focus/previous">◀</button>
+            <button class="btn small" id="next" title="focus/next">▶</button>
+            <button class="btn small" id="rotate" title="layout/rotate-split (BSP only — rejected elsewhere)">Rotate split</button>
+          </div>
+          <div class="keys">
+            <span><kbd>1</kbd>–<kbd>0</kbd> layout</span><span><kbd>n</kbd> new</span><span><kbd>x</kbd> close</span><span><kbd>j</kbd>/<kbd>k</kbd> focus</span><span><kbd>Enter</kbd> promote</span><span><kbd>[</kbd>/<kbd>]</kbd> ratio</span><span><kbd>r</kbd> rotate</span>
+          </div>
+          <div class="note" id="status" style="padding: 0 12px 8px"></div>
+        </div>
+        <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0">
+          <h2>All layouts, same windows <span class="spacer"></span><span class="chip">derive + compile + toHTML</span></h2>
+          <div class="thumbs" id="thumbs"></div>
+        </div>
+        <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--line)">
+          <h2>wm.present().tree <span class="spacer"></span><span class="chip" id="nodes"></span></h2>
+          <pre id="tree"></pre>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module">
+      import {
+        createWindowManager, createState, derive, compile, toHTML, presentationContext, LAYOUTS, COMMANDS,
+        columns, dock, centered, hybrid, fixedGrid, count, updateRatio, isContainer, isModifier,
+      } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, SWATCHES, isTyping } from "./shared/kit.mjs";
+
+      initPage({ current: "./layouts.html", title: "Derived-layout gallery" });
+
+      // Custom interpreters: ordinary functions over the primitives' sugar.
+      const layouts = {
+        dock: (spec, ids) =>
+          ids.length < 3
+            ? columns({}, ids)
+            : dock({ side: "left", extent: spec.extent ?? 200 }, ids[0], dock({ side: "bottom", extent: 150 }, ids[1], columns({}, ids.slice(2)))),
+        spotlight: (spec, ids, { focused }) => {
+          const hero = ids.includes(focused) ? focused : ids[0];
+          const rest = ids.filter((id) => id !== hero);
+          if (!hero) return columns({}, []);
+          return hybrid(fixedGrid({ columns: Math.max(1, Math.ceil(Math.sqrt(rest.length))) }, rest), [centered({ width: "62%", height: "74%" }, hero)]);
+        },
+      };
+
+      const CATALOG = [
+        { key: "master-stack", label: "master-stack", spec: { type: "master-stack", ratio: 0.6, masterCount: 1, side: "left" }, desc: "masterStack(): the first masterCount windows share the master area; the rest stack in a column." },
+        { key: "columns", label: "columns", spec: { type: "columns" }, desc: "columns(): equal flex weights in a row." },
+        { key: "rows", label: "rows", spec: { type: "rows" }, desc: "rows(): equal flex weights in a column." },
+        { key: "grid-auto", label: "grid auto", spec: { type: "grid", min: 220 }, desc: "autoGrid(): repeat(auto-fit, minmax(min, 1fr)); CSS decides the column count from the width." },
+        { key: "grid-fixed", label: "grid fixed", spec: { type: "grid", columns: 3 }, desc: "fixedGrid(): a fixed number of equal columns." },
+        { key: "spiral", label: "spiral", spec: { type: "spiral", ratio: 0.55 }, desc: "spiral(): each window splits the remaining space, alternating direction (dwindle)." },
+        { key: "monocle", label: "monocle", spec: { type: "monocle" }, desc: "monocle(): a stack; only the focused window is visible, the others stay mounted but hidden and inert." },
+        { key: "tabs", label: "tabs", spec: { type: "tabs" }, desc: "tabs(): monocle with tab chrome. Tab buttons are compiled chrome (data-wm-tab), not windows." },
+        { key: "bsp", label: "bsp", spec: { type: "bsp" }, desc: "BSP: a stateful tree kept in workspace state. New windows split the focused one; ratio and rotate-split act on the focused window's split." },
+        { key: "floating", label: "floating", spec: { type: "floating" }, desc: "floating: the tiled base is empty and every window uses its requested placement. Drag title bars; resize from any edge." },
+        { key: "dock", label: "dock", custom: true, spec: { type: "dock", extent: 200 }, desc: "Custom interpreter built from dock(): first window docked left, second docked bottom, the rest in columns." },
+        { key: "spotlight", label: "spotlight", custom: true, spec: { type: "spotlight" }, desc: "Custom interpreter built from hybrid() + centered() + fixedGrid(): the focused window floats centered over a grid of the rest." },
+      ];
+      const byKey = Object.fromEntries(CATALOG.map((entry) => [entry.key, entry]));
+      const keyOf = (spec) => (spec.type === "grid" ? (spec.columns ? "grid-fixed" : "grid-auto") : spec.type);
+
+      // ------------------------------------------------------------- manager
+      const root = $("#stage");
+      const surfaces = createSurfaceRegistry();
+      let renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({
+        state: createState({ layout: byKey["master-stack"].spec, config: { gap: 8, inset: 8 } }),
+        layouts,
+        renderer: { commit: (tree) => renderer.commit(tree), measure: () => renderer.measure() },
+        schedule: createFrameScheduler(),
+        history: true,
+      });
+      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: 8 });
+      syncChrome(wm, root);
+
+      let counter = 0;
+      const colorOf = new Map();
+      const add = () => {
+        const n = ++counter;
+        const id = `w${n}`;
+        colorOf.set(id, SWATCHES[(n - 1) % SWATCHES.length]);
+        surfaces.set(id, windowSurface({
+          id,
+          title: `Window ${n}`,
+          color: colorOf.get(id),
+          actions: ["float", "close"],
+          body: (el) => el.append(h("div", { class: "win-body" }, h("div", { class: "n" }, n), h("div", { class: "pos", "data-pos": "" }, ""))),
+        }));
+        const cascade = (n % 6) * 36;
+        wm.create({ id, title: `Window ${n}`, placement: { x: 40 + cascade, y: 30 + cascade, width: 340, height: 230 } });
+      };
+      for (let i = 0; i < 5; i++) add();
+
+      // ------------------------------------------------------------- toolbar
+      const seg = $("#seg");
+      CATALOG.forEach((entry, index) => {
+        seg.append(h("button", { type: "button", "data-key": entry.key, title: `${index < 10 ? `[${(index + 1) % 10}] ` : ""}${entry.desc}` }, entry.label, entry.custom ? h("span", { class: "custom" }, "custom") : ""));
+      });
+      seg.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-key]");
+        if (button) setLayout(button.dataset.key);
+      });
+      const currentSpec = () => wm.state.workspaces[wm.state.activeWorkspace].layout;
+      const setLayout = (key) => {
+        const base = byKey[key].spec;
+        const current = currentSpec();
+        // Keep tuned options (ratio, etc.) when re-selecting the same kind.
+        wm.setLayout(keyOf(current) === key ? current : { ...base });
+      };
+
+      const renderOptions = () => {
+        const spec = currentSpec();
+        const key = keyOf(spec);
+        const entry = byKey[key];
+        const opts = $("#opts");
+        const controls = [];
+        const patch = (change) => wm.setLayout({ ...currentSpec(), ...change });
+        if (["master-stack", "spiral", "bsp"].includes(key)) {
+          const value = key === "bsp" ? 0.5 : spec.ratio ?? 0.5;
+          controls.push(h("label", { class: "inline" }, key === "bsp" ? "focused split ratio" : "ratio", h("input", { type: "range", min: 0.1, max: 0.9, step: 0.01, value, oninput: (e) => wm.setRatio(Number(e.target.value)) })));
+        }
+        if (key === "master-stack") {
+          controls.push(h("label", { class: "inline" }, "masterCount", h("input", { type: "number", min: 1, max: 4, value: spec.masterCount ?? 1, onchange: (e) => patch({ masterCount: Number(e.target.value) }) })));
+          const side = h("select", { onchange: (e) => patch({ side: e.target.value }) }, h("option", { value: "left" }, "left"), h("option", { value: "right" }, "right"));
+          side.value = spec.side ?? "left";
+          controls.push(h("label", { class: "inline" }, "side", side));
+        }
+        if (key === "grid-auto") controls.push(h("label", { class: "inline" }, "min", h("input", { type: "range", min: 120, max: 480, step: 10, value: spec.min ?? 300, oninput: (e) => patch({ min: Number(e.target.value) }) })));
+        if (key === "grid-fixed") controls.push(h("label", { class: "inline" }, "columns", h("input", { type: "number", min: 1, max: 6, value: spec.columns, onchange: (e) => patch({ columns: Number(e.target.value) }) })));
+        if (key === "dock") controls.push(h("label", { class: "inline" }, "extent", h("input", { type: "range", min: 120, max: 360, step: 10, value: spec.extent ?? 200, oninput: (e) => patch({ extent: Number(e.target.value) }) })));
+        const config = wm.state.config;
+        controls.push(h("label", { class: "inline" }, "gap", h("input", { type: "range", min: 0, max: 24, value: config.gap, oninput: (e) => wm.dispatch({ type: "config/set", gap: Number(e.target.value) }) })));
+        controls.push(h("label", { class: "inline" }, "inset", h("input", { type: "range", min: 0, max: 32, value: config.inset, oninput: (e) => wm.dispatch({ type: "config/set", inset: Number(e.target.value) }) })));
+        opts.replaceChildren(h("span", { class: "desc" }, entry.desc), ...controls);
+      };
+
+      // ------------------------------------------------------------- side panel
+      const thumbs = $("#thumbs");
+      const renderThumbs = () => {
+        const state = wm.state;
+        const current = keyOf(currentSpec());
+        const context = presentationContext(state);
+        thumbs.replaceChildren(
+          ...CATALOG.map((entry) => {
+            // Same state, different layout spec: derive → compile → toHTML.
+            const ws = state.workspaces[state.activeWorkspace];
+            const spec = entry.key === current ? ws.layout : entry.spec;
+            const probe = { ...state, workspaces: { ...state.workspaces, [ws.id]: { ...ws, layout: spec } } };
+            const html = toHTML(compile(derive(probe, { layouts }), context, { key: `thumb-${entry.key}` }));
+            const mini = h("div", { class: "mini", html });
+            for (const el of mini.querySelectorAll("wm-view[data-view]")) el.style.setProperty("--c", colorOf.get(el.getAttribute("data-view")) ?? "var(--faint)");
+            return h("button", { class: "thumb", type: "button", "aria-pressed": String(entry.key === current), onclick: () => setLayout(entry.key) }, mini, entry.label);
+          }),
+        );
+      };
+
+      const treeText = (node, indent = "") => {
+        const pad = indent + "  ";
+        if (node.type === "view") return `<u>view</u>("${node.id}")`;
+        const opts = Object.keys(node.options).length ? JSON.stringify(node.options).replace(/"(\w+)":/g, "$1: ") : "{}";
+        if (isModifier(node)) return `<i>${node.type}</i>(${opts}, ${treeText(node.child, indent)})`;
+        if (!node.children.length) return `<b>${node.type}</b>(${opts})`;
+        return `<b>${node.type}</b>(${opts},\n${node.children.map((c) => pad + treeText(c, pad)).join(",\n")}\n${indent})`;
+      };
+
+      // ------------------------------------------------------------- divider (updateRatio)
+      const divider = $("#divider");
+      const placeDivider = () => {
+        const spec = currentSpec();
+        const ids = wm.state.workspaces[wm.state.activeWorkspace].windows.filter((id) => wm.state.windows[id].mode === "tiled");
+        if (!["master-stack", "spiral"].includes(spec.type) || ids.length <= (spec.masterCount ?? 1)) {
+          divider.style.display = "none";
+          return;
+        }
+        const geometry = wm.measure();
+        const masterId = spec.type === "spiral" ? ids[0] : ids[(spec.masterCount ?? 1) - 1];
+        const r = geometry[masterId];
+        if (!r) return;
+        const gapPx = wm.state.config.gap;
+        const x = spec.side === "right" && spec.type === "master-stack" ? r.x - gapPx / 2 : r.x + r.width + gapPx / 2;
+        Object.assign(divider.style, { display: "block", left: `${x + 10}px`, top: `${r.y + 10}px`, height: `${r.height}px` });
+      };
+      divider.addEventListener("pointerdown", (event) => {
+        const spec = currentSpec();
+        const total = root.getBoundingClientRect().width - 2 * wm.state.config.inset;
+        const sign = spec.side === "right" && spec.type === "master-stack" ? -1 : 1;
+        const start = { ratio: spec.ratio ?? 0.5, origin: { x: event.clientX * sign, y: event.clientY }, total };
+        divider.setPointerCapture(event.pointerId);
+        divider.classList.add("dragging");
+        const move = (e) => wm.setRatio(updateRatio(start, { x: e.clientX * sign, y: e.clientY }, "x"));
+        const up = () => {
+          divider.classList.remove("dragging");
+          divider.removeEventListener("pointermove", move);
+          divider.removeEventListener("pointerup", up);
+          renderOptions();
+        };
+        divider.addEventListener("pointermove", move);
+        divider.addEventListener("pointerup", up);
+      });
+
+      /** Realized geometry, read back from the DOM after the frame's commit. */
+      const updateGeometry = () => {
+        placeDivider();
+        const geometry = wm.measure();
+        for (const el of root.querySelectorAll("[data-pos]")) {
+          const id = el.closest("wm-view").getAttribute("data-view");
+          const r = geometry[id];
+          if (r) el.textContent = `${Math.round(r.width)} × ${Math.round(r.height)}`;
+        }
+      };
+
+      // ------------------------------------------------------------- refresh
+      let lastKey = null;
+      let lastRejection = null;
+      const refresh = () => {
+        const spec = currentSpec();
+        const key = keyOf(spec);
+        $$("#seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.key === key)));
+        if (key !== lastKey) {
+          renderOptions();
+          lastKey = key;
+        }
+        renderThumbs();
+        const { tree } = wm.present();
+        $("#tree").innerHTML = treeText(tree);
+        $("#nodes").textContent = `${count(tree)} nodes`;
+        requestAnimationFrame(updateGeometry);
+        const focused = wm.state.focus.window;
+        $("#status").textContent = `${Object.keys(wm.state.windows).length} windows · focused ${focused ?? "none"}${lastRejection ? ` · last rejection: ${lastRejection}` : ""}`;
+      };
+      wm.subscribe((state, events) => {
+        const rejection = events.find((e) => e.type === "command/rejected");
+        if (rejection) lastRejection = `${rejection.command} (${rejection.reason})`;
+        refresh();
+      });
+      new ResizeObserver(() => requestAnimationFrame(updateGeometry)).observe(root);
+      new ResizeObserver(() => {
+        const mini = thumbs.querySelector(".mini");
+        if (mini) thumbs.style.setProperty("--s", String(mini.clientWidth / 640));
+      }).observe(thumbs);
+
+      // ------------------------------------------------------------- actions
+      const focused = () => wm.state.focus.window;
+      const tiledOrder = () => wm.state.workspaces[wm.state.activeWorkspace].windows;
+      const actions = {
+        add,
+        close: () => focused() && wm.close(focused()),
+        promote: () => focused() && wm.promote(focused()),
+        swap: () => {
+          const ids = tiledOrder();
+          const i = ids.indexOf(focused());
+          if (i >= 0 && ids.length > 1) wm.swap(ids[i], ids[(i + 1) % ids.length]);
+        },
+        prev: () => wm.focusPrevious(),
+        next: () => wm.focusNext(),
+        rotate: () => wm.dispatch({ type: "layout/rotate-split", id: focused() }),
+      };
+      for (const [name, fn] of Object.entries(actions)) $(`#${name}`).onclick = fn;
+
+      document.addEventListener("keydown", (event) => {
+        if (isTyping(event) || event.metaKey || event.ctrlKey || event.altKey) return;
+        const digit = "1234567890".indexOf(event.key);
+        if (digit >= 0 && CATALOG[digit]) return setLayout(CATALOG[digit].key);
+        const map = { n: "add", x: "close", j: "next", k: "prev", Enter: "promote", r: "rotate", s: "swap" };
+        if (map[event.key]) {
+          event.preventDefault();
+          return actions[map[event.key]]();
+        }
+        if (event.key === "[" || event.key === "]") {
+          const spec = currentSpec();
+          wm.setRatio((spec.ratio ?? 0.5) + (event.key === "]" ? 0.05 : -0.05));
+          renderOptions();
+        }
+      });
+
+      refresh();
+      window.wm = wm;
+      window.gallery = { CATALOG, LAYOUTS, COMMANDS, setLayout };
+    </script>
+  </body>
+</html>

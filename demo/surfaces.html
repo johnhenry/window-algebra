@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Surfaces</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 0; }
+      .work { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+      #stage { margin: 8px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+      aside { min-width: 0; border-left: 1px solid var(--line); background: var(--surface); display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+      aside h2 { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+      aside h2 .spacer { flex: 1; }
+      .matrix { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+      .matrix th:nth-child(1) { width: 56px; } .matrix th:nth-child(2) { width: 52px; } .matrix th:nth-child(3) { width: 66px; } .matrix th:nth-child(4) { width: 70px; }
+      .matrix th, .matrix td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+      .matrix th { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 650; }
+      .matrix td.num { font-family: var(--mono); text-align: right; }
+      .matrix td.ok { color: var(--ok); } .matrix td.bad { color: var(--danger); }
+      .explain { padding: 8px 12px 12px; font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; }
+      .explain label { color: var(--fg); }
+      /* HTML surface content */
+      .form { padding: 12px; display: grid; gap: 10px; align-content: start; font-size: 13px; }
+      .form .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .form .bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+      .form .bar i { display: block; height: 100%; width: 40%; background: var(--wa-color); animation: slide 4s linear infinite; }
+      @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      .form .list { height: 110px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; font: 12px/1.9 var(--mono); padding: 0 8px; background: var(--surface-2); }
+      .form input[type="text"] { width: 100%; }
+      @container wm-view (width < 280px) { .form .wide { display: none; } }
+      /* Lazy surface content */
+      .lazy { padding: 12px; font-size: 13px; display: grid; gap: 6px; align-content: start; }
+      .lazy .big { font: 700 30px/1 var(--mono); color: var(--wa-color); }
+      .lazy ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+      @media (max-width: 900px) {
+        main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(520px, 75dvh) auto; }
+        aside { border-left: 0; border-top: 1px solid var(--line); }
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="site"></header>
+    <main>
+      <section class="work">
+        <div class="toolbar">
+          <span class="label">layout</span>
+          <span class="group" id="layouts"></span>
+          <span class="sep"></span>
+          <button class="btn small primary" id="tour" aria-pressed="false">▶ Tour layouts</button>
+          <button class="btn small" id="shuffle" title="window/swap the first and last windows">Swap ends</button>
+          <button class="btn small" id="float-all" title="window/toggle-floating on every window">Toggle floating</button>
+          <button class="btn small" id="minimize" title="Minimize the lazy window, then restore it">Minimize ⇄ restore lazy</button>
+          <button class="btn small" id="fullscreen" title="Fullscreen the canvas: the other views are removed, so their surfaces unmount">Fullscreen canvas</button>
+        </div>
+        <div id="stage" class="stage"></div>
+      </section>
+      <aside>
+        <div>
+          <h2>Surface state <span class="spacer"></span><span class="chip" id="changes">0 layout changes</span></h2>
+          <table class="matrix">
+            <thead><tr><th>surface</th><th>mounts</th><th>unmounts</th><th>element</th><th>notes</th></tr></thead>
+            <tbody id="matrix"></tbody>
+          </table>
+        </div>
+        <div class="explain">
+          <div>Views are keyed by window id, so a layout change <em>moves</em> each view element instead of recreating it. The renderer places containers first and moves views with <code>moveBefore()</code>, so iframes don't reload, CSS animations and scroll positions carry on, and inputs keep their values.</div>
+          <label class="inline"><input type="checkbox" id="no-move" /> simulate a browser without <code>moveBefore</code></label>
+          <div>Hiding a view (minimize, fullscreen elsewhere, another workspace) <em>unmounts</em> its surface. <code>htmlSurface</code> keeps its element and re-attaches it (an iframe inside still reloads). <code>lazySurface</code> rebuilds from scratch.</div>
+        </div>
+        <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--line)">
+          <h2>Lifecycle log <span class="spacer"></span><button class="btn small ghost" id="clear">clear</button></h2>
+          <div class="scroll"><ul class="log" id="log"></ul></div>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, htmlSurface, lazySurface, iframeSurface, canvasSurface, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, syncChrome, createLog, currentTheme } from "./shared/kit.mjs";
+
+      initPage({ current: "./surfaces.html", title: "Surfaces" });
+      const log = createLog($("#log"), { max: 300 });
+      const stats = { html: { mounts: 0, unmounts: 0 }, lazy: { mounts: 0, unmounts: 0 }, frame: { mounts: 0, unmounts: 0, loads: 0 }, canvas: { mounts: 0, unmounts: 0, paints: 0 } };
+
+      // Wrap any surface in the standard chrome + lifecycle accounting. The inner
+      // surface mounts into the chrome's body; the WM only sees mount/unmount.
+      const chrome = (id, title, color, inner, kind = inner.kind) => ({
+        kind,
+        mount(target) {
+          stats[id].mounts++;
+          log.add("event", `mount ${kind}`, id);
+          target.style.setProperty("--wa-color", color);
+          const body = h("div", { class: "wa-body" });
+          const win = h("div", { class: "wa-win" },
+            h("div", { class: "wa-bar", "data-wm-handle": "move" }, h("span", { class: "wa-dot" }), h("span", { class: "wa-title" }, title), h("span", { class: "wa-meta", "data-meta": id }, `${kind}Surface`), h("span", { class: "wa-actions" },
+              h("button", { type: "button", "data-wm-command": "window/minimize", title: "Minimize (unmounts)", html: "–" }),
+              h("button", { type: "button", "data-wm-command": "window/toggle-floating", title: "Toggle floating", html: "⧉" }),
+            )),
+            body,
+          );
+          const grips = ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((edge) => h("div", { class: "wa-grip", "data-wm-handle": `resize-${edge}` }));
+          target.append(win, ...grips);
+          inner.mount(body);
+          this.cleanup = () => {
+            inner.unmount?.();
+            win.remove();
+            grips.forEach((g) => g.remove());
+          };
+          renderMatrix();
+        },
+        unmount() {
+          stats[id].unmounts++;
+          log.add("info", `unmount ${kind}`, id);
+          this.cleanup?.();
+          renderMatrix();
+        },
+      });
+
+      // 1. htmlSurface: an element built once, kept forever.
+      const counter = { n: 0 };
+      const formEl = h("div", { class: "form" },
+        h("div", {}, h("strong", {}, "htmlSurface"), " wraps an existing element. Type, scroll, click — then change the layout."),
+        h("input", { type: "text", placeholder: "Your text survives layout changes", "aria-label": "Text" }),
+        h("div", { class: "row" },
+          h("button", { class: "btn small", type: "button", onclick: (e) => (e.currentTarget.textContent = `clicked ${++counter.n}×`) }, "clicked 0×"),
+          h("label", { class: "inline" }, h("input", { type: "checkbox" }), "checkbox"),
+          h("input", { type: "range", "aria-label": "Range", class: "wide" }),
+        ),
+        h("div", { class: "bar", title: "CSS animation: restarts if the element leaves the document" }, h("i")),
+        h("div", { class: "list", "aria-label": "Scrollable list" }, Array.from({ length: 60 }, (_, i) => h("div", {}, `row ${String(i + 1).padStart(2, "0")} — scroll me`))),
+      );
+
+      // 2. lazySurface: built on each mount, cleanup on unmount.
+      const lazy = lazySurface((target) => {
+        const builtAt = new Date().toLocaleTimeString();
+        const started = performance.now();
+        const big = h("div", { class: "big" }, "0.0s");
+        const timer = setInterval(() => (big.textContent = `${((performance.now() - started) / 1000).toFixed(1)}s`), 100);
+        const el = h("div", { class: "lazy" },
+          h("strong", {}, "lazySurface"),
+          h("div", { class: "note" }, `render() ran at ${builtAt} (mount #${stats.lazy.mounts}). Alive for:`),
+          big,
+          h("ul", {}, h("li", {}, "Layout changes: keeps counting (same mount)."), h("li", {}, "Minimize / fullscreen elsewhere: cleanup runs, the timer stops; restoring builds it again from zero.")),
+        );
+        target.append(el);
+        return () => {
+          clearInterval(timer);
+          el.remove();
+        };
+      });
+
+      // 3. iframeSurface with srcdoc (no external sites). The parent counts load events.
+      const srcdoc = (theme) => `<!doctype html><html><head><meta charset="utf-8"><style>
+        :root{color-scheme:${theme}} body{margin:0;font:13px/1.5 system-ui,sans-serif;padding:12px;background:${theme === "dark" ? "#181c22" : "#fff"};color:${theme === "dark" ? "#e7eaef" : "#161a20"}}
+        .n{font:700 34px/1 ui-monospace,monospace;color:#2c9fb8} button{font:inherit;padding:3px 10px} .muted{color:#8a93a0;font-size:12px}
+        @keyframes spin{to{transform:rotate(360deg)}} .spin{display:inline-block;width:14px;height:14px;border:2px solid #2c9fb8;border-right-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle}
+      </style></head><body>
+        <strong>iframeSurface</strong> <span class="spin"></span>
+        <div class="muted">srcdoc document, loaded at <b id="t"></b></div>
+        <p><span class="n" id="n">0</span> <span class="muted">JS state inside the frame</span></p>
+        <button id="b">increment</button> <input placeholder="frame input" style="width:120px">
+        <script>
+          document.getElementById("t").textContent = new Date().toLocaleTimeString();
+          let n = 0; const el = document.getElementById("n");
+          document.getElementById("b").onclick = () => el.textContent = ++n;
+          setInterval(() => el.textContent = ++n, 1000);
+        <\/script></body></html>`;
+      const frame = iframeSurface("about:blank", { attributes: { srcdoc: srcdoc(currentTheme()), title: "srcdoc frame" } });
+      const frameEl = (() => {
+        const probe = document.createElement("div");
+        frame.mount(probe);
+        const el = probe.firstElementChild;
+        frame.unmount();
+        return el;
+      })();
+      frameEl.addEventListener("load", () => {
+        stats.frame.loads++;
+        log.add(stats.frame.loads > 1 ? "rejected" : "event", "iframe load", stats.frame.loads > 1 ? `reload #${stats.frame.loads - 1} — frame state was lost` : "first load");
+        renderMatrix();
+      });
+
+      // 4. canvasSurface: repaints whenever the allocation changes size.
+      const canvas = canvasSurface((c, { width, height, ratio }) => {
+        stats.canvas.paints++;
+        const ctx = c.getContext("2d");
+        ctx.scale(ratio, ratio);
+        const dark = currentTheme() === "dark";
+        ctx.fillStyle = dark ? "#181c22" : "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.strokeStyle = dark ? "#2c333d" : "#e3e6eb";
+        for (let x = 0; x < width; x += 20) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, height); ctx.stroke(); }
+        for (let y = 0; y < height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(width, y + 0.5); ctx.stroke(); }
+        const r = Math.min(width, height) * 0.32;
+        const g = ctx.createRadialGradient(width / 2, height / 2, 4, width / 2, height / 2, r);
+        g.addColorStop(0, "#d4812b");
+        g.addColorStop(1, "rgba(212,129,43,0.05)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = dark ? "#e7eaef" : "#161a20";
+        ctx.font = "600 15px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("canvasSurface", width / 2, height / 2 - 8);
+        ctx.font = "12px ui-monospace, monospace";
+        ctx.fillText(`${Math.round(width)} × ${Math.round(height)} @${ratio}x · paint #${stats.canvas.paints}`, width / 2, height / 2 + 12);
+        renderMatrixSoon();
+      });
+
+      const surfaces = createSurfaceRegistry({
+        html: chrome("html", "Form (html)", "var(--swatch-1)", htmlSurface(formEl)),
+        lazy: chrome("lazy", "Stopwatch (lazy)", "var(--swatch-2)", lazy),
+      });
+      surfaces.set("frame", chrome("frame", "Frame (iframe srcdoc)", "var(--swatch-6)", frame, "iframe")).set("canvas", chrome("canvas", "Canvas", "var(--swatch-3)", canvas));
+
+      // ---------------------------------------------------------------- manager
+      const root = $("#stage");
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({ state: createState({ config: { gap: 8, inset: 8 } }), renderer, schedule: createFrameScheduler(), history: true });
+      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      syncChrome(wm, root);
+      const ids = ["html", "frame", "lazy", "canvas"];
+      ids.forEach((id, i) => wm.create({ id, title: id, placement: { x: 30 + i * 40, y: 30 + i * 36, width: 380, height: 260 } }));
+      log.add("info", "registry", `has("frame") = ${surfaces.has("frame")}`);
+
+      const firstElements = {};
+      requestAnimationFrame(() => ids.forEach((id) => (firstElements[id] = renderer.elementFor(id))));
+
+      let changes = 0;
+      const LAYOUTS = [
+        ["master-stack", { type: "master-stack", ratio: 0.55 }],
+        ["columns", { type: "columns" }],
+        ["rows", { type: "rows" }],
+        ["grid", { type: "grid", min: 260 }],
+        ["spiral", { type: "spiral", ratio: 0.6 }],
+        ["bsp", { type: "bsp" }],
+        ["tabs", { type: "tabs" }],
+        ["monocle", { type: "monocle" }],
+        ["floating", { type: "floating" }],
+      ];
+      $("#layouts").append(...LAYOUTS.map(([name, spec]) => h("button", { class: "btn small", type: "button", "data-layout": name, onclick: () => setLayout(spec) }, name)));
+      const setLayout = (spec) => {
+        wm.setLayout(spec);
+        changes++;
+        log.add("command", "layout/set", spec.type);
+      };
+
+      let tour = null;
+      $("#tour").onclick = () => {
+        if (tour) {
+          clearInterval(tour);
+          tour = null;
+          $("#tour").setAttribute("aria-pressed", "false");
+          $("#tour").textContent = "▶ Tour layouts";
+          return;
+        }
+        let i = LAYOUTS.findIndex(([, spec]) => spec.type === wm.state.workspaces.main.layout.type);
+        $("#tour").setAttribute("aria-pressed", "true");
+        $("#tour").textContent = "■ Stop tour";
+        tour = setInterval(() => {
+          i = (i + 1) % LAYOUTS.length;
+          setLayout(LAYOUTS[i][1]);
+          if (LAYOUTS[i][0] === "tabs" || LAYOUTS[i][0] === "monocle") wm.focus(ids[(i + changes) % ids.length]);
+        }, 1400);
+      };
+      $("#shuffle").onclick = () => {
+        const order = wm.state.workspaces.main.windows;
+        wm.swap(order[0], order[order.length - 1]);
+        changes++;
+      };
+      $("#float-all").onclick = () => {
+        ids.forEach((id) => wm.toggleFloating(id));
+        changes++;
+      };
+      $("#minimize").onclick = () => (wm.state.windows.lazy.status === "minimized" ? wm.restore("lazy") : wm.minimize("lazy"));
+      $("#fullscreen").onclick = () => (wm.state.windows.canvas.status === "fullscreen" ? wm.restore("canvas") : wm.fullscreen("canvas"));
+      $("#clear").onclick = () => log.clear();
+
+      const original = Element.prototype.moveBefore;
+      $("#no-move").onchange = (event) => {
+        if (event.target.checked) Element.prototype.moveBefore = undefined;
+        else Element.prototype.moveBefore = original;
+        log.add("info", "moveBefore", event.target.checked ? "disabled: views are re-inserted (iframes reload)" : "enabled");
+      };
+      if (typeof original !== "function") {
+        $("#no-move").checked = true;
+        $("#no-move").disabled = true;
+        log.add("info", "moveBefore", "not supported by this browser: iframes reload when views move");
+      }
+
+      // ---------------------------------------------------------------- state matrix
+      const renderMatrix = () => {
+        $("#changes").textContent = `${changes} layout change${changes === 1 ? "" : "s"}`;
+        const rows = [
+          ["html", "inputs · scroll"],
+          ["frame", `${stats.frame.loads} load${stats.frame.loads === 1 ? "" : "s"}`],
+          ["lazy", "rebuilt per mount"],
+          ["canvas", `${stats.canvas.paints} paints`],
+        ];
+        $("#matrix").replaceChildren(
+          ...rows.map(([id, note]) => {
+            const same = firstElements[id] ? renderer.elementFor(id) === firstElements[id] : undefined;
+            return h("tr", {},
+              h("td", {}, id),
+              h("td", { class: "num" }, stats[id].mounts),
+              h("td", { class: "num" }, stats[id].unmounts),
+              h("td", { class: same === false ? "bad" : "ok" }, same === undefined ? "—" : renderer.elementFor(id) ? (same ? "✓ kept" : "recreated") : "hidden"),
+              h("td", { class: id === "frame" && stats.frame.loads > 1 ? "bad" : "" }, note),
+            );
+          }),
+        );
+        const type = wm.state.workspaces.main.layout.type;
+        $$("#layouts button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.layout === (type === "grid" ? "grid" : type))));
+      };
+      let pending = false;
+      const renderMatrixSoon = () => {
+        if (pending) return;
+        pending = true;
+        setTimeout(() => ((pending = false), renderMatrix()), 100);
+      };
+      wm.subscribe(() => requestAnimationFrame(renderMatrix));
+      document.addEventListener("wa-theme", (event) => {
+        frameEl.setAttribute("srcdoc", srcdoc(event.detail)); // deliberate reload: new theme
+      });
+      renderMatrix();
+      window.wm = wm;
+      window.surfacesPage = { renderer, stats, firstElements, setLayout, LAYOUTS };
+    </script>
+  </body>
+</html>
