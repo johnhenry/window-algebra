@@ -19,7 +19,6 @@ Browser applications that need multiple windows (IDEs, dashboards, browser-OS ex
 - Replacing an operating-system window manager or compositor.
 - Multi-output (multiple displays or canvases). The state model leaves room for an `Output`, but there isn't one yet.
 - Collaborative synchronization. Determinism and the command log make it possible, but it isn't built.
-- Animated transitions. The keyed DOM makes View Transitions straightforward to add later.
 
 ## Architecture
 
@@ -87,6 +86,7 @@ One command covers every case: `layout/resize-split { workspace?, path, index?, 
 | Size hints | ICCCM `WM_NORMAL_HINTS`-style hints beyond min/max: `aspectRatio` (exact or `{ min, max }`) and `widthIncrement`/`heightIncrement` with `baseWidth`/`baseHeight` (terminal-style cells). Honoured by `constrainSize` for floating move/resize and `window/resize`; tiled windows get CSS `aspect-ratio` for an exact ratio, increments are advisory. |
 | Split sizing | Persistent, resizable splits for columns/rows/master-stack/BSP/spiral (see "Split sizing" above): `layout/resize-split`, rendered `[data-wm-splitter]` handles, pointer drag and arrow-key resizing, one undo step per gesture, min/max constraints respected best-effort. |
 | Snap zones | Windows-Snap/macOS-tiling-style edge/corner preview for floating windows (`config.snap.edges`/`threshold`/`zones`, pure `snapZoneAt`/`snapZoneRect`), applied on release as one `window/resize` (one undo step); magnetism (`config.snap.magnet`, pure `magnetize`/`magnetizeResize`) snaps floating move/resize to other visible windows' edges and the stage. Configurable, disable-able, constraint-respecting; does not interfere with tiled drag-and-drop or drag-to-tile. |
+| Animation | `createDomRenderer({ animate })` runs commits inside `document.startViewTransition`, giving each primary view a unique, id-derived `view-transition-name`; a no-op without browser support, under `prefers-reduced-motion: reduce`, during a gesture (or an explicit `immediate` commit), or while an earlier transition is still in flight (rapid commits coalesce onto it instead of stacking). `setAnimate()` reconfigures it live. |
 
 ## Open questions
 

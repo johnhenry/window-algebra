@@ -38,7 +38,7 @@ const coalesce = (commands, command) => {
  * @param {object} [options.modifiers] extra/override layout modifiers for derive (see `MODIFIERS`)
  * @param {object} [options.extensions] extra command handlers for update
  * @param {object} [options.drops] extra/override drop interpreters for window/drop, keyed by layout type
- * @param {{ commit(renderTree): void, measure?(): object }} [options.renderer]
+ * @param {{ commit(renderTree, opts?): void, measure?(): object }} [options.renderer]
  * @param {(task: () => void) => void} [options.schedule] commit scheduler (default: immediate)
  * @param {boolean|number} [options.history] enable undo/redo (number = limit)
  * @param {(effect: object, wm: object) => void} [options.onEffect] interpret effects
@@ -47,7 +47,10 @@ const coalesce = (commands, command) => {
  * drag's stream of window/move, say) form one history step and one log entry.
  * Runs of absolute setters (window/move with x and y, window/resize with
  * x, y, width and height) collapse to their last command, so a whole drag
- * logs as one command and `replay(origin, log)` still equals the state.
+ * logs as one command and `replay(origin, log)` still equals the state. A
+ * `gesture` token (or an explicit `command.immediate: true`) also tells a
+ * renderer's `animate` option to commit that render immediately, never
+ * mid-transition (see `createDomRenderer`'s `animate` option).
  */
 export const createWindowManager = ({
   state: initial = createState(),
@@ -78,9 +81,14 @@ export const createWindowManager = ({
     return { tree, render: compile(tree, presentationContext(state)) };
   };
 
-  const render = () => {
+  // A gesture (a floating drag's stream of window/move, say) or a command
+  // explicitly marked `immediate` never animates, so an in-progress drag or
+  // resize is never fighting a view transition for the element's position.
+  const isImmediate = (command) => command?.gesture != null || command?.immediate === true;
+
+  const render = (command) => {
     if (!renderer) return;
-    schedule(() => renderer.commit(present().render));
+    schedule(() => renderer.commit(present().render, { immediate: isImmediate(command) }));
   };
 
   const notify = (events, command) => {
@@ -130,7 +138,7 @@ export const createWindowManager = ({
     }
     const wm = api;
     for (const effect of out.effects) {
-      if (effect.type === "render") render();
+      if (effect.type === "render") render(command);
       else onEffect?.(effect, wm);
     }
     notify(out.events, command);

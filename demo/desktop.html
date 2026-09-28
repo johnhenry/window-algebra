@@ -132,6 +132,7 @@
           <button class="btn small ghost" id="to-tree" title="layout/to-tree: convert this workspace's current layout into a docking tree">⇥ To docking tree</button>
           <label class="inline" title="config.focusRaises: focusing a window also raises it within its layer"><input type="checkbox" id="focus-raises" checked /> focus raises</label>
           <label class="inline" title="attachInput({ snap }): floating moves snap to a 16px grid"><input type="checkbox" id="snap" /> snap 16px</label>
+          <label class="inline" title="createDomRenderer({ animate }): layout changes run inside document.startViewTransition (no-op if unsupported or prefers-reduced-motion)"><input type="checkbox" id="animate" /> animate</label>
           <span class="sep"></span>
           <button class="btn small" id="undo" title="Undo (Alt+Z)">↶ Undo</button>
           <button class="btn small" id="redo" title="Redo (Alt+Shift+Z)">↷ Redo</button>
@@ -712,6 +713,7 @@
         detachInput = attachInput({ ...inputOptions, snap: event.target.checked ? 16 : undefined });
         mirrorAnnouncer();
       };
+      $("#animate").onchange = (event) => renderer.setAnimate(event.target.checked);
       $("#undo").onclick = () => wm.undo();
       $("#redo").onclick = () => wm.redo();
       $$("[data-spawn]").forEach((button) => {
