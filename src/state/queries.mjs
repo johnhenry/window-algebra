@@ -2,6 +2,7 @@
  * Pure read-only queries over state.
  */
 import { LAYERS } from "./create.mjs";
+export { matchRules, validRules, MATCH_FIELDS, SET_FIELDS } from "./rules.mjs";
 
 export const getWindow = (state, id) => state.windows[id];
 

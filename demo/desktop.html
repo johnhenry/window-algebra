@@ -45,6 +45,16 @@
       .kv dt { color: var(--faint); } .kv dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
       .events { max-height: 220px; overflow: auto; }
       .spawn { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 12px 10px; }
+      .rules-list { list-style: none; margin: 0; padding: 2px 12px 6px; display: grid; gap: 4px; font-size: 12px; font-family: var(--mono); }
+      .rules-list li { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+      .rules-list .rule-text { flex: 1; overflow-wrap: anywhere; }
+      .rules-list .rm { border: 0; background: none; color: var(--faint); cursor: pointer; padding: 0 2px; }
+      .rules-list .rm:hover { color: var(--danger); }
+      .rules-list .empty { color: var(--faint); font-family: var(--font); padding: 2px 0; }
+      .rule-form { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 12px 6px; align-items: center; }
+      .rule-form select, .rule-form input { font: 12px var(--font); padding: 3px 5px; }
+      .rule-form input { width: 76px; }
+      .rule-form .arrow { color: var(--faint); }
       /* Window bodies */
       .info { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
       .info .facts { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
@@ -171,6 +181,36 @@
         <section>
           <h2>Modal graph <span class="spacer"></span><span class="chip warn" id="blocked-chip">0 blocked</span></h2>
           <div class="graph" id="graph"></div>
+        </section>
+        <section>
+          <h2>Window rules <span class="spacer"></span><span class="chip" id="rules-chip">config.rules</span></h2>
+          <ul class="rules-list" id="rules-list"></ul>
+          <div class="rule-form">
+            <select id="rule-match-kind" title="match field">
+              <option value="idPrefix">id starts with</option>
+              <option value="id">id is</option>
+              <option value="role">role is</option>
+              <option value="title">title is</option>
+              <option value="titleRegex">title matches /…/</option>
+              <option value="app">app is</option>
+            </select>
+            <input id="rule-match-value" placeholder="value" size="10" />
+            <span class="arrow">→</span>
+            <select id="rule-set-kind" title="set field">
+              <option value="layer">layer</option>
+              <option value="mode">mode</option>
+              <option value="workspace">workspace</option>
+              <option value="status">status</option>
+              <option value="draggable">draggable</option>
+            </select>
+            <input id="rule-set-value" placeholder="value" size="8" />
+            <button class="btn small primary" id="rule-add" title="rules/set">+ Add rule</button>
+          </div>
+          <p class="note">Rules match at <code>window/create</code> (role, id, idPrefix, title, titleRegex, app, parent) and set mode/layer/workspace/placement/status/draggable/constraints/anchor. Later rules override earlier ones; a field the create command sets explicitly always wins. Spawn a window whose id starts with <code>term-</code> or whose title is <code>Editor</code> to see the seeded rules below apply — check the event log for <code>rules: […]</code>.</p>
+          <div class="spawn">
+            <button class="btn small" id="spawn-term" title="id starts with term- — matches an idPrefix rule below">Spawn term-*</button>
+            <button class="btn small" id="spawn-editor" title="title is Editor — matches a title rule below">Spawn "Editor"</button>
+          </div>
         </section>
         <section>
           <h2>Events <span class="spacer"></span><button class="btn small ghost" id="clear-events">clear</button></h2>
@@ -365,6 +405,7 @@
       let seq = 0;
       const KIND_OPTIONS = {
         app: {},
+        term: {}, // id prefix "term-" only, to demonstrate an idPrefix window rule
         floating: { mode: "floating" },
         dialog: { role: "dialog", modal: true, placement: { width: 380, height: 190 } },
         sheet: { role: "sheet", modal: true, placement: { width: 340 } },
@@ -377,11 +418,11 @@
         background: { mode: "floating", layer: "background", placement: { x: 140, y: 120, width: 360, height: 240 } },
         system: { role: "panel", layer: "system", placement: { x: 24, y: 24, width: 230, height: 34 }, focus: false },
       };
-      const TITLES = { attached: "Attached", app: "App", floating: "Floating", dialog: "Dialog", sheet: "Sheet", menu: "Menu", popover: "Popover", tooltip: "Tooltip", notification: "Notice", panel: "Clock", background: "Wallpaper app", system: "Recorder" };
+      const TITLES = { attached: "Attached", app: "App", floating: "Floating", dialog: "Dialog", sheet: "Sheet", menu: "Menu", popover: "Popover", tooltip: "Tooltip", notification: "Notice", panel: "Clock", background: "Wallpaper app", system: "Recorder", term: "Terminal" };
 
       const spawn = (kind, options = {}) => {
         const n = ++seq;
-        const bodyKind = kind === "floating" || kind === "background" ? "app" : kind;
+        const bodyKind = kind === "floating" || kind === "background" || kind === "term" ? "app" : kind;
         const id = `${kind === "background" ? "bg" : kind === "system" ? "sys" : kind}-${n}`;
         const { anchorSide, ...base } = KIND_OPTIONS[kind];
         const needsParent = ["dialog", "sheet", "attached", "menu", "popover", "tooltip"].includes(kind);
@@ -433,6 +474,45 @@
         const win = S().windows[id];
         if (win) wm.dispatch({ type: "window/set-layer", id, layer: win.layer === "top" ? "normal" : "top" });
       };
+
+      // ---------------------------------------------------------------- window rules
+      // Seed a couple of rules so the panel and the two demo spawn buttons have
+      // something to show immediately: rules/set / config.rules / matchRules.
+      wm.setRules([
+        { match: { idPrefix: "term-" }, set: { layer: "top" } },
+        { match: { title: "Editor" }, set: { mode: "floating" } },
+      ]);
+      const ruleText = (rule) => {
+        const [mk, mv] = Object.entries(rule.match ?? {})[0] ?? ["*", "any window"];
+        const [sk, sv] = Object.entries(rule.set ?? {})[0] ?? ["—", ""];
+        const matchLabel = mk === "idPrefix" ? `id ~ "${mv}*"` : mk === "titleRegex" ? `title ~ /${mv}/` : `${mk} = "${mv}"`;
+        return `${matchLabel} → ${sk}: ${typeof sv === "object" ? JSON.stringify(sv) : sv}`;
+      };
+      const renderRules = () => {
+        const rules = S().config.rules ?? [];
+        $("#rules-chip").textContent = `${rules.length} rule${rules.length === 1 ? "" : "s"}`;
+        $("#rules-list").replaceChildren(
+          ...(rules.length
+            ? rules.map((rule, index) =>
+                h("li", {}, h("span", { class: "rule-text" }, `${index}. ${ruleText(rule)}`), h("button", { class: "rm", title: "remove", onclick: () => wm.setRules(rules.filter((_, i) => i !== index)) }, "✕")),
+              )
+            : [h("li", { class: "empty" }, "No rules yet — add one below.")]),
+        );
+      };
+      $("#rule-add").onclick = () => {
+        const matchKind = $("#rule-match-kind").value;
+        const matchValue = $("#rule-match-value").value.trim();
+        const setKind = $("#rule-set-kind").value;
+        let setValue = $("#rule-set-value").value.trim();
+        if (!matchValue || !setValue) return toast("Add rule", "Both a match value and a set value are required.", "rejected", 2500);
+        if (setKind === "draggable") setValue = setValue !== "false";
+        const rule = { match: { [matchKind]: matchValue }, set: { [setKind]: setValue } };
+        wm.setRules([...(S().config.rules ?? []), rule]);
+        $("#rule-match-value").value = "";
+        $("#rule-set-value").value = "";
+      };
+      $("#spawn-term").onclick = () => spawn("term");
+      $("#spawn-editor").onclick = () => spawn("app", { title: "Editor" });
 
       // ---------------------------------------------------------------- initial scene
       spawn("app", { title: "Editor" });
@@ -666,6 +746,7 @@
           } else events.add("event", event.type, describe(event));
         }
         renderWorkspaces();
+        renderRules();
         requestAnimationFrame(() => {
           renderTaskbar();
           renderInspector();
@@ -673,6 +754,7 @@
         });
       });
       renderWorkspaces();
+      renderRules();
       requestAnimationFrame(() => {
         renderTaskbar();
         renderInspector();

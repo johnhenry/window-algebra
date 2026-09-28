@@ -205,6 +205,8 @@ export const createWindowManager = ({
     activateWorkspace: command("workspace/activate"),
     setLayout: (layout, workspace) => dispatch({ type: "layout/set", layout, workspace }),
     setRatio: (ratio, options = {}) => dispatch({ ...options, type: "layout/set-ratio", ratio }),
+    /** Replace `config.rules` wholesale. */
+    setRules: (rules) => dispatch({ type: "rules/set", rules }),
 
     undo: () => travel(undoHistory, -1),
     redo: () => travel(redoHistory, 1),
