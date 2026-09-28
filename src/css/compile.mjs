@@ -539,4 +539,9 @@ wm-tabs { touch-action: pan-x; }
 [data-wm-splitter][aria-orientation="horizontal"]::after { height: 1px; width: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
 [data-wm-splitter]:hover, [data-wm-splitter]:focus-visible, [data-wm-splitter][data-wm-active] { background: var(--wm-splitter-fill-active, rgb(59 130 246 / 0.35)); }
 [data-wm-splitter]:focus-visible { outline: none; }
+::view-transition-group(*) { animation-duration: var(--wm-transition-duration, 0.25s); }
+::view-transition-old(*), ::view-transition-new(*) { animation-duration: var(--wm-transition-duration, 0.25s); animation-timing-function: var(--wm-transition-easing, ease); }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
 `.trim();

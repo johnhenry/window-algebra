@@ -145,6 +145,10 @@ export const CHECKLIST = [
     ["htmlSurface"], ["lazySurface"], ["iframeSurface"], ["canvasSurface"], ["createSurfaceRegistry"],
     ["state-preserving", "surfaces keep mounted state across layouts"],
     ["createFrameScheduler"], ["immediateScheduler"],
+    ["animate", "createDomRenderer({ animate }): layout changes run inside document.startViewTransition, off by default"],
+    ["animate-names", "unique, sanitized view-transition-name per primary view (setAnimate toggles it live)"],
+    ["animate-gesture-immediate", "drag/resize gestures (and an explicit immediate commit) never animate"],
+    ["animate-reduced-motion", "prefers-reduced-motion: reduce (and unsupported browsers) make animate a no-op"],
   ]),
   ...items("Manager & geometry", [
     ["createWindowManager"], ["present", "wm.present()"], ["keyboard", "keyboard shortcuts"],
@@ -204,6 +208,7 @@ export const PAGES = [
       "modifiers-registry", "withModifiers", "mod-smart-gaps", "mod-no-gaps", "mod-mirror", "mod-reflect-x", "mod-reflect-y", "mod-max-windows",
       "mod-drop-agreement", "layout/toggle",
       "tree", "tree-fns", "tree-path-fns", "tree-drop-zones", "layout/to-tree",
+      "animate", "animate-names", "animate-gesture-immediate", "animate-reduced-motion",
     ],
   },
   {
@@ -229,6 +234,7 @@ export const PAGES = [
       "layout/resize-split", "split-sizing", "splitter-render", "splitter-drag", "splitter-keyboard",
       "tree", "tree-fns", "tree-path-fns", "tree-drop-zones", "layout/to-tree",
       "aria-window", "aria-dialog", "aria-tabpanel", "f6-cycle", "focus-trap", "reduced-motion",
+      "animate", "animate-names", "animate-gesture-immediate", "animate-reduced-motion",
     ],
   },
   {

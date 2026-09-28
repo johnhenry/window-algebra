@@ -94,6 +94,7 @@
             <label class="inline" title="modifier: max-windows(n) — 0 disables; extra windows share a hidden stack slot">max <input type="number" id="mod-max" min="0" max="8" value="0" style="width: 42px" /></label>
             <button class="btn small" id="toggle-layout" title="layout/toggle { a, b } (xmonad ToggleLayouts): flips this workspace between master-stack and monocle">⇄ toggle a/b</button>
             <button class="btn small ghost" id="to-tree" title="layout/to-tree: convert the current layout into a docking tree">⇥ to docking tree</button>
+            <label class="inline" title="createDomRenderer({ animate }): layout changes run inside document.startViewTransition (no-op if unsupported or prefers-reduced-motion)"><input type="checkbox" id="animate" /> animate</label>
           </div>
           <div class="dragset" id="dragset">
             <span class="title" title="config.drag">Drag</span>
@@ -433,6 +434,7 @@
       // first call — wm.toggleLayout() with no arguments reuses the stored pair.
       $("#toggle-layout").onclick = () => wm.toggleLayout(toggleLayoutAB.a, toggleLayoutAB.b);
       $("#to-tree").onclick = () => wm.dispatch({ type: "layout/to-tree" });
+      $("#animate").onchange = (event) => renderer.setAnimate(event.target.checked);
 
       document.addEventListener("keydown", (event) => {
         if (isTyping(event) || event.metaKey || event.ctrlKey || event.altKey) return;

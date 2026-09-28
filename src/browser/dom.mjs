@@ -19,14 +19,35 @@ const supportsAnchors = (win) => {
   }
 };
 
+const prefersReducedMotion = (win) => {
+  try {
+    return Boolean(win?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  } catch {
+    return false;
+  }
+};
+
+/** Renderer instances counted so their view-transition names never collide in one document. */
+let rendererSeq = 0;
+
+/** A valid, safe CSS custom-ident derived from an arbitrary view id: any non-ident character becomes `-`. */
+const identSafe = (id) => String(id).replace(/[^a-zA-Z0-9_-]/g, "-") || "x";
+
 /**
  * @param {object} options
  * @param {Element} options.root host element; the render tree is mounted inside it
  * @param {(id: string) => ({ mount(target: Element): void, unmount?(): void } | undefined)} [options.surfaceFor]
  * @param {Document} [options.document]
  * @param {boolean} [options.anchorFallback] position anchored elements with JS when CSS anchors are unsupported
+ * @param {boolean|{duration?: number|string, easing?: string}} [options.animate] animate commits with the View
+ *   Transitions API when the browser supports it: `document.startViewTransition` wraps the reconcile, each primary
+ *   view gets a unique `view-transition-name`, and `prefers-reduced-motion: reduce` or an unsupported browser make
+ *   it a no-op (commits apply immediately, same as `animate` unset). `duration`/`easing` set
+ *   `--wm-transition-duration`/`--wm-transition-easing`, which `BASE_CSS` reads. Pass `{ immediate: true }` to
+ *   `commit()` to force a given commit to skip the transition (drag gestures; see `manager.mjs`); an animation
+ *   already in flight makes later commits immediate too, so rapid commits coalesce instead of stacking transitions.
  */
-export const createDomRenderer = ({ root, surfaceFor = () => undefined, document: doc = root.ownerDocument, anchorFallback } = {}) => {
+export const createDomRenderer = ({ root, surfaceFor = () => undefined, document: doc = root.ownerDocument, anchorFallback, animate } = {}) => {
   const elements = new Map(); // key → Element
   const records = new Map(); // key → { attrs, style }
   const mounted = new Map(); // view id → surface
@@ -36,6 +57,34 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
   let fallbackSized = new Set(); // keys whose width/height the fallback's `resize` set directly
   const useFallback = anchorFallback ?? !supportsAnchors(doc.defaultView);
   root.setAttribute("data-wm-root", "");
+
+  let animateConfig = null;
+  const instanceId = `r${rendererSeq++}`;
+  const transitionNames = new Map(); // view id → assigned view-transition-name
+  const usedTransitionNames = new Set();
+  const transitionName = (id) => {
+    let name = transitionNames.get(id);
+    if (name) return name;
+    const base = `wm-${instanceId}-${identSafe(id)}`;
+    name = base;
+    for (let n = 1; usedTransitionNames.has(name); n++) name = `${base}-${n}`;
+    usedTransitionNames.add(name);
+    transitionNames.set(id, name);
+    return name;
+  };
+  let pendingTransition = null; // the in-flight ViewTransition, if any (rapid commits coalesce onto it)
+
+  /** Normalizes `animate`/`setAnimate`'s argument and applies duration/easing to the document element. */
+  const configureAnimate = (value) => {
+    animateConfig = value ? (value === true ? {} : value) : null;
+    if (!animateConfig) return;
+    const docEl = doc.documentElement ?? doc.body;
+    if (animateConfig.duration != null) {
+      docEl?.style?.setProperty("--wm-transition-duration", typeof animateConfig.duration === "number" ? `${animateConfig.duration}ms` : animateConfig.duration);
+    }
+    if (animateConfig.easing != null) docEl?.style?.setProperty("--wm-transition-easing", animateConfig.easing);
+  };
+  configureAnimate(animate);
 
   const create = (node) => {
     const element = doc.createElement(node.tag);
@@ -48,41 +97,49 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
   const ANCHOR_PROPS = ["position-anchor", "position-area", "position-try-fallbacks", "justify-self", "align-self", "anchor-name"];
 
   const effectiveStyle = (node) => {
-    if (!useFallback) return node.style;
-    const to = node.attrs["data-wm-anchor"];
-    if (to === undefined) {
-      anchorSpecs.delete(node.key);
-      if (!("anchor-name" in node.style)) return node.style;
-    } else {
-      const raw = node.attrs["data-wm-anchor-opts"];
-      let positioner = null;
-      if (raw) {
-        try {
-          positioner = JSON.parse(raw);
-        } catch {
-          positioner = null;
+    let style = node.style;
+    if (useFallback) {
+      const to = node.attrs["data-wm-anchor"];
+      if (to === undefined) {
+        anchorSpecs.delete(node.key);
+      } else {
+        const raw = node.attrs["data-wm-anchor-opts"];
+        let positioner = null;
+        if (raw) {
+          try {
+            positioner = JSON.parse(raw);
+          } catch {
+            positioner = null;
+          }
         }
+        anchorSpecs.set(
+          node.key,
+          positioner
+            ? { mode: "side", to, ...positioner }
+            : {
+                // "inside" mode (or an anchor without side/align/offset): positioned
+                // by the CSS declarations compile.mjs derived for it.
+                mode: "inside",
+                to,
+                area: node.style["position-area"],
+                justify: node.style["justify-self"],
+                align: node.style["align-self"],
+                // margin-right / margin-bottom do not move an element placed by left/top.
+                gapBefore: parseFloat(node.style["margin-right"]) || 0,
+                gapAbove: parseFloat(node.style["margin-bottom"]) || 0,
+              },
+        );
       }
-      anchorSpecs.set(
-        node.key,
-        positioner
-          ? { mode: "side", to, ...positioner }
-          : {
-              // "inside" mode (or an anchor without side/align/offset): positioned
-              // by the CSS declarations compile.mjs derived for it.
-              mode: "inside",
-              to,
-              area: node.style["position-area"],
-              justify: node.style["justify-self"],
-              align: node.style["align-self"],
-              // margin-right / margin-bottom do not move an element placed by left/top.
-              gapBefore: parseFloat(node.style["margin-right"]) || 0,
-              gapAbove: parseFloat(node.style["margin-bottom"]) || 0,
-            },
-      );
+      if (to !== undefined || "anchor-name" in node.style) {
+        style = { ...node.style };
+        for (const prop of ANCHOR_PROPS) if (to !== undefined || prop === "anchor-name") delete style[prop];
+      }
     }
-    const style = { ...node.style };
-    for (const prop of ANCHOR_PROPS) if (to !== undefined || prop === "anchor-name") delete style[prop];
+    // Every primary view gets a stable, unique view-transition-name so a
+    // `document.startViewTransition` commit can animate it individually.
+    if (animateConfig && node.primary && node.view !== undefined) {
+      style = { ...style, "view-transition-name": transitionName(node.view) };
+    }
     return style;
   };
 
@@ -272,31 +329,62 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     }
   }
 
+  const applyCommit = (renderTree) => {
+    const live = new Set();
+    reconcileChildren(root, [renderTree], live);
+    for (const element of retired) element.remove();
+    retired.clear();
+    for (const key of [...elements.keys()]) {
+      if (live.has(key)) continue;
+      elements.get(key).remove();
+      elements.delete(key);
+      records.delete(key);
+      anchorSpecs.delete(key);
+    }
+    for (const [id, surface] of [...mounted]) {
+      if (!live.has(`view:${id}`)) {
+        surface.unmount?.();
+        mounted.delete(id);
+      }
+    }
+    if (useFallback) positionAnchoredFallback();
+  };
+
   return {
-    /** Apply a render tree. Unmounts surfaces whose views disappeared. */
-    commit(renderTree) {
-      const live = new Set();
-      reconcileChildren(root, [renderTree], live);
-      for (const element of retired) element.remove();
-      retired.clear();
-      for (const key of [...elements.keys()]) {
-        if (live.has(key)) continue;
-        elements.get(key).remove();
-        elements.delete(key);
-        records.delete(key);
-        anchorSpecs.delete(key);
+    /**
+     * Apply a render tree. Unmounts surfaces whose views disappeared.
+     * `{ immediate: true }` (a drag gesture, say) always skips the
+     * animation; so does a commit that lands while an earlier one is still
+     * transitioning, which keeps rapid commits from stacking transitions.
+     */
+    commit(renderTree, { immediate = false } = {}) {
+      const canAnimate = animateConfig && !immediate && !pendingTransition &&
+        typeof doc.startViewTransition === "function" && !prefersReducedMotion(doc.defaultView);
+      if (!canAnimate) {
+        applyCommit(renderTree);
+        return;
       }
-      for (const [id, surface] of [...mounted]) {
-        if (!live.has(`view:${id}`)) {
-          surface.unmount?.();
-          mounted.delete(id);
-        }
-      }
-      if (useFallback) positionAnchoredFallback();
+      const transition = doc.startViewTransition(() => applyCommit(renderTree));
+      pendingTransition = transition;
+      const clear = () => {
+        if (pendingTransition === transition) pendingTransition = null;
+      };
+      if (transition?.finished?.then) transition.finished.then(clear, clear);
+      else clear();
     },
 
     /** Whether anchored elements are positioned by JS instead of CSS anchor positioning. */
     anchorFallback: useFallback,
+
+    /** Whether this renderer was configured to animate commits (regardless of browser support). */
+    get animate() {
+      return Boolean(animateConfig);
+    },
+
+    /** Turn animated commits on/off (or reconfigure duration/easing) after creation, e.g. a demo toggle. */
+    setAnimate(value) {
+      configureAnimate(value);
+    },
 
     /** Re-run the JS anchor fallback (e.g. after content changed size without a commit). */
     reposition() {

@@ -199,7 +199,7 @@ function compileSelector(selector) {
 export const createFakeDocument = () => {
   const listeners = new Map();
   const doc = {
-    defaultView: { CSS: { supports: () => true } },
+    defaultView: { CSS: { supports: () => true }, matchMedia: () => ({ matches: false }) },
     createElement: (tag) => new FakeElement(tag, doc),
     addEventListener(type, fn) {
       if (!listeners.has(type)) listeners.set(type, new Set());
@@ -215,6 +215,10 @@ export const createFakeDocument = () => {
     listeners,
   };
   doc.body = new FakeElement("body", doc);
+  // Not part of the body's tree (isConnected treats `body` as the root) — just
+  // enough to give style-only consumers (e.g. the renderer's `animate` option)
+  // somewhere to set document-level CSS custom properties.
+  doc.documentElement = new FakeElement("html", doc);
   doc.activeElement = doc.body;
   return doc;
 };
