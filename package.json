@@ -1,0 +1,37 @@
+{
+  "name": "@johnhenry/window-algebra",
+  "version": "0.0.0",
+  "description": "A functional window manager for the browser: pure state updates, a small layout algebra that derives a presentation tree, and CSS (flex, grid, anchor positioning, container queries) as the final layout solver.",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.mjs",
+    "./browser": "./src/browser/index.mjs",
+    "./algebra": "./src/algebra/nodes.mjs",
+    "./transforms": "./src/algebra/transforms.mjs",
+    "./layouts": "./src/layouts/index.mjs",
+    "./css": "./src/css/compile.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "demo": "echo 'Serve the repo root with any static server and open /demo/ (ES modules do not load from file://).'"
+  },
+  "keywords": [
+    "window-manager",
+    "tiling",
+    "layout",
+    "css-grid",
+    "anchor-positioning",
+    "functional",
+    "reducer"
+  ],
+  "author": "John Henry",
+  "license": "MIT"
+}

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>window-algebra demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f4f1;
+        --fg: #1d1d1b;
+        --panel: #ffffff;
+        --muted: #6b6b66;
+        --accent: #2f6fdb;
+        --line: #d6d6cf;
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161615;
+          --fg: #ecece8;
+          --panel: #22221f;
+          --muted: #9a9a93;
+          --line: #3a3a36;
+          --accent: #6f9ef0;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--fg); }
+      nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: center; }
+      nav button, nav select { font: inherit; padding: 4px 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 6px; }
+      nav .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+      #desktop { position: relative; min-height: 0; }
+      #desktop > wm-overlay { width: 100%; height: 100%; }
+      wm-view { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+      wm-view[data-focused] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+      wm-view[data-mode="floating"] { box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); }
+      wm-view[inert] { filter: grayscale(0.7) brightness(0.85); }
+      wm-tabs { gap: 2px; padding: 0 0 4px; }
+      wm-tabs button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 6px 6px 0 0; padding: 4px 12px; }
+      wm-tabs button[aria-selected="true"] { border-color: var(--accent); }
+      .win { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+      .win header { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); cursor: default; user-select: none; }
+      [data-mode="floating"] .win header { cursor: move; }
+      .win header strong { flex: 1; }
+      .win header button { font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; }
+      .win .body { padding: 12px; overflow: auto; color: var(--muted); }
+      .grip { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+      /* Windows are size containers: content adapts via container queries. */
+      @container wm-view (width < 260px) { .win .body .detail { display: none; } }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <button id="new">New window</button>
+      <button id="float">Toggle floating</button>
+      <button id="dialog">Modal dialog</button>
+      <button id="close">Close</button>
+      <span class="sep"></span>
+      <select id="layout" aria-label="Layout">
+        <option value="master-stack">master-stack</option>
+        <option value="bsp">bsp</option>
+        <option value="columns">columns</option>
+        <option value="rows">rows</option>
+        <option value="grid">grid (auto-fit)</option>
+        <option value="spiral">spiral</option>
+        <option value="tabs">tabs</option>
+        <option value="monocle">monocle</option>
+        <option value="floating">floating</option>
+      </select>
+      <label>ratio <input id="ratio" type="range" min="0.2" max="0.8" step="0.05" value="0.5" /></label>
+      <span class="sep"></span>
+      <button id="undo">Undo</button>
+      <button id="redo">Redo</button>
+      <button id="next">Focus next</button>
+    </nav>
+    <div id="desktop"></div>
+
+    <script type="module">
+      import { createWindowManager, createState, BASE_CSS } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, lazySurface, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+
+      const style = document.createElement("style");
+      style.textContent = BASE_CSS;
+      document.head.append(style);
+
+      const root = document.getElementById("desktop");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({
+        state: createState({ config: { gap: 6, inset: 6 } }),
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 200,
+      });
+      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+
+      let counter = 0;
+      const makeSurface = (id, title) =>
+        lazySurface((target) => {
+          target.innerHTML = `
+            <div class="win">
+              <header data-wm-handle="move">
+                <strong></strong>
+                <button data-wm-command="window/toggle-floating" title="Float">⧉</button>
+                <button data-wm-command="window/close" title="Close">×</button>
+              </header>
+              <div class="body">
+                <p>${id}</p>
+                <p class="detail">Resize me: this line hides below 260px via a container query.</p>
+              </div>
+            </div>
+            <div class="grip" data-wm-handle="resize-se"></div>`;
+          target.querySelector("strong").textContent = title;
+        });
+
+      const open = (options = {}) => {
+        const id = options.id ?? `w${++counter}`;
+        const title = options.title ?? `Window ${counter}`;
+        surfaces.set(id, makeSurface(id, title));
+        wm.create({ id, title, ...options });
+        return id;
+      };
+
+      open({ title: "Editor" });
+      open({ title: "Terminal" });
+      open({ title: "Browser" });
+
+      const focused = () => wm.state.focus.window;
+      document.getElementById("new").onclick = () => open();
+      document.getElementById("float").onclick = () => focused() && wm.toggleFloating(focused());
+      document.getElementById("close").onclick = () => focused() && wm.close(focused());
+      document.getElementById("dialog").onclick = () => {
+        const parent = focused();
+        if (!parent) return;
+        const id = open({ role: "dialog", parent, modal: true, title: "Confirm", placement: { width: 280, height: 160 } });
+        wm.setMode(id, "floating");
+      };
+      document.getElementById("layout").onchange = (event) => {
+        const type = event.target.value;
+        wm.setLayout(type === "grid" ? { type, min: 280 } : { type, ratio: Number(document.getElementById("ratio").value) });
+      };
+      document.getElementById("ratio").oninput = (event) => wm.setRatio(Number(event.target.value));
+      document.getElementById("undo").onclick = () => wm.undo();
+      document.getElementById("redo").onclick = () => wm.redo();
+      document.getElementById("next").onclick = () => wm.focusNext();
+
+      // Expose for tinkering in devtools.
+      window.wm = wm;
+    </script>
+  </body>
+</html>
