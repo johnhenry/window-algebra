@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multiple Outputs</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      .stages { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px; min-height: 0; }
+      @media (max-width: 820px) { .stages { grid-template-columns: 1fr; } }
+      .output { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; border-radius: 10px; border: 2px solid var(--line); overflow: hidden; transition: border-color 0.15s; }
+      .output[data-focused="true"] { border-color: var(--accent); }
+      .output-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+      .output-head strong { font-size: 12.5px; }
+      .output-head .badge { font: 10.5px var(--mono); color: var(--faint); padding: 1px 6px; border-radius: 999px; background: var(--surface-3); }
+      .output[data-focused="true"] .output-head .badge.focus { color: var(--accent); background: var(--accent-soft); }
+      .output-head .spacer { flex: 1; }
+      .output-head button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+      .output-stage { min-height: 220px; background: var(--surface); }
+      .ws-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; background: var(--surface-2); border-top: 1px solid var(--line); }
+      .ws-row button { font: 11.5px var(--mono); border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 5px; padding: 2px 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+      .ws-row button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+      .ws-row button .mv { opacity: 0.6; }
+      .wa-body .body { padding: 10px; color: var(--muted); font-size: 12.5px; }
+      .wa-body .body code { font: 11px var(--mono); }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar">
+      <button class="btn small" id="new">New window</button>
+      <span class="sep"></span>
+      <button class="btn small" id="add-output">Add output</button>
+      <button class="btn small" id="remove-output">Remove focused output</button>
+      <span class="sep"></span>
+      <button class="btn small" id="focus-next">Focus next (crosses outputs)</button>
+      <span class="hint" id="hint" style="color: var(--faint); font-size: 12px;"></span>
+    </nav>
+    <div id="stages" class="stages"></div>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h, windowSurface, syncChrome } from "./shared/kit.mjs";
+
+      // Page furniture only (header + theme); the demo below uses the library directly.
+      initPage({ current: "./outputs.html", title: "Multiple outputs" });
+
+      const stagesEl = document.getElementById("stages");
+      const surfaces = createSurfaceRegistry();
+      // One manager drives every output: each gets its own DOM renderer and
+      // input adapter (see wm.setRenderer), all sharing the same windows/state.
+      const wm = createWindowManager({
+        state: createState({ config: { gap: 6, inset: 6 } }),
+        schedule: createFrameScheduler(),
+        history: 200,
+      });
+
+      let counter = 0;
+      const makeSurface = (id, title) =>
+        windowSurface({
+          id,
+          title,
+          actions: ["float", "close"],
+          body: (el) => {
+            el.innerHTML = `<div class="body"><p>${title}</p><p>workspace: <code data-ws></code></p></div>`;
+          },
+        });
+
+      const open = (options = {}) => {
+        const id = options.id ?? `w${++counter}`;
+        const title = options.title ?? `Window ${counter}`;
+        surfaces.set(id, makeSurface(id, title));
+        wm.create({ id, title, ...options });
+        return id;
+      };
+
+      // ------------------------------------------------------------------ per-output stage chrome
+      // outputId → { root, stageEl, renderer, detachInput }
+      const outputRigs = new Map();
+
+      const buildRig = (outputId) => {
+        const card = h("div", { class: "output", "data-output": outputId });
+        const head = h(
+          "div",
+          { class: "output-head" },
+          h("strong", {}, outputId),
+          h("span", { class: "badge focus", "data-focus-badge": "" }, "focused"),
+          h("span", { class: "spacer" }),
+          h("button", { type: "button", onclick: () => wm.focusOutput(outputId) }, "Focus"),
+        );
+        const stageEl = h("div", { class: "output-stage stage" });
+        const wsRow = h("div", { class: "ws-row" });
+        card.append(head, stageEl, wsRow);
+        stagesEl.append(card);
+
+        const renderer = createDomRenderer({ root: stageEl, surfaceFor: surfaces });
+        wm.setRenderer(outputId, renderer);
+        // `present` is bound to this output, so drag/resize previews on this
+        // stage derive *its* active workspace, not whichever output has focus.
+        const detach = attachInput({
+          root: stageEl,
+          getState: wm.getState,
+          dispatch: wm.dispatch,
+          subscribe: wm.subscribe,
+          simulate: wm.simulate,
+          drops: wm.drops,
+          present: (state) => wm.present(state, { output: outputId }),
+        });
+        syncChrome(wm, stageEl);
+        return { card, head, stageEl, wsRow, renderer, detach };
+      };
+
+      const destroyRig = (outputId) => {
+        const rig = outputRigs.get(outputId);
+        if (!rig) return;
+        rig.detach?.();
+        wm.setRenderer(outputId, null);
+        rig.card.remove();
+        outputRigs.delete(outputId);
+      };
+
+      const syncOutputs = () => {
+        const state = wm.state;
+        // Remove stages for outputs that no longer exist.
+        for (const outputId of [...outputRigs.keys()]) {
+          if (!state.outputs[outputId]) destroyRig(outputId);
+        }
+        // Add stages for new outputs.
+        for (const outputId of state.outputOrder) {
+          if (!outputRigs.has(outputId)) outputRigs.set(outputId, buildRig(outputId));
+        }
+        // Sync each stage's chrome: focused ring, workspace tabs, empty-state.
+        for (const outputId of state.outputOrder) {
+          const rig = outputRigs.get(outputId);
+          const output = state.outputs[outputId];
+          const focused = state.focusedOutput === outputId;
+          rig.card.dataset.focused = String(focused);
+          rig.head.querySelector("[data-focus-badge]").hidden = !focused;
+          rig.wsRow.replaceChildren(
+            ...output.workspaces.map((wsId) =>
+              h(
+                "button",
+                {
+                  type: "button",
+                  "aria-pressed": String(output.activeWorkspace === wsId),
+                  onclick: () => wm.activateWorkspace(wsId),
+                },
+                wsId,
+                output.workspaces.length > 1
+                  ? h(
+                      "span",
+                      {
+                        class: "mv",
+                        title: "Move to the other output",
+                        onclick: (event) => {
+                          event.stopPropagation();
+                          const other = state.outputOrder.find((oid) => oid !== outputId);
+                          if (other) wm.moveWorkspaceToOutput(wsId, other);
+                        },
+                      },
+                      "⇄",
+                    )
+                  : null,
+              ),
+            ),
+            h(
+              "button",
+              { type: "button", title: "New workspace on this output", onclick: () => wm.createWorkspace(`${outputId}-${output.workspaces.length + 1}`, { output: outputId, activate: true }) },
+              "+",
+            ),
+          );
+          for (const el of rig.stageEl.querySelectorAll("[data-ws]")) {
+            const key = el.closest("wm-view")?.getAttribute("data-view");
+            if (key) el.textContent = state.windows[key]?.workspace ?? "";
+          }
+        }
+        document.getElementById("hint").textContent = `focused: ${state.focusedOutput} · active workspace: ${state.activeWorkspace}`;
+        document.getElementById("remove-output").disabled = state.outputOrder.length === 1;
+      };
+
+      wm.subscribe(() => syncOutputs());
+      syncOutputs();
+
+      open({ title: "Editor" });
+      open({ title: "Terminal" });
+
+      document.getElementById("new").onclick = () => open({ workspace: wm.state.outputs[wm.state.focusedOutput].activeWorkspace });
+      document.getElementById("focus-next").onclick = () => wm.focusNext();
+      let displayCount = 1;
+      document.getElementById("add-output").onclick = () => {
+        const id = `display-${++displayCount}`;
+        wm.createOutput(id, { workspaces: [`${id}-1`] });
+      };
+      document.getElementById("remove-output").onclick = () => wm.removeOutput(wm.state.focusedOutput);
+
+      // Expose for tinkering in devtools.
+      window.wm = wm;
+    </script>
+  </body>
+</html>

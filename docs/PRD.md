@@ -17,7 +17,6 @@ Browser applications that need multiple windows (IDEs, dashboards, browser-OS ex
 ## Non-goals (v0)
 
 - Replacing an operating-system window manager or compositor.
-- Multi-output (multiple displays or canvases). The state model leaves room for an `Output`, but there isn't one yet.
 - Collaborative synchronization. Determinism and the command log make it possible, but it isn't built.
 - Animated transitions. The keyed DOM makes View Transitions straightforward to add later.
 
@@ -66,12 +65,25 @@ One command covers every case: `layout/resize-split { workspace?, path, index?, 
 
 `compile()` renders a splitter between every pair of children of a row/column carrying this `resize` metadata: `[data-wm-splitter]`, `role="separator"`, `aria-orientation` (vertical for a row's splitters, horizontal for a column's), `aria-valuenow` (the pair's split as 0–100), and `data-wm-path`/`data-wm-index`/`data-wm-count` — exactly what `layout/resize-split` expects back. `attachInput` drags one with pointer capture (converting pixel movement to a weight delta via the container's measured size, clamped so neither side crosses a directly-wrapped window's min/max constraints) and answers the arrow key along its axis when it has focus; either way the whole gesture is one undo step, via the same `gesture` token mechanism as a floating drag.
 
+## Multiple outputs
+
+sway-style outputs: `state.outputs` (id → `{ workspaces, activeWorkspace }`) partitions workspaces across displays/stages, with `state.outputOrder` and `state.focusedOutput` alongside it. `state.activeWorkspace` always mirrors `outputs[focusedOutput].activeWorkspace`, so it — and every single-output query and command that reads it (`activeWorkspace`, `workspace/activate`, `derive(state)`, `isVisible`/`visibleWindows`/`focusable`/`paintOrder`, …) — keeps meaning exactly what it always did when there is only one output, which is what `createState()` still produces (one output, `DEFAULT_OUTPUT`, holding every workspace).
+
+- `output/create { id, workspaces?, focus? }` adds an output with its own workspace(s) (same shape as `createState`'s `workspaces` option; default a single `"<id>-1"`).
+- `output/remove { id, fallback? }` moves an output's workspaces (and their windows) onto another output; rejected (`last-output`) when it is the only one.
+- `workspace/move-to-output { id, output, activate? }` moves one workspace between outputs; rejected (`last-workspace-on-output`) when it is the only workspace its current output has — every output keeps at least one, the same invariant `workspace/remove`'s `last-workspace-on-output` (alongside the pre-existing global `last-workspace`) now also enforces.
+- `output/focus { id }` switches which output has input focus. Keyboard focus follows: to a focusable window on the newly focused output (most-recently-focused first), or clears if it has none.
+- Focus crosses outputs on its own: `window/focus` (and the modal graph redirecting to a window on another output) switches `focusedOutput` first, the same way it already switches `activeWorkspace` for a window on another workspace; `focus/next`/`focus/previous` wrap from the last focusable window of one output straight into the first of the next, walking `outputOrder`.
+- Visibility, `focusable` and `paintOrder` are resolved *per output*: a window is visible when its workspace is the active workspace of *that workspace's own output*, independent of which output currently has focus — so every output's stage always shows the right windows, not just the focused one's. Sticky windows are visible on every workspace of their own output, not across outputs.
+- `derive(state, { output })` derives any output's own active workspace (default: `state.focusedOutput`). The manager can drive several renderers — one per output — via `wm.setRenderer(outputId, renderer)` / `wm.measureOutput(outputId)`, each fed that output's own presentation tree; pairing each with its own `attachInput({ present: (state) => wm.present(state, { output: outputId }) })` keeps drag/resize previews correct on every stage, not just the focused one. See `demo/outputs.html`.
+- A pre-outputs (version 1) saved state is migrated (`1 → 2`) by backfilling a single default output that owns every workspace, focused — the implicit single output such a state always had.
+
 ## Requirements implemented in v0
 
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 43 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 49 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history, EWMH/X11-style urgency hints (`window/set-urgent`, `focus/urgent`, `config.urgency.clearOnFocus`). |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), docking tree (stateful, n-ary row/column/tabs; `layout/to-tree` converts any other layout into one), and custom interpreters. |
 | Layout modifiers | xmonad-style, serializable (`spec.modifiers: [{ type, ... }]`): `smart-gaps`, `no-gaps`, `mirror`, `reflect-x`, `reflect-y`, `max-windows(n)` (overflow shares a hidden stack slot), applied via a `MODIFIERS` registry parallel to `LAYOUTS` and the `withModifiers(interpreter, mods)` combinator. `layout/toggle { a, b }` flips a workspace between two stored layouts (xmonad `ToggleLayouts`). Drop interpreters remap their zones to match `mirror`/`reflect-x`/`reflect-y` (`applyModifiersToOps`). |

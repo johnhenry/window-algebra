@@ -14,7 +14,10 @@ export const STATUSES = Object.freeze(["normal", "minimized", "maximized", "full
  * The current state shape's version. Bump this and add a step to `MIGRATIONS`
  * (see `state/migrate.mjs`) whenever a change to the state shape needs one.
  */
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
+
+/** The id of the output every state starts with (sway-style: single output until more are created). */
+export const DEFAULT_OUTPUT = "primary";
 
 export const DEFAULT_CONFIG = Object.freeze({
   /** Focusing a window also raises it within its layer. */
@@ -84,10 +87,22 @@ export const DEFAULT_CONFIG = Object.freeze({
 
 const emptyStack = () => Object.fromEntries(LAYERS.map((layer) => [layer, []]));
 
-export const createWorkspace = ({ id, layout = { type: "master-stack", ratio: 0.5 }, windows = [] }) => ({
+export const createWorkspace = ({ id, layout = { type: "master-stack", ratio: 0.5 }, windows = [], output = DEFAULT_OUTPUT }) => ({
   id,
   windows: [...windows],
   layout,
+  output,
+});
+
+/**
+ * Create an output record: sway-style outputs (multiple displays/stages).
+ * Workspaces belong to an output; each output tracks which of its own
+ * workspaces is currently active.
+ */
+export const createOutput = ({ id, workspaces = [], activeWorkspace }) => ({
+  id,
+  workspaces: [...workspaces],
+  activeWorkspace: activeWorkspace ?? workspaces[0],
 });
 
 /**
@@ -100,9 +115,12 @@ export const createWorkspace = ({ id, layout = { type: "master-stack", ratio: 0.
  */
 export const createState = ({ workspaces = ["main"], layout, config = {} } = {}) => {
   const list = workspaces.map((ws) =>
-    typeof ws === "string" ? createWorkspace({ id: ws, layout }) : createWorkspace({ layout, ...ws }),
+    typeof ws === "string"
+      ? createWorkspace({ id: ws, layout, output: DEFAULT_OUTPUT })
+      : createWorkspace({ layout, output: DEFAULT_OUTPUT, ...ws }),
   );
   if (list.length === 0) throw new TypeError("createState(): at least one workspace is required.");
+  const output = createOutput({ id: DEFAULT_OUTPUT, workspaces: list.map((ws) => ws.id) });
   return {
     version: STATE_VERSION,
     config: {
@@ -116,6 +134,17 @@ export const createState = ({ workspaces = ["main"], layout, config = {} } = {})
     workspaces: Object.fromEntries(list.map((ws) => [ws.id, ws])),
     workspaceOrder: list.map((ws) => ws.id),
     activeWorkspace: list[0].id,
+    /**
+     * Outputs (id → { workspaces, activeWorkspace }): sway-style multiple
+     * displays/stages. Every state starts with one default output holding
+     * all its workspaces. `activeWorkspace` above always mirrors
+     * `outputs[focusedOutput].activeWorkspace`, kept for single-output code
+     * that only ever cared about "the" active workspace.
+     */
+    outputs: { [DEFAULT_OUTPUT]: output },
+    outputOrder: [DEFAULT_OUTPUT],
+    /** The output that currently has input focus; drives `activeWorkspace`. */
+    focusedOutput: DEFAULT_OUTPUT,
     focus: { window: null, history: [] },
     stack: emptyStack(),
     // The most recently hidden-to or shown-from scratchpad window id, used as
