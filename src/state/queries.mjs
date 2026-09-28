@@ -17,11 +17,33 @@ export const windowsIn = (state, workspaceId = state.activeWorkspace) =>
 export const isVisible = (state, id) => {
   const win = state.windows[id];
   if (!win || win.status === "minimized") return false;
-  if (win.workspace !== state.activeWorkspace) return false;
+  // A scratchpad window not currently shown belongs to no workspace.
+  if (win.workspace === null) return false;
+  // Sticky windows skip the active-workspace check: they are visible everywhere.
+  if (win.workspace !== state.activeWorkspace && !win.sticky) return false;
   return win.parent ? isVisible(state, win.parent) : true;
 };
 
-export const visibleWindows = (state) => windowsIn(state).filter((win) => isVisible(state, win.id));
+/**
+ * Visible windows of the active workspace: its own windows, plus any sticky
+ * window that lives on another workspace (visible everywhere).
+ */
+export const visibleWindows = (state) => {
+  const local = windowsIn(state).filter((win) => isVisible(state, win.id));
+  const stickyElsewhere = Object.values(state.windows).filter(
+    (win) => win.sticky && win.workspace !== state.activeWorkspace && isVisible(state, win.id),
+  );
+  return [...local, ...stickyElsewhere];
+};
+
+/** Windows currently hidden in the scratchpad (sent there, not shown). */
+export const scratchpadWindows = (state) => Object.values(state.windows).filter((win) => win.scratchpad);
+
+/** Is this window a scratchpad window that is currently hidden (not on any workspace)? */
+export const isScratchpadHidden = (state, id) => state.windows[id]?.scratchpad === true && state.windows[id]?.workspace === null;
+
+/** Windows marked sticky (visible on every workspace). */
+export const stickyWindows = (state) => Object.values(state.windows).filter((win) => win.sticky);
 
 /** Direct children of a window (dialogs, popovers, ...). */
 export const childrenOf = (state, id) => Object.values(state.windows).filter((win) => win.parent === id);
@@ -57,6 +79,9 @@ export const descendantsOf = (state, id) =>
  */
 export const inTiledBase = (state, win) =>
   Boolean(win) &&
+  // Sticky windows are always presented as floating overlays, regardless of
+  // mode: the tiled base is inherently workspace-local, sticky is not.
+  !win.sticky &&
   state.workspaces[win.workspace]?.layout?.type !== "floating" &&
   win.role === "window" &&
   win.mode === "tiled" &&

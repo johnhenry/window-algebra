@@ -37,6 +37,11 @@
       .wid.tiled { border-style: dashed; }
       .layer.painted { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 4px; }
       .wid.min { opacity: 0.5; }
+      .scratchpad-list { padding: 2px 12px 10px; display: grid; gap: 4px; }
+      .scratchpad-list .row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+      .scratchpad-list .row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .scratchpad-list .row .state { font: 11px var(--mono); color: var(--faint); }
+      .scratchpad-list .empty { color: var(--faint); font-size: 12px; }
       .graph { padding: 2px 12px 10px; font: 12px/1.7 var(--mono); }
       .graph .node { white-space: nowrap; }
       .graph .modal { color: var(--warn); }
@@ -213,6 +218,10 @@
           </div>
         </section>
         <section>
+          <h2>Scratchpad <span class="spacer"></span><span class="chip" id="scratchpad-chip">0</span></h2>
+          <div class="scratchpad-list" id="scratchpad-list"></div>
+        </section>
+        <section>
           <h2>Events <span class="spacer"></span><button class="btn small ghost" id="clear-events">clear</button></h2>
           <div class="events"><ul class="log" id="events"></ul></div>
         </section>
@@ -240,6 +249,9 @@
           <tr><td><kbd>Alt</kbd> <kbd>1</kbd>–<kbd>9</kbd></td><td>activate workspace</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>1</kbd>–<kbd>9</kbd></td><td>move focused window to workspace</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>Z</kbd> / <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>Z</kbd></td><td>undo / redo</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>S</kbd></td><td>send focused window to the scratchpad (window/to-scratchpad)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>S</kbd></td><td>show/hide the last scratchpad window, floating and centered (scratchpad/toggle)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Y</kbd></td><td>toggle sticky: visible on every workspace (window/set-sticky)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>B</kbd></td><td>blur (window/blur)</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>close focused transient (menu, dialog, …) or leave fullscreen</td></tr>
           <tr><td><kbd>?</kbd></td><td>this sheet</td></tr>
@@ -253,6 +265,7 @@
       import {
         createWindowManager, createState, LAYERS, dock, masterStack,
         focusable, modalTarget, blockedWindows, stackingOrder, paintOrder, inTiledBase, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
+        scratchpadWindows, isScratchpadHidden, stickyWindows,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
@@ -303,7 +316,8 @@
       const clocks = new Set();
 
       const factText = (win) => [
-        ["role", win.role], ["mode", win.mode], ["layer", win.layer], ["status", win.status], ["ws", win.workspace],
+        ["role", win.role], ["mode", win.mode], ["layer", win.layer], ["status", win.status], ["ws", win.workspace ?? "scratchpad"],
+        ...(win.sticky ? [["sticky", "true"]] : []),
       ];
 
       const BODIES = {
@@ -371,6 +385,8 @@
               item("Always on top", () => toggleOnTop(target), "⌥T"),
               item("Minimize", () => wm.minimize(target), "⌥M"),
               item(S().windows[target]?.draggable === false ? "Unpin (allow dragging)" : "Pin (no dragging)", () => togglePin(target), "⌥L"),
+              item(S().windows[target]?.sticky ? "Unstick (this workspace only)" : "Stick (show on every workspace)", () => toggleSticky(target), "⌥Y"),
+              item("Send to scratchpad", () => wm.toScratchpad(target), "⌥S"),
               h("hr"),
               ...others.map((ws) => item(`Move to “${ws}”`, () => wm.moveToWorkspace(target, ws))),
               h("hr"),
@@ -470,6 +486,11 @@
         if (win) wm.setDraggable(id, win.draggable === false);
       };
 
+      const toggleSticky = (id) => {
+        const win = S().windows[id];
+        if (win) wm.setSticky(id, !win.sticky);
+      };
+
       const toggleOnTop = (id) => {
         const win = S().windows[id];
         if (win) wm.dispatch({ type: "window/set-layer", id, layer: win.layer === "top" ? "normal" : "top" });
@@ -519,7 +540,10 @@
       spawn("app", { title: "Terminal" });
       spawn("app", { title: "Browser" });
       spawn("floating", { title: "Calculator" });
-      spawn("panel");
+      const clockId = spawn("panel");
+      wm.setSticky(clockId, true); // the clock is visible on every workspace
+      const notesId = spawn("floating", { title: "Notes" });
+      wm.toScratchpad(notesId); // start tucked away; Alt+Shift+S (or the Scratchpad panel) brings it back
       wm.activateWorkspace("web");
       spawn("app", { title: "Bookmarks" });
       spawn("app", { title: "Docs" });
@@ -662,9 +686,9 @@
               type: "button",
               "data-status": win.status,
               "data-focused": String(win.id === state.focus.window),
-              title: `${win.id} · ${win.status}${isBlocked(state, win.id) ? " · blocked" : ""}`,
+              title: `${win.id} · ${win.status}${isBlocked(state, win.id) ? " · blocked" : ""}${win.sticky ? " · sticky" : ""}`,
               onclick: () => (win.id === state.focus.window && win.status !== "minimized" ? wm.minimize(win.id) : wm.focus(win.id)),
-            }, h("span", { class: "dot", style: { "--c": colorFor(win.id) } }), h("span", { class: "t" }, win.title || win.id), win.status !== "normal" ? h("span", { class: "chip" }, win.status) : ""),
+            }, h("span", { class: "dot", style: { "--c": colorFor(win.id) } }), win.sticky ? h("span", {}, "📌") : "", h("span", { class: "t" }, win.title || win.id), win.status !== "normal" ? h("span", { class: "chip" }, win.status) : ""),
           ),
           h("span", { class: "hint" }, "click: focus (restores) · click focused: minimize"),
         );
@@ -721,6 +745,25 @@
         $("#graph").replaceChildren(...(lines.length ? lines : [h("div", { class: "note" }, "No child windows. Spawn a dialog or the nested-modal chain.")]));
       };
 
+      // Scratchpad: every window ever sent there, shown or hidden.
+      const renderScratchpad = () => {
+        const state = S();
+        const list = scratchpadWindows(state);
+        $("#scratchpad-chip").textContent = String(list.length);
+        $("#scratchpad-list").replaceChildren(
+          ...(list.length
+            ? list.map((win) => {
+                const hidden = isScratchpadHidden(state, win.id);
+                return h("div", { class: "row" },
+                  h("span", { class: "t" }, win.title || win.id),
+                  h("span", { class: "state" }, hidden ? "hidden" : `shown · ${win.workspace}`),
+                  h("button", { class: "btn small", title: "scratchpad/toggle", onclick: () => wm.toggleScratchpad(win.id) }, hidden ? "Show" : "Hide"),
+                );
+              })
+            : [h("div", { class: "empty" }, "Empty. Alt+S sends the focused window here; Alt+Shift+S shows/hides the last one.")]),
+        );
+      };
+
       // Live facts inside app windows.
       const renderFacts = () => {
         const state = S();
@@ -750,6 +793,7 @@
         requestAnimationFrame(() => {
           renderTaskbar();
           renderInspector();
+          renderScratchpad();
           renderFacts();
         });
       });
@@ -758,6 +802,7 @@
       requestAnimationFrame(() => {
         renderTaskbar();
         renderInspector();
+        renderScratchpad();
         renderFacts();
       });
 
@@ -805,6 +850,9 @@
           KeyD: () => spawn("dialog"),
           KeyZ: () => (event.shiftKey ? wm.redo() : wm.undo()),
           KeyB: () => wm.blur(),
+          // Shift: show/hide the last-touched scratchpad window instead of the focused one.
+          KeyS: () => (event.shiftKey ? wm.toggleScratchpad() : id && wm.toScratchpad(id)),
+          KeyY: () => id && toggleSticky(id),
         };
         const fn = actions[event.code];
         if (!fn) return;

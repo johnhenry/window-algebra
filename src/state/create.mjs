@@ -81,6 +81,9 @@ export const createState = ({ workspaces = ["main"], layout, config = {} } = {})
     activeWorkspace: list[0].id,
     focus: { window: null, history: [] },
     stack: emptyStack(),
+    // The most recently hidden-to or shown-from scratchpad window id, used as
+    // the default target of `scratchpad/toggle {}` (no id given).
+    lastScratchpad: null,
   };
 };
 

@@ -321,6 +321,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       if (context.roles?.[id]) attrs["data-role"] = context.roles[id];
       if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
       if (context.pinned?.includes(id)) attrs["data-wm-draggable"] = "false";
+      if (context.sticky?.includes(id)) attrs["data-wm-sticky"] = "";
       return {
         tag: "wm-view",
         key: occurrence > 1 ? `view:${id}#${occurrence}` : `view:${id}`,

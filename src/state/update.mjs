@@ -90,7 +90,9 @@ const applyFocus = (state, requested) => {
   let next = state;
   const events = [];
   const win = next.windows[target];
-  if (win.workspace !== next.activeWorkspace) {
+  // A sticky window is visible on every workspace already, so focusing it
+  // never needs to switch which workspace is active.
+  if (win.workspace !== next.activeWorkspace && !win.sticky) {
     events.push({ type: "workspace/activated", id: win.workspace, previous: next.activeWorkspace });
     next = { ...next, activeWorkspace: win.workspace };
   }
@@ -190,8 +192,11 @@ const handlers = {
     let next = state;
     for (const victim of doomed) {
       const ws = next.windows[victim].workspace;
-      next = setWorkspace(next, ws, { windows: without(next.workspaces[ws].windows, victim) });
-      next = bspDrop(next, ws, victim);
+      // A hidden scratchpad window (workspace: null) belongs to no workspace.
+      if (ws !== null) {
+        next = setWorkspace(next, ws, { windows: without(next.workspaces[ws].windows, victim) });
+        next = bspDrop(next, ws, victim);
+      }
       next = removeFromStack(next, victim);
       const { [victim]: _removed, ...windows } = next.windows;
       next = {
@@ -201,6 +206,7 @@ const handlers = {
           window: next.focus.window === victim ? null : next.focus.window,
           history: without(next.focus.history, victim),
         },
+        lastScratchpad: next.lastScratchpad === victim ? null : next.lastScratchpad,
       };
     }
     const closed = result(
@@ -383,16 +389,101 @@ const handlers = {
     let next = state;
     for (const id of moving) {
       const from = next.windows[id].workspace;
-      next = setWorkspace(next, from, { windows: without(next.workspaces[from].windows, id) });
-      next = bspDrop(next, from, id);
+      // A hidden scratchpad window (workspace: null) belongs to no workspace yet.
+      if (from !== null) {
+        next = setWorkspace(next, from, { windows: without(next.workspaces[from].windows, id) });
+        next = bspDrop(next, from, id);
+      }
       next = setWindow(next, id, { workspace: target });
       next = setWorkspace(next, target, { windows: [...next.workspaces[target].windows, id] });
       next = bspAdd(next, next.windows[id]);
+    }
+    // Moving a scratchpad window onto a workspace directly pulls it out of the scratchpad for good.
+    if (win.scratchpad) {
+      const { scratchpad: _scratchpad, ...rest } = next.windows[win.id];
+      next = {
+        ...next,
+        windows: { ...next.windows, [win.id]: rest },
+        lastScratchpad: next.lastScratchpad === win.id ? null : next.lastScratchpad,
+      };
     }
     const moved = result(next, [{ type: "window/workspace-changed", id: win.id, workspace: target }], [RENDER]);
     // follow: go with the window (activate its new workspace and focus it).
     if (command.follow) return merge(moved, applyFocus(next, win.id));
     return merge(moved, refocus(next));
+  },
+
+  /**
+   * i3-style scratchpad: hide a window off every workspace. It keeps its
+   * `workspace` as `null` (belonging to no workspace) while hidden, is
+   * marked `scratchpad: true` for as long as it remains one (shown or
+   * hidden), and forced to floating mode so a later `scratchpad/toggle`
+   * always shows it as a floating window. Already-hidden is a no-op.
+   */
+  "window/to-scratchpad"(state, command) {
+    const { id } = command;
+    const win = state.windows[id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (win.workspace === null) return result(state);
+    const from = win.workspace;
+    let next = setWorkspace(state, from, { windows: without(state.workspaces[from].windows, id) });
+    next = bspDrop(next, from, id);
+    next = setWindow(next, id, { scratchpad: true, mode: "floating", workspace: null });
+    next = { ...next, lastScratchpad: id };
+    const hidden = result(next, [{ type: "window/scratchpad", id }], [RENDER]);
+    return merge(hidden, refocus(next));
+  },
+
+  /**
+   * Show the last (or given) scratchpad window floating and centered on the
+   * active workspace, focusing it; toggling the same window again hides it
+   * back into the scratchpad. `id` must already be a scratchpad window
+   * (sent there with `window/to-scratchpad`); with no `id`, the most
+   * recently shown-or-hidden scratchpad window is used.
+   */
+  "scratchpad/toggle"(state, command) {
+    const id = command.id ?? state.lastScratchpad;
+    if (id == null) return rejected(state, command, "empty-scratchpad");
+    const win = state.windows[id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (!win.scratchpad) return rejected(state, command, "not-scratchpad");
+    let next = { ...state, lastScratchpad: id };
+    if (win.workspace === null) {
+      // Show: float it, centered, on the active workspace.
+      const ws = next.activeWorkspace;
+      next = setWindow(next, id, { workspace: ws, placement: { ...win.placement, x: "center", y: "center" } });
+      next = setWorkspace(next, ws, { windows: [...next.workspaces[ws].windows, id] });
+      const shown = result(next, [{ type: "scratchpad/shown", id }], [RENDER]);
+      return merge(shown, applyFocus(next, id));
+    }
+    // Hide: wherever it currently is.
+    const ws = win.workspace;
+    next = setWorkspace(next, ws, { windows: without(next.workspaces[ws].windows, id) });
+    next = bspDrop(next, ws, id);
+    next = setWindow(next, id, { workspace: null });
+    const wasHidden = result(next, [{ type: "scratchpad/hidden", id }], [RENDER]);
+    return merge(wasHidden, refocus(next));
+  },
+
+  /**
+   * EWMH-style sticky: visible on every workspace, keeping its stacking.
+   * Only the exception (`sticky: true`) is stored.
+   */
+  "window/set-sticky"(state, command) {
+    const { id, sticky } = command;
+    const win = state.windows[id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (typeof sticky !== "boolean") return rejected(state, command, "invalid-sticky");
+    if (Boolean(win.sticky) === sticky) return result(state);
+    let next;
+    if (sticky) {
+      next = setWindow(state, id, { sticky: true });
+    } else {
+      const { sticky: _sticky, ...rest } = win;
+      next = { ...state, windows: { ...state.windows, [id]: rest } };
+    }
+    const changed = result(next, [{ type: "window/sticky-changed", id, sticky }], [RENDER]);
+    return merge(changed, refocus(next));
   },
 
   "workspace/create"(state, command) {
