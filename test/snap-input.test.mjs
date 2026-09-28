@@ -5,13 +5,13 @@ import { createDomRenderer, attachInput } from "../src/browser/index.mjs";
 import { createFakeDocument } from "./helpers/fake-dom.mjs";
 
 /** A single 600×400 stage; windows are floating and set up individually per test. */
-const setup = ({ config, stageRect = { left: 0, top: 0, width: 600, height: 400 } } = {}) => {
+const setup = ({ config, state, stageRect = { left: 0, top: 0, width: 600, height: 400 } } = {}) => {
   const doc = createFakeDocument();
   const root = doc.createElement("div");
   root.rect = stageRect;
   doc.body.append(root);
   const renderer = createDomRenderer({ root, document: doc, anchorFallback: false });
-  const wm = createWindowManager({ state: createState({ config }), renderer, history: true });
+  const wm = createWindowManager({ state: state ?? createState({ config }), renderer, history: true });
   const commands = [];
   const dispatch = (command) => {
     commands.push(command);
@@ -237,5 +237,69 @@ describe("magnetism: floating move/resize snaps to other windows' edges and the 
     t.move(142, 50);
     assert.equal(t.wm.state.windows.b.placement.width, 192, "no snap: the raw resize stands");
     t.up(142, 50);
+  });
+
+  test("a sticky window on another workspace is still visible here, and magnetism snaps onto it", () => {
+    // isVisible/visibleWindows (state/queries.mjs) treat a sticky window on another
+    // workspace as visible (rendered) on the active one — magnetism should be
+    // consistent with that, not re-filter candidates by `win.workspace`.
+    const t = setup({ state: createState({ workspaces: ["main", "other"] }) });
+    t.wm.create({ id: "anchor", workspace: "other", mode: "floating", placement: { x: 0, y: 0, width: 150, height: 150 } });
+    t.wm.dispatch({ type: "window/set-sticky", id: "anchor", sticky: true });
+    t.wm.create({ id: "b", workspace: "main", mode: "floating", placement: { x: 200, y: 170, width: 60, height: 40 } });
+    const handle = t.handleFor("b");
+    t.down(handle, 300, 200);
+    t.move(254, 200); // raw target x=154, 4px from the sticky anchor's right edge at 150
+    assert.equal(t.wm.state.windows.b.placement.x, 150, "snapped onto the sticky window's edge although it lives on 'other'");
+    t.up(254, 200);
+  });
+});
+
+describe("config.snap missing or partial on a loaded state (no migration backfills it)", () => {
+  // config.snap entered at the current STATE_VERSION with no migration step, so a
+  // pre-existing version-1 state (saved by main or another branch before this feature,
+  // then round-tripped through migrate()/JSON) can have config.snap entirely or
+  // partially absent. attachInput must still work: it falls back to DEFAULT_CONFIG.snap
+  // per field (see snapConfigOf in src/browser/input.mjs).
+  const stateWithoutSnap = () => {
+    const state = createState();
+    delete state.config.snap;
+    return state;
+  };
+
+  test("state.config.snap entirely missing: edge preview still uses the default threshold/zones", () => {
+    const t = setup({ state: stateWithoutSnap() });
+    assert.equal("snap" in t.wm.state.config, false, "sanity: config.snap really is absent");
+    t.wm.create({ id: "b", mode: "floating", placement: { x: 150, y: 150, width: 80, height: 60 } });
+    const handle = t.handleFor("b");
+    t.down(handle, 190, 160);
+    t.move(230, 15); // near the top edge, within the default 16px threshold
+    assert.equal(t.zoneEl().getAttribute("data-zone"), "maximize");
+    t.up(230, 15);
+    assert.deepEqual(t.wm.state.windows.b.placement, { x: 0, y: 0, width: 600, height: 400 });
+  });
+
+  test("state.config.snap entirely missing: magnetism still uses the default magnet distance", () => {
+    const t = setup({ state: stateWithoutSnap() });
+    t.wm.create({ id: "anchor", mode: "floating", placement: { x: 0, y: 0, width: 150, height: 150 } });
+    t.wm.create({ id: "b", mode: "floating", placement: { x: 200, y: 170, width: 60, height: 40 } });
+    const handle = t.handleFor("b");
+    t.down(handle, 300, 200);
+    t.move(254, 200); // raw target x=154, 4px from the anchor's right edge: within the default 8px magnet
+    assert.equal(t.wm.state.windows.b.placement.x, 150, "snapped using the default magnet, even with no config.snap at all");
+    t.up(254, 200);
+  });
+
+  test("state.config.snap partially present: an omitted field (magnet) still gets its default", () => {
+    const state = createState();
+    state.config.snap = { edges: false }; // as if only `edges` had been explicitly saved
+    const t = setup({ state });
+    t.wm.create({ id: "anchor", mode: "floating", placement: { x: 0, y: 0, width: 150, height: 150 } });
+    t.wm.create({ id: "b", mode: "floating", placement: { x: 200, y: 170, width: 60, height: 40 } });
+    const handle = t.handleFor("b");
+    t.down(handle, 300, 200);
+    t.move(254, 200);
+    assert.equal(t.wm.state.windows.b.placement.x, 150, "magnet still defaults to 8 even though only `edges` was set");
+    t.up(254, 200);
   });
 });

@@ -288,6 +288,7 @@
         focusable, modalTarget, blockedWindows, stackingOrder, paintOrder, inTiledBase, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
         scratchpadWindows, isScratchpadHidden, stickyWindows,
         urgentWindows,
+        DEFAULT_CONFIG,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
@@ -648,7 +649,12 @@
         $("#drag-tile").value = drag.toTiled;
         $("#drag-cross").checked = drag.crossWorkspace;
         $("#drag-follow").checked = drag.follow;
-        const snap = state.config.snap;
+        // config.snap entered at the current STATE_VERSION with no migration step (to
+        // avoid clashing with other in-flight feature branches), so a state saved
+        // before this feature — and merely round-tripped through migrate() — can have
+        // it entirely missing or partially missing; fall back to DEFAULT_CONFIG.snap
+        // per-field, same as src/browser/input.mjs's snapConfigOf.
+        const snap = { ...DEFAULT_CONFIG.snap, ...state.config.snap };
         $("#snap-edges-mode").value = String(snap.edges);
         $("#snap-zones-mode").value = snap.zones;
         $("#snap-threshold").value = snap.threshold;

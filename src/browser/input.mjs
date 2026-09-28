@@ -301,11 +301,16 @@ export const attachInput = (options) => {
   /** Effective `config.snap`, defaulting fields a state saved before this feature omits. */
   const snapConfigOf = (state) => ({ ...DEFAULT_CONFIG.snap, ...state.config.snap });
 
-  /** Rects (root-relative) of every visible window in the active workspace but `selfId`, plus the stage. */
+  /**
+   * Rects (root-relative) of every window visible on the active workspace but `selfId`,
+   * plus the stage. `isVisible` already treats a sticky window on another workspace as
+   * visible here (see state/queries.mjs) — it really is on-screen, magnetism should snap
+   * onto it too, so this doesn't re-filter by `win.workspace`.
+   */
   const otherRects = (state, selfId, geometry) => {
     const rects = [stageRect()];
     for (const win of Object.values(state.windows)) {
-      if (win.id === selfId || win.workspace !== state.activeWorkspace || !isVisible(state, win.id)) continue;
+      if (win.id === selfId || !isVisible(state, win.id)) continue;
       const r = win.mode === "floating" ? win.placement : geometry?.[win.id];
       if (r) rects.push(r);
     }
