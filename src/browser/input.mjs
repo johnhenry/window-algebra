@@ -33,12 +33,14 @@
  */
 import { createDrag, updateDrag, createResize, updateResize } from "../interaction/drag.mjs";
 import { dropTargetAt, zoneRect } from "../interaction/drop.mjs";
-import { isBlocked } from "../state/queries.mjs";
+import { snapZoneAt, snapZoneRect, magnetize, magnetizeResize } from "../interaction/snap.mjs";
+import { isBlocked, isVisible } from "../state/queries.mjs";
 import { update } from "../state/update.mjs";
 import { DROPS, dragMode, isDroppable, tiledOrder } from "../state/drops.mjs";
 import { derive, presentationContext } from "../state/derive.mjs";
 import { compile, SPLITTER_SIZE } from "../css/compile.mjs";
 import { bspNodeAt } from "../layouts/bsp.mjs";
+import { DEFAULT_CONFIG } from "../state/create.mjs";
 import { createDomRenderer } from "./dom.mjs";
 
 /** Elements that handle their own pointer input, even inside a drag handle. */
@@ -290,6 +292,26 @@ export const attachInput = (options) => {
     return { x: event.clientX - origin.left, y: event.clientY - origin.top };
   };
 
+  /** `root`'s own rect, root-relative — the "stage" snap zones are measured against. */
+  const stageRect = () => {
+    const r = root.getBoundingClientRect();
+    return { x: 0, y: 0, width: r.width, height: r.height };
+  };
+
+  /** Effective `config.snap`, defaulting fields a state saved before this feature omits. */
+  const snapConfigOf = (state) => ({ ...DEFAULT_CONFIG.snap, ...state.config.snap });
+
+  /** Rects (root-relative) of every visible window in the active workspace but `selfId`, plus the stage. */
+  const otherRects = (state, selfId, geometry) => {
+    const rects = [stageRect()];
+    for (const win of Object.values(state.windows)) {
+      if (win.id === selfId || win.workspace !== state.activeWorkspace || !isVisible(state, win.id)) continue;
+      const r = win.mode === "floating" ? win.placement : geometry?.[win.id];
+      if (r) rects.push(r);
+    }
+    return rects;
+  };
+
   /** The workspace target under the pointer, anywhere on the page. */
   const workspaceTargetAt = (event) => {
     const stack = doc.elementsFromPoint?.(event.clientX, event.clientY) ?? [];
@@ -530,6 +552,7 @@ export const attachInput = (options) => {
     if (!drop || !geometry[drop.target]) {
       zoneEl.style.setProperty("display", "none");
       zoneEl.removeAttribute("data-zone");
+      zoneEl.removeAttribute("data-target");
       return;
     }
     // A swap takes the whole target; an insert or split, the edge half it lands in.
@@ -538,6 +561,20 @@ export const attachInput = (options) => {
     zoneEl.setAttribute("data-op", drop.op);
     zoneEl.setAttribute("data-target", drop.target);
     setStyles(zoneEl, { display: "block", left: `${r.x}px`, top: `${r.y}px`, width: `${r.width}px`, height: `${r.height}px` });
+  };
+
+  /** The half/quarter/maximize preview for a floating window nearing a stage edge or corner. */
+  const showSnapZone = (visuals, rect, zone) => {
+    const { zoneEl } = visuals;
+    if (!rect) {
+      zoneEl.style.setProperty("display", "none");
+      zoneEl.removeAttribute("data-zone");
+      return;
+    }
+    zoneEl.setAttribute("data-zone", zone);
+    zoneEl.setAttribute("data-op", "snap");
+    zoneEl.removeAttribute("data-target");
+    setStyles(zoneEl, { display: "block", left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px` });
   };
 
   const showLine = (visuals, rect) => {
@@ -635,7 +672,11 @@ export const attachInput = (options) => {
     }
     if (session.kind === "floating") {
       const allowed = settings.toTiled === "always" || (settings.toTiled === "modifier" && held);
-      if (!allowed) return null;
+      const found = allowed ? dropTargetAt(state, session.geometry ?? {}, point, session.id, { drops, allowFloating: true }) : null;
+      if (found) return { type: "drop", key: `drop:${found.target}:${found.zone}`, drop: { id: session.id, ...found } };
+      const snapCfg = snapConfigOf(state);
+      const zone = snapZoneAt(stageRect(), point, snapCfg);
+      return zone ? { type: "snap", key: `snap:${zone}`, zone } : null;
     }
     const found = dropTargetAt(state, session.geometry ?? {}, point, session.id, { drops, allowFloating: session.kind === "floating" });
     return found ? { type: "drop", key: `drop:${found.target}:${found.zone}`, drop: { id: session.id, ...found } } : null;
@@ -645,6 +686,7 @@ export const attachInput = (options) => {
     if (!intent) return "No drop target.";
     if (intent.type === "workspace") return `Release to move to workspace ${intent.workspace}.`;
     if (intent.type === "detach") return "Release to float.";
+    if (intent.type === "snap") return `Release to snap ${intent.zone}.`;
     const { op, target, zone } = intent.drop;
     const t = titleOf(state, target);
     return op === "swap" ? `Release to swap with ${t}.` : op === "split" ? `Release to place ${zone} of ${t}.` : `Release to move ${op} ${t}.`;
@@ -668,7 +710,7 @@ export const attachInput = (options) => {
     let next = null;
     if (intent?.type === "drop") next = dryRun({ type: "window/drop", id: intent.drop.id, target: intent.drop.target, zone: intent.drop.zone }, state);
     else if (intent?.type === "detach") next = dryRun(intent.command, state);
-    else if (intent?.type === "workspace") next = state;
+    else if (intent?.type === "workspace" || intent?.type === "snap") next = state;
     const valid = intent && next ? intent : null;
     const changed = (valid?.key ?? null) !== (session.intent?.key ?? null);
     session.key = key;
@@ -678,7 +720,8 @@ export const attachInput = (options) => {
     if (visuals) {
       const ghostState = (valid?.type === "drop" && !valid.line) || valid?.type === "detach" ? next : null;
       showWorkspaceTarget(visuals, valid?.type === "workspace" ? valid.element : null);
-      showZone(visuals, session.geometry ?? {}, valid?.type === "drop" && !valid.line ? valid.drop : null);
+      if (valid?.type === "snap") showSnapZone(visuals, snapZoneRect(stageRect(), valid.zone), valid.zone);
+      else showZone(visuals, session.geometry ?? {}, valid?.type === "drop" && !valid.line ? valid.drop : null);
       showLine(visuals, valid?.line);
       if (!dragPreview) showGhost(visuals, state, ghostState, session.id);
       else if (changed || valid?.type === "detach") {
@@ -706,6 +749,10 @@ export const attachInput = (options) => {
       return [{ type: "window/move-to-workspace", id: session.id, workspace: intent.workspace, ...(state.config.drag?.follow ? { follow: true } : {}) }];
     }
     if (intent.type === "detach") return [intent.command];
+    if (intent.type === "snap") {
+      const rect = snapZoneRect(stageRect(), intent.zone);
+      return [{ type: "window/resize", id: session.id, x: rect.x, y: rect.y, width: rect.width, height: rect.height }];
+    }
     const { id, target, zone } = intent.drop;
     const command = { type: "window/drop", id, target, zone };
     const ghostGeometry = session.visuals?.ghostGeometry;
@@ -988,15 +1035,27 @@ export const attachInput = (options) => {
       if (gesture.pointerId !== undefined && event.pointerId !== undefined && event.pointerId !== gesture.pointerId) return;
       const pointer = { x: event.clientX, y: event.clientY };
       if (gesture.kind === "floating") {
-        dispatch({ type: "window/move", id: gesture.id, ...updateDrag(gesture.op, pointer, { snap }), gesture: gesture.token });
+        // Other windows' rects do not change while a floating window moves: measure once.
+        gesture.geometry ??= measureViews();
+        const state = getState();
+        const win = state.windows[gesture.id];
+        const raw = updateDrag(gesture.op, pointer, { snap });
+        const snapCfg = snapConfigOf(state);
+        const moved = { ...raw, width: win?.placement.width ?? 0, height: win?.placement.height ?? 0 };
+        const magnetized = snapCfg.magnet > 0 ? magnetize(moved, otherRects(state, gesture.id, gesture.geometry), snapCfg) : moved;
+        dispatch({ type: "window/move", id: gesture.id, x: magnetized.x, y: magnetized.y, gesture: gesture.token });
         if (!gesture.moved) {
           gesture.moved = true;
-          gesture.geometry = measureViews(); // tiled rects do not change while a floating window moves
           listenKeys(true);
         }
         track(gesture, event);
       } else {
-        dispatch({ type: "window/resize", id: gesture.id, ...updateResize(gesture.op, pointer), gesture: gesture.token });
+        const state = getState();
+        gesture.geometry ??= measureViews();
+        const raw = updateResize(gesture.op, pointer);
+        const snapCfg = snapConfigOf(state);
+        const resized = snapCfg.magnet > 0 ? magnetizeResize(raw, otherRects(state, gesture.id, gesture.geometry), gesture.op.edge, snapCfg) : raw;
+        dispatch({ type: "window/resize", id: gesture.id, ...resized, gesture: gesture.token });
       }
       return;
     }

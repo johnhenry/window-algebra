@@ -62,6 +62,24 @@ export const DEFAULT_CONFIG = Object.freeze({
   urgency: Object.freeze({
     clearOnFocus: true,
   }),
+  /**
+   * Snap zones and magnetism for floating windows (Windows Snap / macOS
+   * tiling / WM magnetism). See `interaction/snap.mjs` for the pure helpers
+   * this configures.
+   * - edges: while dragging a floating window, approaching a stage edge or
+   *   corner previews and (on release) applies a half/quarter/maximize
+   *   placement.
+   * - threshold: how close (px) to a stage edge/corner counts as "near".
+   * - magnet: floating move/resize snaps edges to other visible windows'
+   *   edges and the stage within this many px (0 disables magnetism).
+   * - zones: "halves-quarters" (default) | "halves" | "quarters" | "off".
+   */
+  snap: Object.freeze({
+    edges: true,
+    threshold: 16,
+    magnet: 8,
+    zones: "halves-quarters",
+  }),
 });
 
 const emptyStack = () => Object.fromEntries(LAYERS.map((layer) => [layer, []]));
@@ -92,6 +110,7 @@ export const createState = ({ workspaces = ["main"], layout, config = {} } = {})
       ...config,
       drag: { ...DEFAULT_CONFIG.drag, ...config.drag },
       urgency: { ...DEFAULT_CONFIG.urgency, ...config.urgency },
+      snap: { ...DEFAULT_CONFIG.snap, ...config.snap },
     },
     windows: {},
     workspaces: Object.fromEntries(list.map((ws) => [ws.id, ws])),

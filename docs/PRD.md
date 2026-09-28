@@ -85,6 +85,7 @@ One command covers every case: `layout/resize-split { workspace?, path, index?, 
 | Versioning | Every state carries `STATE_VERSION`; `migrate(state)` upgrades older (or unversioned) states through a `MIGRATIONS` registry and refuses states from a newer version. `wm.load()` and `replay()` both migrate their input. |
 | Size hints | ICCCM `WM_NORMAL_HINTS`-style hints beyond min/max: `aspectRatio` (exact or `{ min, max }`) and `widthIncrement`/`heightIncrement` with `baseWidth`/`baseHeight` (terminal-style cells). Honoured by `constrainSize` for floating move/resize and `window/resize`; tiled windows get CSS `aspect-ratio` for an exact ratio, increments are advisory. |
 | Split sizing | Persistent, resizable splits for columns/rows/master-stack/BSP/spiral (see "Split sizing" above): `layout/resize-split`, rendered `[data-wm-splitter]` handles, pointer drag and arrow-key resizing, one undo step per gesture, min/max constraints respected best-effort. |
+| Snap zones | Windows-Snap/macOS-tiling-style edge/corner preview for floating windows (`config.snap.edges`/`threshold`/`zones`, pure `snapZoneAt`/`snapZoneRect`), applied on release as one `window/resize` (one undo step); magnetism (`config.snap.magnet`, pure `magnetize`/`magnetizeResize`) snaps floating move/resize to other visible windows' edges and the stage. Configurable, disable-able, constraint-respecting; does not interfere with tiled drag-and-drop or drag-to-tile. |
 
 ## Open questions
 

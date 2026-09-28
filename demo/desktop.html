@@ -182,6 +182,20 @@
           <p class="note drag-note" aria-hidden="true">announced: <span id="announced">—</span></p>
         </section>
         <section>
+          <h2>Snap zones &amp; magnetism <span class="spacer"></span><span class="chip" id="snap-chip">config.snap</span></h2>
+          <div class="drag-settings" id="snap-settings">
+            <label title="config.snap.edges: approaching a stage edge/corner while dragging a floating window previews and applies a half/quarter/maximize placement">edges
+              <select id="snap-edges-mode"><option value="true">on</option><option value="false">off</option></select></label>
+            <label title="config.snap.zones: which placements the edge/corner preview offers">zones
+              <select id="snap-zones-mode"><option value="halves-quarters">halves + quarters</option><option value="halves">halves only</option><option value="quarters">quarters only</option><option value="off">off</option></select></label>
+            <label title="config.snap.threshold: how close (px) to a stage edge/corner counts as &quot;near&quot;">threshold <output id="snap-threshold-out"></output>
+              <input type="range" id="snap-threshold" min="0" max="64" step="1" /></label>
+            <label title="config.snap.magnet: floating move/resize snaps to other visible windows' edges and the stage within this many px (0 disables it)">magnet <output id="snap-magnet-out"></output>
+              <input type="range" id="snap-magnet" min="0" max="32" step="1" /></label>
+          </div>
+          <p class="note drag-note">Drag a floating window's title bar near the stage's edges or corners: the overlay previews a half, quarter or maximize placement; release to apply it (one undo step). Away from the edges, moving or resizing a floating window snaps its edges onto other windows' edges and the stage within the magnet distance.</p>
+        </section>
+        <section>
           <h2>Focus <span class="spacer"></span><span class="chip" id="focus-chip">—</span></h2>
           <dl class="kv" id="focus"></dl>
         </section>
@@ -634,6 +648,13 @@
         $("#drag-tile").value = drag.toTiled;
         $("#drag-cross").checked = drag.crossWorkspace;
         $("#drag-follow").checked = drag.follow;
+        const snap = state.config.snap;
+        $("#snap-edges-mode").value = String(snap.edges);
+        $("#snap-zones-mode").value = snap.zones;
+        $("#snap-threshold").value = snap.threshold;
+        $("#snap-threshold-out").textContent = `${snap.threshold}px`;
+        $("#snap-magnet").value = snap.magnet;
+        $("#snap-magnet-out").textContent = `${snap.magnet}px`;
         const focused = focusedWindow(state);
         $("#pin").textContent = focused?.draggable === false ? "Unpin focused" : "Pin focused";
         $("#drag-chip").textContent = `effective: ${layout.drag ?? drag.tiled}`;
@@ -647,6 +668,11 @@
       $("#drag-tile").onchange = (event) => setDrag({ toTiled: event.target.value });
       $("#drag-cross").onchange = (event) => setDrag({ crossWorkspace: event.target.checked });
       $("#drag-follow").onchange = (event) => setDrag({ follow: event.target.checked });
+      const setSnap = (patch) => wm.dispatch({ type: "config/set", snap: patch });
+      $("#snap-edges-mode").onchange = (event) => setSnap({ edges: event.target.value === "true" });
+      $("#snap-zones-mode").onchange = (event) => setSnap({ zones: event.target.value });
+      $("#snap-threshold").oninput = (event) => setSnap({ threshold: Number(event.target.value) });
+      $("#snap-magnet").oninput = (event) => setSnap({ magnet: Number(event.target.value) });
       $("#drag-layout").onchange = (event) => {
         const { drag: _drag, ...spec } = activeWorkspace(S()).layout;
         wm.setLayout(event.target.value ? { ...spec, drag: event.target.value } : spec);

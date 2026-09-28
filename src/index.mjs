@@ -50,6 +50,7 @@ export * from "./layouts/index.mjs";
 export * as geometry from "./geometry/rect.mjs";
 export { createDrag, updateDrag, createResize, updateResize, updateRatio, EDGES } from "./interaction/drag.mjs";
 export { dropZoneAt, dropTargetAt, previewDrop, zoneRect } from "./interaction/drop.mjs";
+export { snapZoneAt, snapZoneRect, magnetize, magnetizeResize, SNAP_ZONES } from "./interaction/snap.mjs";
 
 // Logical state: update / derive
 export { createState, createWorkspace, createWindowRecord, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, STATE_VERSION } from "./state/create.mjs";

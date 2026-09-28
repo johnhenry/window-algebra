@@ -359,6 +359,22 @@ describe("urgency hint", () => {
     );
   });
 
+  test("config.snap defaults and merges one level deep, like drag and urgency", () => {
+    assert.deepEqual(createState().config.snap, { edges: true, threshold: 16, magnet: 8, zones: "halves-quarters" });
+    const out = update(createState(), { type: "config/set", snap: { magnet: 0 } });
+    assert.deepEqual(out.state.config.snap, { edges: true, threshold: 16, magnet: 0, zones: "halves-quarters" });
+  });
+
+  test("invalid config.snap is rejected", () => {
+    const reason = (patch) => update(createState(), { type: "config/set", snap: patch }).events[0].reason;
+    assert.equal(update(createState(), { type: "config/set", snap: "nope" }).events[0].reason, "invalid-config");
+    assert.equal(reason({ edges: "nope" }), "invalid-config");
+    assert.equal(reason({ threshold: -1 }), "invalid-config");
+    assert.equal(reason({ magnet: -1 }), "invalid-config");
+    assert.equal(reason({ zones: "nope" }), "invalid-config");
+    assert.equal(reason({ zones: "halves" }), undefined, "a valid zones value is accepted");
+  });
+
   test("urgency survives serialization and replay", () => {
     let state = withWindows(["a", "b"]);
     state = reduce(state, { type: "window/set-urgent", id: "b" });
