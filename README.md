@@ -305,6 +305,27 @@ Toggle between two full layouts (rather than decorating one) with `layout/toggle
 
 `compile(tree, presentationContext(state))` returns a render tree of `{ tag, key, attrs, style, children }`. Views are `container-type: size`, except on an axis sized by its content (`height: "content"`), where they fall back to `inline-size` (or no containment) so the content can size them. `toHTML()` serializes it for server rendering or snapshots. View elements are keyed `view:<id>`, so a layout change moves elements instead of recreating them. When a view appears more than once, the extra copies become non-primary projections.
 
+`compile` also carries every window's role/ARIA attributes (see *Accessibility*, below): `role="group"` and `aria-label` for ordinary windows, `role="dialog"` (+ `aria-modal="true"` when the window is modal) for `dialog`/`sheet` roles, and `role="tabpanel"` + `aria-labelledby` for a tabs stack's children, cross-referenced with the tab strip's `role="tab"` buttons (`id`/`aria-controls`, via `tabId`/`panelId`).
+
+## Accessibility
+
+Accessibility basics, in the spirit of VS Code/Dockview: `compile` and `attachInput` add the roles, ARIA attributes and keyboard behavior below with no extra configuration (besides opting into `attachInput`'s `announce` and `keyboard` options); applications still own their own content's accessibility.
+
+**Roles and ARIA** (`compile`):
+
+- Every window view is a labelled region: `role="group"` and `aria-label` set to its title.
+- A `dialog`/`sheet` window is `role="dialog"`; when it is also modal (`win.modal`), it additionally gets `aria-modal="true"`. A non-modal dialog (a popover-style panel) is `role="dialog"` without `aria-modal`.
+- A tabs stack's tab strip is `role="tablist"`; each tab button is `role="tab"` with `aria-selected` and `aria-controls` pointing at its panel's `id`; the corresponding window view becomes `role="tabpanel"` with `aria-labelledby` pointing back at the tab (`tabId(id)`/`panelId(id)` compute the pair).
+- A splitter is `role="separator"` with `aria-orientation`/`aria-valuenow`/`aria-valuemin`/`aria-valuemax` (see *Drag and drop in layouts*). A window blocked by an open modal descendant gets `aria-disabled="true"`; its contents are made `inert` by the DOM renderer (see *Browser adapters*) — hidden from assistive tech and unfocusable, while the window itself stays hit-testable so a click on it is redirected rather than falling through.
+
+**Keyboard** (`attachInput`):
+
+- `F6` / `Shift+F6` cycle WM focus forward/backward between focusable windows (`focus/next` / `focus/previous`), the desktop convention for moving between windows without a mouse. Enabled whenever the `keyboard` option is truthy (`true`, or a custom move-key map — see *Drag and drop in layouts*), alongside whatever move keys it configures.
+- **Focus trap**: while the WM-focused window is modal (`win.modal`), `Tab` is trapped inside its element — past the last focusable descendant it wraps to the first, and `Shift+Tab` past the first wraps to the last. This is always on (it needs no option): a modal window's blocked ancestor is already `inert`, so the trap only has to keep focus from drifting to unrelated windows or the page chrome around `root`.
+- **Escape** for transients (popovers, menus, tooltips, non-modal sheets) is left to the application: `attachInput` only defines Escape during an active pointer gesture (cancel a drag/resize/splitter-drag — see *Drag and drop in layouts*). Bind `Escape → wm.close(id)` (or `wm.restore(id)` for a fullscreen window) yourself for the focused window's transient roles, as `demo/desktop.html` does.
+- **Live announcements** of focus changes and window open/close piggyback on the existing `announce` option (`true` for a built-in `aria-live="polite"` region, an element, or a function) — pass `subscribe` (or use a manager's `wm.subscribe`) so `attachInput` narrates `window/focused`, `window/created` and `window/closed` events, in addition to the drag/drop events it already announces.
+- **Reduced motion**: the library itself declares no animation (`BASE_CSS` is motion-free), so there is nothing to gate there; example chrome that does animate (`demo/shared/style.css`) wraps every transition in `@media (prefers-reduced-motion: no-preference)`, off by default for anyone who set the OS preference.
+
 ## Browser adapters
 
 - `createDomRenderer({ root, surfaceFor })` reconciles the keyed DOM, mounts and unmounts surfaces, measures realized geometry with `measure()`, and positions anchors with JS when CSS anchor positioning isn't supported (force it with `anchorFallback: true`; `reposition()` re-runs it). Reconciliation is top-down and moves views with `moveBefore()` where the browser has it, so an iframe, a playing animation or a focused input survives a layout change.

@@ -163,4 +163,6 @@ export const presentationContext = (state) => ({
   scratchpad: Object.values(state.windows).filter((win) => win.scratchpad).map((win) => win.id),
   /** Ids currently marked urgent (window/set-urgent); see focus/urgent. */
   urgent: urgentWindows(state),
+  /** Ids of windows that are themselves modal dialogs (win.modal); see the ARIA `aria-modal`. */
+  modal: Object.values(state.windows).filter((win) => win.modal).map((win) => win.id),
 });

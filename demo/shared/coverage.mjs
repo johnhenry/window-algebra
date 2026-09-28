@@ -145,6 +145,14 @@ export const CHECKLIST = [
     ["updateRatio", "updateRatio (divider drag)"],
     ["size-hints", "constrainSize honours aspectRatio, widthIncrement/heightIncrement, baseWidth/baseHeight; sizeToCells"],
   ]),
+  ...items("Accessibility", [
+    ["aria-window", "windows as labelled regions: role=group, aria-label = title"],
+    ["aria-dialog", "role=dialog for dialog/sheet windows, aria-modal=true when modal"],
+    ["aria-tabpanel", "tab strip role=tablist/tab (aria-selected, aria-controls) ↔ panel role=tabpanel (aria-labelledby); tabId/panelId"],
+    ["f6-cycle", "F6 / Shift+F6 cycles WM focus between windows (attachInput keyboard option)"],
+    ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
+    ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
+  ]),
 ];
 
 export const PAGES = [
@@ -201,6 +209,7 @@ export const PAGES = [
       "window/to-scratchpad", "scratchpad/toggle", "window/set-sticky", "scratchpad", "sticky", "not-scratchpad", "empty-scratchpad", "invalid-sticky",
       "window/set-urgent", "focus/urgent", "urgency", "window/urgent-changed", "invalid-urgent", "no-urgent-window",
       "layout/resize-split", "split-sizing", "splitter-render", "splitter-drag", "splitter-keyboard",
+      "aria-window", "aria-dialog", "aria-tabpanel", "f6-cycle", "focus-trap", "reduced-motion",
     ],
   },
   {

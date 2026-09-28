@@ -186,6 +186,10 @@ const placeStyle = (options, parentKind) => {
   return style;
 };
 
+/** DOM ids (page-scoped, like `anchorName`) tying a tab button to its panel — see ARIA "tab" pattern. */
+export const tabId = (id) => `wm-tab-${String(id).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+export const panelId = (id) => `wm-panel-${String(id).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
 const AREA_BY_SIDE = {
   bottom: { start: "bottom span-right", center: "bottom", end: "bottom span-left" },
   top: { start: "top span-right", center: "top", end: "top span-left" },
@@ -276,7 +280,7 @@ const splitterAfter = (target, index, elementKey) => {
  * Compile a layout tree into a render tree.
  *
  * @param {object} tree layout-algebra tree
- * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, roles, urgent }
+ * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, roles, urgent, modal }
  * @param {object} [options]
  * @param {string} [options.key] key of the root element
  */
@@ -291,6 +295,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
 
   const blocked = new Set(context.blocked ?? []);
   const urgent = new Set(context.urgent ?? []);
+  const modal = new Set(context.modal ?? []);
   const seen = new Map();
 
   const visit = (node, parent, index, elementKey) => {
@@ -369,8 +374,24 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       if (blocked.has(id)) Object.assign(attrs, { "data-wm-blocked": "", "aria-disabled": "true" });
       if (urgent.has(id)) attrs["data-wm-urgent"] = "";
       if (context.modes?.[id]) attrs["data-mode"] = context.modes[id];
-      if (context.roles?.[id]) attrs["data-role"] = context.roles[id];
-      if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
+      const role = context.roles?.[id];
+      if (role) attrs["data-role"] = role;
+      // ARIA: a tab's panel is a "tabpanel" labelled by its tab, not a labelled
+      // region of its own; a dialog/sheet is a "dialog" (aria-modal when the
+      // window is modal); everything else is a labelled group.
+      const isTabPanel = parentKind === "stack" && parent.options.chrome === "tabs";
+      if (isTabPanel) {
+        attrs.id = panelId(id);
+        attrs.role = "tabpanel";
+        attrs["aria-labelledby"] = tabId(id);
+      } else if (role === "dialog" || role === "sheet") {
+        attrs.role = "dialog";
+        if (modal.has(id)) attrs["aria-modal"] = "true";
+        if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
+      } else {
+        attrs.role = "group";
+        if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
+      }
       if (context.pinned?.includes(id)) attrs["data-wm-draggable"] = "false";
       if (context.sticky?.includes(id)) attrs["data-wm-sticky"] = "";
       return {
@@ -408,8 +429,10 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
               attrs: {
                 type: "button",
                 role: "tab",
+                id: tabId(id),
                 "data-wm-tab": id,
                 "aria-selected": String(id === target.options.active),
+                "aria-controls": panelId(id),
                 ...(urgent.has(id) ? { "data-wm-urgent": "" } : {}),
               },
               style: {},
