@@ -66,6 +66,7 @@ These candidates were considered and rejected (or left as derived helpers):
 | Input | Pure drag, resize, and ratio math, plus a pointer adapter with a markup contract. |
 | Drag and drop | `window/drop` edits tiled structure (order or BSP tree) per layout through drop interpreters; `config.drag` modes, edge zone, preview, and a `tooSmall` check; pinned windows; keyboard equivalents; a ghost preview rendered by the same derive → compile pipeline. Tiled ↔ floating (`window/detach`, floating drops), drops onto workspace targets (with `follow`), tab-strip reordering, children that travel with their parent, pinned-window affordances, touch long-press, aria-live announcements, and opt-in keyboard moving. |
 | History | Undo/redo of window management, a command log, replay, and serialize/load. A gesture (commands sharing a `gesture` token) is one undo step and one log entry. |
+| Versioning | Every state carries `STATE_VERSION`; `migrate(state)` upgrades older (or unversioned) states through a `MIGRATIONS` registry and refuses states from a newer version. `wm.load()` and `replay()` both migrate their input. |
 
 ## Open questions
 

@@ -10,6 +10,12 @@ export const ROLES = Object.freeze(["window", "dialog", "sheet", "popover", "men
 
 export const STATUSES = Object.freeze(["normal", "minimized", "maximized", "fullscreen"]);
 
+/**
+ * The current state shape's version. Bump this and add a step to `MIGRATIONS`
+ * (see `state/migrate.mjs`) whenever a change to the state shape needs one.
+ */
+export const STATE_VERSION = 1;
+
 export const DEFAULT_CONFIG = Object.freeze({
   /** Focusing a window also raises it within its layer. */
   focusRaises: true,
@@ -68,7 +74,7 @@ export const createState = ({ workspaces = ["main"], layout, config = {} } = {})
   );
   if (list.length === 0) throw new TypeError("createState(): at least one workspace is required.");
   return {
-    version: 1,
+    version: STATE_VERSION,
     config: { ...DEFAULT_CONFIG, ...config, drag: { ...DEFAULT_CONFIG.drag, ...config.drag } },
     windows: {},
     workspaces: Object.fromEntries(list.map((ws) => [ws.id, ws])),

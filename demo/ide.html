@@ -109,7 +109,7 @@
 
     <script type="module">
       import {
-        createWindowManager, createState, update, derive, grid, row, column, stack, place, size, view, masterStack, visibleWindows, windowsIn, updateRatio,
+        createWindowManager, createState, update, derive, grid, row, column, stack, place, size, view, masterStack, visibleWindows, windowsIn, updateRatio, migrate,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, htmlSurface, lazySurface, iframeSurface, canvasSurface, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, storage, currentTheme, isTyping } from "./shared/kit.mjs";
@@ -426,7 +426,14 @@
       };
       let restored = null;
       try {
-        restored = saved?.state ? JSON.parse(saved.state) : null;
+        const parsed = saved?.state ? JSON.parse(saved.state) : null;
+        // Older saved sessions (pre-dating `version`, or missing later fields
+        // such as config.drag) are brought up to the current state shape here.
+        // A session from a *newer* build (a future STATE_VERSION) is refused
+        // rather than guessed at, and falls back to a fresh session below.
+        const migrated = parsed ? migrate(parsed) : { ok: true, state: null };
+        if (parsed && !migrated.ok) console.warn(`Saved IDE session could not be loaded (${migrated.reason}); starting fresh.`);
+        restored = migrated.ok ? migrated.state : null;
         // Transient windows are not worth restoring.
         if (restored) for (const [id, w] of Object.entries(restored.windows)) if (["palette", "ctx", "toast"].includes(w.data?.slot)) restored = update(restored, { type: "window/close", id }).state;
         // Sessions saved before the drag override existed get it now.
