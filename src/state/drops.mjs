@@ -17,6 +17,7 @@
  */
 import { bspIds, bspPlace, bspReconcile, bspRemove, bspSwap, bspInsert, bspParentDirection } from "../layouts/bsp.mjs";
 import { inTiledBase, isBlocked } from "./queries.mjs";
+import { applyModifiersToOps } from "./modifiers.mjs";
 
 export const DROP_ZONES = Object.freeze(["center", "left", "right", "top", "bottom"]);
 export const DRAG_MODES = Object.freeze(["swap-or-insert", "swap", "insert", "off"]);
@@ -120,9 +121,18 @@ export const DROPS = Object.freeze({
   default: orderDrops(() => "both"),
 });
 
-/** The interpreter for a layout spec (function specs and unknown types use `default`). */
-export const dropInterpreterFor = (drops, spec) =>
-  (spec && typeof spec === "object" && drops[spec.type]) || drops.default || DROPS.default;
+/**
+ * The interpreter for a layout spec (function specs and unknown types use
+ * `default`). `mirror`/`reflect-x`/`reflect-y` modifiers remap the zone→op
+ * map to match the axes they actually painted (see `applyModifiersToOps`);
+ * `apply` (BSP's tree edit, say) is untouched.
+ */
+export const dropInterpreterFor = (drops, spec) => {
+  const base = (spec && typeof spec === "object" && drops[spec.type]) || drops.default || DROPS.default;
+  const mods = spec && typeof spec === "object" ? spec.modifiers : undefined;
+  if (!Array.isArray(mods) || mods.length === 0) return base;
+  return { ...base, ops: (s, ids, target) => applyModifiersToOps(base.ops(s, ids, target), mods) };
+};
 
 /** Generic order edit. A dragged window missing from `ids` (floating) is inserted; its "swap" becomes "before". */
 export const reorder = (ids, id, target, op) => {

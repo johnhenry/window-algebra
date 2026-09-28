@@ -35,6 +35,7 @@ const coalesce = (commands, command) => {
  * @param {object} [options]
  * @param {object} [options.state] initial state (default: createState())
  * @param {object} [options.layouts] extra layout interpreters for derive
+ * @param {object} [options.modifiers] extra/override layout modifiers for derive (see `MODIFIERS`)
  * @param {object} [options.extensions] extra command handlers for update
  * @param {object} [options.drops] extra/override drop interpreters for window/drop, keyed by layout type
  * @param {{ commit(renderTree): void, measure?(): object }} [options.renderer]
@@ -51,6 +52,7 @@ const coalesce = (commands, command) => {
 export const createWindowManager = ({
   state: initial = createState(),
   layouts,
+  modifiers,
   extensions: extraHandlers,
   drops,
   renderer,
@@ -72,7 +74,7 @@ export const createWindowManager = ({
   const getState = () => history.present;
 
   const present = (state = getState()) => {
-    const tree = derive(state, { layouts });
+    const tree = derive(state, { layouts, modifiers });
     return { tree, render: compile(tree, presentationContext(state)) };
   };
 
@@ -90,11 +92,14 @@ export const createWindowManager = ({
    * refuses layout specs no interpreter can derive (otherwise every later
    * render would throw).
    */
+  const layoutIsUnknown = (layout) =>
+    Boolean(layout) && typeof layout !== "function" && typeof layout.type === "string" &&
+    !(layout.type in LAYOUTS) && !(layouts && layout.type in layouts);
+
   const unknownLayout = (command) => {
-    if (command?.type !== "layout/set" && command?.type !== "workspace/create") return false;
-    const layout = command.layout;
-    if (!layout || typeof layout === "function" || typeof layout.type !== "string") return false;
-    return !(layout.type in LAYOUTS) && !(layouts && layout.type in layouts);
+    if (command?.type === "layout/set" || command?.type === "workspace/create") return layoutIsUnknown(command.layout);
+    if (command?.type === "layout/toggle") return layoutIsUnknown(command.a) || layoutIsUnknown(command.b);
+    return false;
   };
 
   /** What a command would do, without doing it: no history, render, or notification. */
@@ -213,6 +218,8 @@ export const createWindowManager = ({
     activateWorkspace: command("workspace/activate"),
     setLayout: (layout, workspace) => dispatch({ type: "layout/set", layout, workspace }),
     setRatio: (ratio, options = {}) => dispatch({ ...options, type: "layout/set-ratio", ratio }),
+    /** xmonad `ToggleLayouts`: flip between two stored layouts (`a`/`b` optional after the first call). */
+    toggleLayout: (a, b, workspace) => dispatch({ type: "layout/toggle", a, b, workspace }),
     /** Replace `config.rules` wholesale. */
     setRules: (rules) => dispatch({ type: "rules/set", rules }),
 

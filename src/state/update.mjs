@@ -18,6 +18,7 @@ import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./q
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
 import { migrate } from "./migrate.mjs";
+import { validModifiers } from "./modifiers.mjs";
 
 const RENDER = Object.freeze({ type: "render" });
 
@@ -40,6 +41,18 @@ const setWorkspace = (state, id, patch) => ({
 const setLayout = (state, workspaceId, fn) => {
   const ws = state.workspaces[workspaceId];
   return setWorkspace(state, workspaceId, { layout: fn(ws.layout) });
+};
+
+/** A layout spec is a function, or an object with a string `type` and (optionally) a valid `modifiers` list. */
+const isValidLayoutSpec = (layout) =>
+  Boolean(layout) &&
+  (typeof layout === "function" || (typeof layout.type === "string" && (layout.modifiers === undefined || validModifiers(layout.modifiers))));
+
+/** Seed a BSP spec without a tree from the workspace's current tiled order. */
+const seedBspTree = (state, ws, layout) => {
+  if (layout.type !== "bsp" || layout.tree) return layout;
+  const tiled = ws.windows.filter((id) => isTiled(state.windows[id]));
+  return { ...layout, tree: tiled.reduce((tree, id) => bspInsert(tree, { id }), null) };
 };
 
 const raiseOne = (state, id) => {
@@ -564,19 +577,17 @@ const handlers = {
     return merge(result(next, [{ type: "workspace/removed", id, fallback }], [RENDER]), refocus(next));
   },
 
-  /** Replace a workspace's layout spec. A BSP spec without a tree is seeded from the current order. */
+  /**
+   * Replace a workspace's layout spec. A BSP spec without a tree is seeded
+   * from the current order. `layout.modifiers` (see `state/modifiers.mjs`),
+   * when present, must be a list of `{ type, ... }` objects.
+   */
   "layout/set"(state, command) {
     const wsId = command.workspace ?? state.activeWorkspace;
     const ws = state.workspaces[wsId];
     if (!ws) return rejected(state, command, "unknown-workspace");
-    if (!command.layout || (typeof command.layout.type !== "string" && typeof command.layout !== "function")) {
-      return rejected(state, command, "invalid-layout");
-    }
-    let layout = command.layout;
-    if (layout.type === "bsp" && !layout.tree) {
-      const tiled = ws.windows.filter((id) => isTiled(state.windows[id]));
-      layout = { ...layout, tree: tiled.reduce((tree, id) => bspInsert(tree, { id }), null) };
-    }
+    if (!isValidLayoutSpec(command.layout)) return rejected(state, command, "invalid-layout");
+    const layout = seedBspTree(state, ws, command.layout);
     return result(setWorkspace(state, wsId, { layout }), [{ type: "layout/changed", workspace: wsId, layout }], [RENDER]);
   },
 
@@ -604,6 +615,29 @@ const handlers = {
     if (!ws || ws.layout.type !== "bsp") return rejected(state, command, "not-bsp");
     const next = setLayout(state, wsId, (layout) => ({ ...layout, tree: bspRotate(layout.tree, command.id ?? state.focus.window) }));
     return result(next, [{ type: "layout/split-rotated", workspace: wsId }], [RENDER]);
+  },
+
+  /**
+   * xmonad-style `ToggleLayouts a b`: flip a workspace between two stored
+   * layout specs. `a`/`b` are optional after the first call — omitted, the
+   * pair last given (`workspace.toggleLayouts`) is reused, so a bound key can
+   * dispatch `{ type: "layout/toggle" }` with no arguments every time. The
+   * current layout is compared to `a` by `type` alone (ratios, BSP trees,
+   * modifiers, … may have drifted since); anything not `a` switches to `a`.
+   */
+  "layout/toggle"(state, command) {
+    const wsId = command.workspace ?? state.activeWorkspace;
+    const ws = state.workspaces[wsId];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    const stored = ws.toggleLayouts;
+    const a = command.a ?? stored?.[0];
+    const b = command.b ?? stored?.[1];
+    if (!isValidLayoutSpec(a) || !isValidLayoutSpec(b)) return rejected(state, command, "invalid-layout");
+    const sameType = (x, y) => (typeof x === "function" || typeof y === "function" ? x === y : x.type === y.type);
+    const target = sameType(ws.layout, a) ? b : a;
+    const layout = seedBspTree(state, ws, target);
+    const next = setWorkspace(state, wsId, { layout, toggleLayouts: [a, b] });
+    return result(next, [{ type: "layout/toggled", workspace: wsId, layout }], [RENDER]);
   },
 
   /** Shallow patch; plain-object values (drag, defaultPlacement) merge one level deep. */
