@@ -50,6 +50,11 @@ export class FakeElement {
     const siblings = this.parentNode.childNodes;
     return siblings[siblings.indexOf(this) + 1] ?? null;
   }
+  get previousSibling() {
+    if (!this.parentNode) return null;
+    const siblings = this.parentNode.childNodes;
+    return siblings[siblings.indexOf(this) - 1] ?? null;
+  }
   get children() {
     return this.childNodes.filter((node) => node.nodeType === 1);
   }

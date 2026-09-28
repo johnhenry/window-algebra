@@ -115,16 +115,53 @@ export const bspRotate = (tree, id) => {
   return { ...tree, first: bspRotate(tree.first, id), second: bspRotate(tree.second, id) };
 };
 
-/** Interpret a BSP tree as a layout-algebra tree. */
-export const bspToLayout = (tree) => {
+const isSplit = (node) => Boolean(node) && node.type === "split";
+
+/**
+ * The split node reached by walking `path` from the root, one step per
+ * character: "0" into `first`, "1" into `second`. `""` is the root split.
+ * General addressing for `layout/resize-split`, independent of where the
+ * leaves happen to fall (unlike `bspSetRatio`, which needs a leaf directly
+ * on one side). Returns `null` for a path that runs into a leaf or off the
+ * tree.
+ */
+export const bspNodeAt = (tree, path) => {
+  let node = tree;
+  for (const step of path) {
+    if (!isSplit(node)) return null;
+    node = step === "0" ? node.first : node.second;
+  }
+  return isSplit(node) ? node : null;
+};
+
+/** Set the ratio of the split at `path` (see `bspNodeAt`); other splits are untouched. */
+export const bspSetRatioAt = (tree, path, ratio) => {
+  const clamped = Math.min(0.95, Math.max(0.05, ratio));
+  const visit = (node, remaining) => {
+    if (!isSplit(node)) return node;
+    if (remaining === "") return { ...node, ratio: clamped };
+    const [step, ...rest] = remaining;
+    return step === "0" ? { ...node, first: visit(node.first, rest.join("")) } : { ...node, second: visit(node.second, rest.join("")) };
+  };
+  return visit(tree, path);
+};
+
+/**
+ * Interpret a BSP tree as a layout-algebra tree. Every split becomes a
+ * row/column carrying `resize: { path, weights }` (see docs/PRD.md, "Split
+ * sizing"), `path` built the same way `bspNodeAt`/`bspSetRatioAt` read it, so
+ * a splitter rendered at that node addresses it directly.
+ */
+export const bspToLayout = (tree, path = "") => {
   if (!tree) return row({});
   if (tree.type === "leaf") return view(tree.id);
   const make = tree.direction === "vertical" ? column : row;
   const r = Math.round(tree.ratio * 1000) / 1000;
+  const other = Math.round((1 - r) * 1000) / 1000;
   return make(
-    {},
-    size({ weight: r }, bspToLayout(tree.first)),
-    size({ weight: Math.round((1 - r) * 1000) / 1000 }, bspToLayout(tree.second)),
+    { resize: { path, weights: [r, other] } },
+    size({ weight: r }, bspToLayout(tree.first, `${path}0`)),
+    size({ weight: other }, bspToLayout(tree.second, `${path}1`)),
   );
 };
 

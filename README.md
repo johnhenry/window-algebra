@@ -128,7 +128,7 @@ Built-in commands (see `COMMANDS`):
 - **Drag and drop:** `window/drop`, `window/detach`, `window/swap-next`, `window/swap-previous`, `window/move-before`, `window/move-after`, `window/set-draggable` (and `window/move-to-workspace` takes `follow: true`)
 - **Scratchpad and sticky:** `window/to-scratchpad`, `scratchpad/toggle`, `window/set-sticky`
 - **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`
-- **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`
+- **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`, `layout/resize-split`
 - **Config:** `config/set`
 - **Rules:** `rules/set`
 
@@ -147,6 +147,7 @@ The policy decisions baked into these commands:
 - **The log is replayable.** `wm.log` holds the commands applied since `wm.origin` (the initial state, or the last `load()`); undo and redo keep it in step, so `replay(wm.origin, wm.log)` always equals `wm.getState()`.
 - **Gestures are one step.** Commands that carry the same `gesture` token in a row (the input adapter tags every `window/move` / `window/resize` of one floating drag) form one history entry and one log entry: runs of absolute setters collapse to their last command, so a drag undoes in one step and still replays exactly.
 - **BSP is a stateful layout expressed functionally.** Its tree lives in workspace state and is kept in sync as windows are created, closed, floated, or moved.
+- **Persistent, resizable splits.** `layout/resize-split { workspace?, path, index?, delta | weights }` resizes a split and stores it in the layout spec, wherever that layout keeps its sizes: `spec.sizes[""]` (an array of weights, one per child) for `columns`/`rows`; the existing `spec.ratio` for `master-stack`; the existing per-node `tree.ratio` for `bsp`, addressed by a `path` of `"0"`/`"1"` steps from the root (`bspNodeAt`/`bspSetRatioAt`); a new `spec.ratios` array indexed by split depth for `spiral`. `compile` renders a handle between every pair of children of a resizable row/column (`[data-wm-splitter]`, `role="separator"`, `aria-orientation`, `aria-valuenow`, `data-wm-path`/`data-wm-index`/`data-wm-count`); `attachInput` drags one (pointer capture, min/max constraints respected where a side is a single window, one undo step) and answers the arrow key along its axis when it has focus (`splitterStep`, a fraction of the pair's total, default `0.05`). See `docs/PRD.md`, "Split sizing", for the full scheme; grid tracks aren't resizable yet.
 - **Urgency hints (EWMH/X11-style).** `window/set-urgent { id, urgent }` marks or clears a window's urgency (`urgent` defaults to `true`); `presentationContext(state).urgent` lists the ids in the order they became urgent, and `compile` marks their views `data-wm-urgent` and their tab-strip buttons the same way. Urgency clears automatically when the window is focused (`config.urgency.clearOnFocus`, default `true`) and emits `window/urgent-changed`. `focus/urgent` focuses the oldest urgent window, switching workspace if needed (`focus/redirected` / `workspace/activated` apply as usual); it is rejected (`no-urgent-window`) when nothing is urgent.
 
 Add your own commands with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`.
@@ -273,7 +274,7 @@ derive(state, {
 ## Browser adapters
 
 - `createDomRenderer({ root, surfaceFor })` reconciles the keyed DOM, mounts and unmounts surfaces, measures realized geometry with `measure()`, and positions anchors with JS when CSS anchor positioning isn't supported (force it with `anchorFallback: true`; `reposition()` re-runs it). Reconciliation is top-down and moves views with `moveBefore()` where the browser has it, so an iframe, a playing animation or a focused input survives a layout change.
-- `attachInput({ root, getState, dispatch })` turns pointer events into commands. The markup contract is: `data-wm-handle="move"` (moves a floating window; drags a tiled one to a new slot), `data-wm-handle="resize-se"` (any edge or corner), `data-wm-command="window/close"`, and tab buttons with `data-wm-tab`. Options: `subscribe`, `snap`, `threshold`, `present`, `simulate`, `dragPreview` (see *Drag and drop in layouts*).
+- `attachInput({ root, getState, dispatch })` turns pointer events into commands. The markup contract is: `data-wm-handle="move"` (moves a floating window; drags a tiled one to a new slot), `data-wm-handle="resize-se"` (any edge or corner), `data-wm-command="window/close"`, tab buttons with `data-wm-tab`, and `[data-wm-splitter]` (compiled in automatically between a resizable row/column's children — drag it, or focus it and press the arrow key along its axis). Options: `subscribe`, `snap`, `threshold`, `present`, `simulate`, `dragPreview`, `splitterStep` (see *Drag and drop in layouts*).
 - Surfaces share one contract, `{ mount(target), unmount() }`. Provided implementations: `htmlSurface`, `lazySurface`, `iframeSurface`, and `canvasSurface` (an html-in-canvas style surface that repaints when its size changes).
 - `createFrameScheduler()` coalesces many commands into one commit per animation frame.
 

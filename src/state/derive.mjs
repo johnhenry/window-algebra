@@ -29,8 +29,8 @@ const activeOf = (ids, focused, spec) => (ids.includes(spec.active) ? spec.activ
  */
 export const LAYOUTS = Object.freeze({
   "master-stack": (spec, ids) => masterStack(spec, ids),
-  columns: (spec, ids) => columns({}, ids),
-  rows: (spec, ids) => rows({}, ids),
+  columns: (spec, ids) => columns(spec, ids),
+  rows: (spec, ids) => rows(spec, ids),
   monocle: (spec, ids, { focused }) => monocle({ active: activeOf(ids, focused, spec) }, ids),
   tabs: (spec, ids, { focused }) => tabs({ active: activeOf(ids, focused, spec) }, ids),
   grid: (spec, ids) => (spec.columns ? fixedGrid(spec, ids) : autoGrid(spec, ids)),

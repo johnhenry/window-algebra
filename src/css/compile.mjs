@@ -223,6 +223,55 @@ const elementType = (node) => {
 
 const isActiveChild = (child, active) => active === undefined || views(child).includes(active);
 
+/** Default cross-axis thickness (px) of a rendered splitter handle. Override with CSS on `[data-wm-splitter]`. */
+export const SPLITTER_SIZE = 6;
+
+/**
+ * A splitter render node between `target.children[index]` and `[index + 1]`,
+ * or `null` when `target` is not a resizable row/column, `index` is not
+ * followed by another child, or the weights don't line up with the children
+ * (a mismatched custom interpreter — render without a splitter rather than
+ * risk addressing the wrong pair).
+ *
+ * `data-wm-path`/`data-wm-index` are exactly what `layout/resize-split`
+ * expects back; `data-wm-count` is the container's live child count, so the
+ * input adapter can rebuild a full `weights` array before its first resize.
+ */
+const splitterAfter = (target, index, elementKey) => {
+  if (target.type !== "row" && target.type !== "column") return null;
+  const resize = target.options.resize;
+  if (!resize || !Array.isArray(resize.weights)) return null;
+  const { weights, path } = resize;
+  if (weights.length !== target.children.length || index >= weights.length - 1) return null;
+  const [a, b] = [weights[index], weights[index + 1]];
+  const total = a + b;
+  const now = total > 0 ? Math.round((a / total) * 100) : 50;
+  return {
+    tag: "wm-splitter",
+    key: `${elementKey}/splitter:${index}`,
+    attrs: {
+      "data-wm-splitter": "",
+      "data-wm-path": path,
+      "data-wm-index": String(index),
+      "data-wm-count": String(weights.length),
+      role: "separator",
+      "aria-orientation": target.type === "row" ? "vertical" : "horizontal",
+      "aria-valuenow": String(now),
+      "aria-valuemin": "0",
+      "aria-valuemax": "100",
+      tabindex: "0",
+    },
+    style: {
+      flex: `0 0 ${SPLITTER_SIZE}px`,
+      "align-self": "stretch",
+      cursor: target.type === "row" ? "col-resize" : "row-resize",
+      "touch-action": "none",
+      "box-sizing": "border-box",
+    },
+    children: [],
+  };
+};
+
 /**
  * Compile a layout tree into a render tree.
  *
@@ -372,6 +421,8 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
     }
     target.children.forEach((child, childIndex) => {
       element.children.push(visit(child, target, childIndex, `${elementKey}/${childIndex}:${elementType(child)}`));
+      const splitter = splitterAfter(target, childIndex, elementKey);
+      if (splitter) element.children.push(splitter);
     });
     return element;
   };
@@ -424,4 +475,10 @@ wm-view[data-wm-drag-denied] { outline: 2px solid var(--wm-ghost-bad, rgb(220 38
 [data-wm-workspace-target][data-wm-drop-active] { outline: 2px solid var(--wm-zone-line, rgb(59 130 246)); outline-offset: 1px; }
 [data-wm-handle] { touch-action: none; }
 wm-tabs { touch-action: pan-x; }
+[data-wm-splitter] { background: var(--wm-splitter-fill, transparent); position: relative; z-index: 1; }
+[data-wm-splitter]::after { content: ""; position: absolute; inset: 0; margin: auto; }
+[data-wm-splitter][aria-orientation="vertical"]::after { width: 1px; height: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
+[data-wm-splitter][aria-orientation="horizontal"]::after { height: 1px; width: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
+[data-wm-splitter]:hover, [data-wm-splitter]:focus-visible, [data-wm-splitter][data-wm-active] { background: var(--wm-splitter-fill-active, rgb(59 130 246 / 0.35)); }
+[data-wm-splitter]:focus-visible { outline: none; }
 `.trim();

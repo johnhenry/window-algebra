@@ -274,7 +274,8 @@
         "window/minimize": ["id"], "window/maximize": ["id"], "window/fullscreen": ["id"], "window/restore": ["id"],
         "window/set-title": ["id", "title"], "window/set-constraints": ["id", "constraints"], "window/swap": ["a", "b"], "window/promote": ["id"],
         "window/move-to-workspace": ["id", "workspace"], "workspace/create": ["newWs", "activate"], "workspace/activate": ["wsId"], "workspace/remove": ["wsId"],
-        "layout/set": ["layout"], "layout/set-ratio": ["ratio"], "layout/rotate-split": ["idOpt"], "config/set": ["config"],
+        "layout/set": ["layout"], "layout/set-ratio": ["ratio"], "layout/rotate-split": ["idOpt"],
+        "layout/resize-split": ["workspaceOpt", "resizeSplit"], "config/set": ["config"],
         "window/drop": ["id", "target", "zone"], "window/swap-next": ["idOpt"], "window/swap-previous": ["idOpt"],
         "window/move-before": ["id", "targetOpt"], "window/move-after": ["id", "targetOpt"], "window/set-draggable": ["id", "draggable"], "window/detach": ["id", "xy"],
         "rules/set": ["rules"],
@@ -317,6 +318,8 @@
           activate: () => field("activate", h("input", { type: "checkbox", name: "activate", checked: true, style: { width: "auto" } })),
           layout: () => field("layout", select("layout", [...Object.keys(LAYOUTS)], "bsp")),
           ratio: () => field("ratio", h("input", { type: "number", name: "ratio", value: 0.65, step: 0.05 })),
+          resizeSplit: () =>
+            field("path/index/delta|weights", h("input", { type: "text", name: "resizeSplit", value: '{"path": "", "delta": 0.05}' })),
           config: () => field("patch", h("input", { type: "text", name: "config", value: '{"focusRaises": false, "gap": 10}' })),
           rules: () =>
             field("rules", h("input", { type: "text", name: "rules", value: JSON.stringify(state.config.rules?.length ? state.config.rules : [{ match: { idPrefix: "term-" }, set: { layer: "top" } }]) })),
@@ -336,6 +339,10 @@
           }
           if (el.type === "number") value = Number(value);
           if (name === "constraints" || name === "rules") value = JSON.parse(value);
+          if (name === "resizeSplit") {
+            Object.assign(command, JSON.parse(value));
+            continue;
+          }
           if (name === "draggable") value = value === "true";
           if (name === "layout") value = { type: value, ...(value === "grid" ? { min: 120 } : {}) };
           if (name === "config") {
