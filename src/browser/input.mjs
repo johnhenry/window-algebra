@@ -34,7 +34,7 @@
 import { createDrag, updateDrag, createResize, updateResize } from "../interaction/drag.mjs";
 import { dropTargetAt, zoneRect } from "../interaction/drop.mjs";
 import { snapZoneAt, snapZoneRect, magnetize, magnetizeResize } from "../interaction/snap.mjs";
-import { isBlocked, isVisible } from "../state/queries.mjs";
+import { isBlocked, isVisible, outputActiveWorkspace } from "../state/queries.mjs";
 import { update } from "../state/update.mjs";
 import { DROPS, dragMode, isDroppable, tiledOrder } from "../state/drops.mjs";
 import { derive, presentationContext } from "../state/derive.mjs";
@@ -201,7 +201,13 @@ export const attachInput = (options) => {
     announce,
     keyboard,
     splitterStep = 0.05,
+    output,
   } = options;
+  // The workspace this root's stage actually shows: the given output's own
+  // active workspace when this input is bound to one output (multi-output
+  // rigs, one `attachInput` per stage), otherwise the globally focused
+  // output's active workspace, matching this root's single-output rendering.
+  const rootWorkspace = (state) => (output !== undefined ? outputActiveWorkspace(state, output) : state.activeWorkspace);
   let gesture = null; // floating move/resize in progress
   let pending = null; // press on a handle or tab, not yet a drag
   let drag = null; // tiled or tab drag in progress
@@ -429,7 +435,7 @@ export const attachInput = (options) => {
     const count = Number(el.getAttribute("data-wm-count") ?? 2);
     const axis = el.getAttribute("aria-orientation") === "vertical" ? "x" : "y";
     const state = getState();
-    const workspace = state.activeWorkspace;
+    const workspace = rootWorkspace(state);
     const container = el.parentNode;
     const rect = container?.getBoundingClientRect?.() ?? { width: 0, height: 0 };
     const mainSize = Math.max(1, (axis === "x" ? rect.width : rect.height) - (count - 1) * SPLITTER_SIZE);
@@ -512,7 +518,7 @@ export const attachInput = (options) => {
     const index = Number(splitterEl.getAttribute("data-wm-index") ?? 0);
     const count = Number(splitterEl.getAttribute("data-wm-count") ?? 2);
     const state = getState();
-    const workspace = state.activeWorkspace;
+    const workspace = rootWorkspace(state);
     const weights = readSplitWeights(state, workspace, path, count);
     const total = weights[index] + weights[index + 1];
     [weights[index], weights[index + 1]] = nudgePair(weights[index], weights[index + 1], ARROW_SIGN[event.key] * total * splitterStep);
@@ -631,8 +637,9 @@ export const attachInput = (options) => {
     } catch {
       return; // e.g. a custom layout the default `present` cannot derive
     }
-    const shown = new Set(tiledOrder(next, next.activeWorkspace));
-    if (next.windows[dragged]?.workspace === next.activeWorkspace) shown.add(dragged);
+    const workspace = rootWorkspace(next);
+    const shown = new Set(tiledOrder(next, workspace));
+    if (next.windows[dragged]?.workspace === workspace) shown.add(dragged);
     const titles = Object.fromEntries(Object.values(next.windows).map((win) => [win.id, win.title]));
     visuals.ghost ??= createDomRenderer({ root: visuals.ghostHost, document: doc, anchorFallback: false });
     visuals.ghost.commit(ghostify(render, { shown, dragged, titles }));

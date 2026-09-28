@@ -98,6 +98,9 @@
         wm.setRenderer(outputId, renderer);
         // `present` is bound to this output, so drag/resize previews on this
         // stage derive *its* active workspace, not whichever output has focus.
+        // `output` does the same for splitter drag/keydown and the drag
+        // ghost's "shown" set, so interacting with this stage always acts on
+        // *its* workspace, even when another output is focused.
         const detach = attachInput({
           root: stageEl,
           getState: wm.getState,
@@ -106,6 +109,7 @@
           simulate: wm.simulate,
           drops: wm.drops,
           present: (state) => wm.present(state, { output: outputId }),
+          output: outputId,
         });
         syncChrome(wm, stageEl);
         return { card, head, stageEl, wsRow, renderer, detach };

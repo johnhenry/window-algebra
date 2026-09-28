@@ -532,12 +532,14 @@ describe("browser: two stages, one manager, one renderer + input adapter each", 
       getState: wm.getState,
       dispatch: wm.dispatch,
       present: (state) => wm.present(state, { output: DEFAULT_OUTPUT }),
+      output: DEFAULT_OUTPUT,
     });
     const detachHdmi = attachInput({
       root: hdmiRoot,
       getState: wm.getState,
       dispatch: wm.dispatch,
       present: (state) => wm.present(state, { output: "hdmi" }),
+      output: "hdmi",
     });
     const at = (target, x = 10, y = 10) => ({ target, clientX: x, clientY: y, pointerId: 1, button: 0, preventDefault() {} });
     return { doc, mainRoot, hdmiRoot, wm, detachMain, detachHdmi, at };
@@ -576,6 +578,79 @@ describe("browser: two stages, one manager, one renderer + input adapter each", 
     t.mainRoot.dispatch("pointerdown", t.at(aEl));
     t.mainRoot.dispatch("pointerup", t.at(aEl));
     assert.equal(t.wm.state.focus.window, "a");
+  });
+});
+
+describe("browser: splitter drag/keydown on a non-focused stage acts on that stage's own workspace", () => {
+  /**
+   * Same two-stage rig, but the hdmi output's workspace has a columns layout
+   * with two windows, so it renders a resizable splitter. `main` stays
+   * focused throughout: this reproduces dragging or arrow-keying the
+   * splitter shown on the OTHER output's stage.
+   */
+  const setup = () => {
+    const doc = createFakeDocument();
+    const mainRoot = doc.createElement("div");
+    const hdmiRoot = doc.createElement("div");
+    mainRoot.rect = { left: 0, top: 0, width: 300, height: 100 };
+    hdmiRoot.rect = { left: 0, top: 0, width: 300, height: 100 };
+    doc.body.append(mainRoot, hdmiRoot);
+    const wm = createWindowManager({ state: createState(), history: true });
+    wm.createOutput("hdmi", { workspaces: [{ id: "hdmi-1", layout: { type: "columns" } }] });
+    wm.setRenderer(DEFAULT_OUTPUT, createDomRenderer({ root: mainRoot, document: doc, anchorFallback: false }));
+    wm.setRenderer("hdmi", createDomRenderer({ root: hdmiRoot, document: doc, anchorFallback: false }));
+    attachInput({
+      root: mainRoot,
+      getState: wm.getState,
+      dispatch: wm.dispatch,
+      present: (state) => wm.present(state, { output: DEFAULT_OUTPUT }),
+      output: DEFAULT_OUTPUT,
+    });
+    attachInput({
+      root: hdmiRoot,
+      getState: wm.getState,
+      dispatch: wm.dispatch,
+      present: (state) => wm.present(state, { output: "hdmi" }),
+      output: "hdmi",
+    });
+    wm.create({ id: "main-a" }); // main's own workspace, so it also has a splitter
+    wm.create({ id: "main-b" });
+    wm.create({ id: "x", workspace: "hdmi-1", focus: false });
+    wm.create({ id: "y", workspace: "hdmi-1", focus: false });
+    assert.equal(wm.state.focusedOutput, DEFAULT_OUTPUT, "main stays focused: hdmi's stage is the non-focused one");
+    const layoutRect = (root, sizes) => {
+      const el = root.querySelector('[data-layout="row"], [data-layout="column"]');
+      let pos = 0;
+      for (const kid of el.childNodes) {
+        const extent = sizes[el.childNodes.indexOf(kid)] ?? 0;
+        kid.rect = { left: pos, top: 0, width: extent, height: 100 };
+        pos += extent;
+      }
+      el.rect = { left: 0, top: 0, width: pos, height: 100 };
+    };
+    const splitterOf = (root) => root.querySelector("[data-wm-splitter]");
+    const at = (x, y = 50, extra = {}) => ({ clientX: x, clientY: y, pointerId: 1, button: 0, preventDefault() {}, ...extra });
+    return { doc, mainRoot, hdmiRoot, wm, layoutRect, splitterOf, at };
+  };
+
+  test("dragging the splitter rendered on hdmi's stage resizes hdmi-1, not main (the focused output's active workspace)", () => {
+    const t = setup();
+    t.layoutRect(t.hdmiRoot, [150, 150]);
+    const splitter = t.splitterOf(t.hdmiRoot);
+    t.hdmiRoot.dispatch("pointerdown", { target: splitter, ...t.at(150) });
+    t.hdmiRoot.dispatch("pointermove", t.at(180));
+    t.hdmiRoot.dispatch("pointerup", t.at(180));
+    assert.notEqual(t.wm.state.workspaces["hdmi-1"].layout.sizes?.[""], undefined, "hdmi-1's own split was resized");
+    assert.equal(t.wm.state.workspaces.main.layout.sizes, undefined, "main's split (the focused output's active workspace) was left untouched");
+  });
+
+  test("arrow-keying the splitter rendered on hdmi's stage resizes hdmi-1, not main", () => {
+    const t = setup();
+    t.layoutRect(t.hdmiRoot, [150, 150]);
+    const splitter = t.splitterOf(t.hdmiRoot);
+    t.hdmiRoot.dispatch("keydown", { target: splitter, key: "ArrowRight", type: "keydown", preventDefault() {}, stopPropagation() {} });
+    assert.notEqual(t.wm.state.workspaces["hdmi-1"].layout.sizes?.[""], undefined, "hdmi-1's own split was resized");
+    assert.equal(t.wm.state.workspaces.main.layout.sizes, undefined, "main's split was left untouched");
   });
 });
 
