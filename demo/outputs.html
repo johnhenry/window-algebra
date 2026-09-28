@@ -174,10 +174,16 @@
               "+",
             ),
           );
-          for (const el of rig.stageEl.querySelectorAll("[data-ws]")) {
-            const key = el.closest("wm-view")?.getAttribute("data-view");
-            if (key) el.textContent = state.windows[key]?.workspace ?? "";
-          }
+          // Deferred one frame: the renderer's own redraw (batched via the
+          // frame scheduler) can freshly mount a window's surface *after*
+          // this callback runs synchronously — e.g. right after
+          // `window/create` — which would blank out a label set here first.
+          requestAnimationFrame(() => {
+            for (const el of rig.stageEl.querySelectorAll("[data-ws]")) {
+              const key = el.closest("wm-view")?.getAttribute("data-view");
+              if (key) el.textContent = state.windows[key]?.workspace ?? "";
+            }
+          });
         }
         document.getElementById("hint").textContent = `focused: ${state.focusedOutput} · active workspace: ${state.activeWorkspace}`;
         document.getElementById("remove-output").disabled = state.outputOrder.length === 1;
