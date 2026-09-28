@@ -52,7 +52,9 @@ export const MIGRATIONS = {
   // 0 → 1: `config.drag` (drag-and-drop settings) and the "only store the
   // draggable:false exception" convention were both added after states had
   // already been saved without them. Backfill the drag defaults and drop any
-  // redundant explicit `draggable: true`.
+  // redundant explicit `draggable: true`. Also backfill `urgent` (the list of
+  // urgent window ids), added around the same time as versioning itself, so
+  // a pre-versioning state doesn't crash policy code that assumes it exists.
   0: (state) => ({
     ...state,
     version: 1,
@@ -62,6 +64,7 @@ export const MIGRATIONS = {
       drag: { ...DEFAULT_CONFIG.drag, ...(state.config?.drag ?? {}) },
     },
     windows: normalizeDraggable(state.windows),
+    urgent: state.urgent ?? [],
   }),
 };
 
