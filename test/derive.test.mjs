@@ -70,6 +70,8 @@ describe("derive: state → presentation tree", () => {
     let state = make([win("a"), win("b"), win("c")]);
     state = reduce(state, { type: "window/minimize", id: "c" });
     assert.deepEqual(views(derive(state)), ["a", "b"]);
+    state = reduce(state, { type: "window/pop-out", id: "c" });
+    assert.deepEqual(views(derive(state)), ["a", "b"], "popped-out windows disappear too");
     state = reduce(state, { type: "window/maximize", id: "a" });
     const maxTree = derive(state);
     assert.deepEqual(maxTree.children[1].options, { top: 0, right: 0, bottom: 0, left: 0 });

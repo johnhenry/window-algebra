@@ -393,6 +393,42 @@ const handlers = {
     return setStatus(state, command, "normal");
   },
 
+  /**
+   * GoldenLayout/Dockview-style pop-out: leave the layout for a separate
+   * browser window, like `window/minimize` (see `isVisible`/`isBlocked`,
+   * "visible elsewhere") but distinct so the browser shell
+   * (`browser/popouts.mjs`, `attachPopouts`) can tell the two apart and
+   * actually open/close the popup. Refused while a modal child blocks the
+   * window, same as `window/detach`; already popped out is a no-op.
+   */
+  "window/pop-out"(state, command) {
+    const win = state.windows[command.id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (win.status === "popped-out") return result(state);
+    if (isBlocked(state, win.id)) return rejected(state, command, "blocked");
+    const next = setWindow(state, win.id, { status: "popped-out" });
+    const changed = result(
+      next,
+      [{ type: "window/status-changed", id: win.id, status: "popped-out", previous: win.status }],
+      [RENDER],
+    );
+    return merge(changed, refocus(next));
+  },
+
+  /**
+   * Reverse of `window/pop-out`. Unlike the other status setters, a window
+   * that is not currently popped out is rejected rather than treated as a
+   * no-op: the browser shell relies on this to tell whether its own
+   * `popIn()` call (or the popup being closed) is undoing a real pop-out.
+   */
+  "window/pop-in"(state, command) {
+    const win = state.windows[command.id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (win.status !== "popped-out") return rejected(state, command, "not-popped-out");
+    const next = setWindow(state, win.id, { status: "normal" });
+    return result(next, [{ type: "window/status-changed", id: win.id, status: "normal", previous: "popped-out" }], [RENDER]);
+  },
+
   "window/set-title"(state, command) {
     if (!state.windows[command.id]) return rejected(state, command, "unknown-window");
     return result(setWindow(state, command.id, { title: String(command.title ?? "") }), [

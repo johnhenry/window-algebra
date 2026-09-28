@@ -8,7 +8,7 @@ export const LAYERS = Object.freeze(["background", "normal", "top", "modal", "po
 /** Semantic roles. Policy (derive) decides how each is presented. */
 export const ROLES = Object.freeze(["window", "dialog", "sheet", "popover", "menu", "tooltip", "panel", "notification"]);
 
-export const STATUSES = Object.freeze(["normal", "minimized", "maximized", "fullscreen"]);
+export const STATUSES = Object.freeze(["normal", "minimized", "maximized", "fullscreen", "popped-out"]);
 
 /**
  * The current state shape's version. Bump this and add a step to `MIGRATIONS`

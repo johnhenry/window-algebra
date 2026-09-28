@@ -9,6 +9,9 @@ import {
   focusedWindow,
   stackingOrder,
   isBlocked,
+  isVisible,
+  isPoppedOut,
+  poppedOutWindows,
   windowsIn,
   bspIds,
   urgentWindows,
@@ -157,6 +160,62 @@ describe("windows", () => {
     assert.equal(state.windows.b.status, "maximized");
     state = reduce(state, { type: "window/restore", id: "b" });
     assert.equal(state.windows.b.status, "normal");
+  });
+
+  test("pop-out/pop-in: leaves the layout like minimize, refocuses, round-trips", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/pop-out", id: "b" });
+    assert.equal(state.windows.b.status, "popped-out");
+    // Like minimizing: the popped-out window disappears and focus moves on.
+    assert.equal(state.focus.window, "a");
+    assert.deepEqual(windowsIn(state).filter((w) => isVisible(state, w.id)).map((w) => w.id), ["a"]);
+    state = reduce(state, { type: "window/pop-in", id: "b" });
+    assert.equal(state.windows.b.status, "normal");
+  });
+
+  test("pop-out: no-op when already popped out; rejects unknown-window and blocked", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/pop-out", id: "b" });
+    const same = update(state, { type: "window/pop-out", id: "b" });
+    assert.equal(same.state, state);
+    assert.deepEqual(same.events, []);
+
+    const missing = update(state, { type: "window/pop-out", id: "zz" });
+    assert.deepEqual(missing.events, [{ type: "command/rejected", command: "window/pop-out", id: "zz", reason: "unknown-window" }]);
+
+    const blockedState = reduce(state, { type: "window/create", id: "m", role: "dialog", modal: true, parent: "a" });
+    const blocked = update(blockedState, { type: "window/pop-out", id: "a" });
+    assert.deepEqual(blocked.events, [{ type: "command/rejected", command: "window/pop-out", id: "a", reason: "blocked" }]);
+  });
+
+  test("pop-in: rejects unknown-window and a window that is not popped out", () => {
+    const state = withWindows(["a"]);
+    const missing = update(state, { type: "window/pop-in", id: "zz" });
+    assert.deepEqual(missing.events, [{ type: "command/rejected", command: "window/pop-in", id: "zz", reason: "unknown-window" }]);
+    const notPopped = update(state, { type: "window/pop-in", id: "a" });
+    assert.deepEqual(notPopped.events, [{ type: "command/rejected", command: "window/pop-in", id: "a", reason: "not-popped-out" }]);
+  });
+
+  test("popped-out windows are excluded from tiled drops, like minimized ones", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/pop-out", id: "b" });
+    assert.equal(update(state, { type: "window/drop", id: "a", target: "b", zone: "center" }).events[0].reason, "not-tiled");
+  });
+
+  test("COMMANDS lists window/pop-out and window/pop-in", () => {
+    assert.ok(COMMANDS.includes("window/pop-out"));
+    assert.ok(COMMANDS.includes("window/pop-in"));
+  });
+
+  test("isPoppedOut / poppedOutWindows; a popped-out modal child no longer blocks its parent", () => {
+    let state = withWindows(["a"]);
+    state = reduce(state, { type: "window/create", id: "m", role: "dialog", modal: true, parent: "a" });
+    assert.equal(isBlocked(state, "a"), true);
+    assert.equal(isPoppedOut(state, "m"), false);
+    state = reduce(state, { type: "window/pop-out", id: "m" });
+    assert.equal(isPoppedOut(state, "m"), true);
+    assert.deepEqual(poppedOutWindows(state).map((w) => w.id), ["m"]);
+    assert.equal(isBlocked(state, "a"), false, "a popped-out modal is 'visible elsewhere', not blocking");
   });
 
   test("swap and promote reorder the workspace", () => {
