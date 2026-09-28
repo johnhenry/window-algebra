@@ -101,6 +101,38 @@ describe("DOM renderer", () => {
     assert.deepEqual(renderer.measure(), { a: { x: 0, y: 0, width: 100, height: 100 } });
   });
 
+  test("release detaches an element (and its surface) without touching the DOM or unmounting", () => {
+    const { root, renderer, contents, mounts } = setup();
+    renderer.commit(compile(row({}, view("a"), view("b"))));
+    const aElement = renderer.elementFor("a");
+    const released = renderer.release("a");
+    assert.equal(released.element, aElement);
+    assert.equal(typeof released.surface.mount, "function");
+    // Still physically in the document, just no longer tracked.
+    assert.equal(aElement.parentNode, root.children[0]);
+    assert.equal(renderer.elementFor("a"), undefined);
+    // A commit with "a" no longer in the tree neither recreates nor sweeps it.
+    renderer.commit(compile(row({}, view("b"))));
+    assert.equal(aElement.parentNode, root.children[0]);
+    assert.deepEqual(mounts, [
+      ["mount", "a"],
+      ["mount", "b"],
+    ]);
+    assert.equal(renderer.release("a"), undefined, "already released");
+
+    // adopt() gives it back: the next commit reuses it in place instead of
+    // asking surfaceFor for a fresh surface, and patches it back to style.
+    aElement.remove();
+    renderer.adopt("a", aElement, released.surface);
+    renderer.commit(compile(row({}, view("a"), view("b"))));
+    assert.equal(renderer.elementFor("a"), aElement);
+    assert.equal(contents.a.parentNode, aElement, "the original surface content, never unmounted");
+    assert.deepEqual(mounts, [
+      ["mount", "a"],
+      ["mount", "b"],
+    ]);
+  });
+
   test("destroy unmounts everything", () => {
     const { root, renderer, mounts } = setup();
     renderer.commit(compile(row({}, view("a"))));

@@ -16,7 +16,9 @@ export const windowsIn = (state, workspaceId = state.activeWorkspace) =>
 
 export const isVisible = (state, id) => {
   const win = state.windows[id];
-  if (!win || win.status === "minimized") return false;
+  // Popped-out windows, like minimized ones, leave the layout — they are
+  // "visible elsewhere" (a separate browser window; see `browser/popouts.mjs`).
+  if (!win || win.status === "minimized" || win.status === "popped-out") return false;
   // A scratchpad window not currently shown belongs to no workspace.
   if (win.workspace === null) return false;
   // Sticky windows skip the active-workspace check: they are visible everywhere.
@@ -36,6 +38,12 @@ export const visibleWindows = (state) => {
   return [...local, ...stickyElsewhere];
 };
 
+/** Is this window currently popped out into a separate browser window? */
+export const isPoppedOut = (state, id) => state.windows[id]?.status === "popped-out";
+
+/** Windows currently popped out (see `window/pop-out`, `browser/popouts.mjs`). */
+export const poppedOutWindows = (state) => Object.values(state.windows).filter((win) => win.status === "popped-out");
+
 /** Windows currently hidden in the scratchpad (sent there, not shown). */
 export const scratchpadWindows = (state) => Object.values(state.windows).filter((win) => win.scratchpad);
 
@@ -50,7 +58,7 @@ export const childrenOf = (state, id) => Object.values(state.windows).filter((wi
 
 /** The deepest open modal descendant of a window, following the modal graph. */
 export const modalTarget = (state, id) => {
-  const modal = childrenOf(state, id).find((child) => child.modal && child.status !== "minimized");
+  const modal = childrenOf(state, id).find((child) => child.modal && child.status !== "minimized" && child.status !== "popped-out");
   return modal ? modalTarget(state, modal.id) : id;
 };
 

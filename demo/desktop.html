@@ -132,6 +132,7 @@
           <button class="btn small ghost" id="to-tree" title="layout/to-tree: convert this workspace's current layout into a docking tree">⇥ To docking tree</button>
           <label class="inline" title="config.focusRaises: focusing a window also raises it within its layer"><input type="checkbox" id="focus-raises" checked /> focus raises</label>
           <label class="inline" title="attachInput({ snap }): floating moves snap to a 16px grid"><input type="checkbox" id="snap" /> snap 16px</label>
+          <label class="inline" title="Simulate a popup blocker on the next ⇗ Pop out click: attachPopouts rejects with a 'popup-blocked' event instead of opening a window"><input type="checkbox" id="block-popup" /> block next pop-out</label>
           <span class="sep"></span>
           <button class="btn small" id="undo" title="Undo (Alt+Z)">↶ Undo</button>
           <button class="btn small" id="redo" title="Redo (Alt+Shift+Z)">↷ Redo</button>
@@ -294,8 +295,8 @@
         urgentWindows,
         DEFAULT_CONFIG,
       } from "../src/index.mjs";
-      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
-      import { initPage, h, $, $$, windowSurface, syncChrome, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler, attachPopouts } from "../src/browser/index.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, createLog, describe, fmtRect, isTyping, SWATCHES, POPOUT_ICONS } from "./shared/kit.mjs";
 
       initPage({ current: "./desktop.html", title: "Tiling desktop" });
 
@@ -331,6 +332,51 @@
       const inputOptions = { root, wm, announce: true, keyboard: {} };
       let detachInput = attachInput(inputOptions);
       syncChrome(wm, root);
+
+      // ---------------------------------------------------------------- pop-out
+      // GoldenLayout/Dockview-style pop-out: the "popout" chrome button (kit.mjs)
+      // has no data-wm-command (it needs a real browser window, not just a state
+      // change), so its click is wired here to attachPopouts instead.
+      const popouts = attachPopouts({
+        wm,
+        renderer,
+        surfaceFor: surfaces,
+        // "block next pop-out" (see checkbox above) simulates a popup blocker:
+        // attachPopouts treats a null return exactly like a real one, and
+        // rejects with a "popup-blocked" event instead of opening anything.
+        open: (...args) => {
+          const block = $("#block-popup");
+          if (block?.checked) {
+            block.checked = false;
+            return null;
+          }
+          return window.open(...args);
+        },
+      });
+      const syncPopoutButtons = () => {
+        const state = wm.getState();
+        for (const button of $$('[data-action="popout"]', root)) {
+          const id = button.closest("wm-view[data-view]")?.getAttribute("data-view");
+          const poppedOut = id && state.windows[id]?.status === "popped-out";
+          button.setAttribute("data-state", poppedOut ? "popped-out" : "normal");
+          button.setAttribute("title", poppedOut ? "Pop in" : "Pop out");
+          button.setAttribute("aria-label", poppedOut ? "Pop in" : "Pop out");
+          button.setAttribute("aria-pressed", String(Boolean(poppedOut)));
+          button.innerHTML = poppedOut ? POPOUT_ICONS.popin : POPOUT_ICONS.popout;
+        }
+      };
+      root.addEventListener("click", (event) => {
+        const button = event.target.closest('[data-action="popout"]');
+        if (!button) return;
+        const id = button.closest("wm-view[data-view]")?.getAttribute("data-view");
+        if (!id) return;
+        const state = wm.getState();
+        const out = state.windows[id]?.status === "popped-out" ? popouts.popIn(id) : popouts.popOut(id);
+        const rejectedEvent = out.events.find((e) => e.type === "command/rejected");
+        if (rejectedEvent) toast("Pop-out blocked", rejectedEvent.reason === "popup-blocked" ? "The browser blocked the popup — allow popups for this page and try again." : rejectedEvent.reason, "rejected");
+      });
+      wm.subscribe(() => requestAnimationFrame(syncPopoutButtons));
+      requestAnimationFrame(syncPopoutButtons);
       // Mirror the adapter's (visually hidden) live region in the drag panel.
       const mirrorAnnouncer = () => {
         const region = root.querySelector("[data-wm-announcer]");
@@ -483,7 +529,7 @@
         }
         const title = options.title ?? `${TITLES[kind]} ${n}`;
         const bare = ["menu", "popover", "tooltip", "notification", "system"].includes(kind);
-        const actions = kind === "dialog" || kind === "sheet" || kind === "attached" ? ["close"] : kind === "panel" ? ["close"] : ["min", "max", "float", "close"];
+        const actions = kind === "dialog" || kind === "sheet" || kind === "attached" ? ["close"] : kind === "panel" ? ["close"] : ["min", "max", "float", "popout", "close"];
         surfaces.set(id, windowSurface({ id, title, color: SWATCHES[n % SWATCHES.length], actions, bare, body: BODIES[bodyKind](id, options.extra) }));
         const placement = { ...(base.placement ?? {}) };
         if (kind === "floating" || kind === "app") Object.assign(placement, { x: 60 + (n % 7) * 28, y: 40 + (n % 7) * 24 });

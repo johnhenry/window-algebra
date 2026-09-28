@@ -273,6 +273,9 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
   }
 
   return {
+    /** The host element the render tree is mounted inside (the `root` option). */
+    root,
+
     /** Apply a render tree. Unmounts surfaces whose views disappeared. */
     commit(renderTree) {
       const live = new Set();
@@ -318,6 +321,42 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     /** The element for a view id, if rendered. */
     elementFor(id) {
       return elements.get(`view:${id}`);
+    },
+
+    /**
+     * Detach a view's element from this renderer's bookkeeping without
+     * touching the DOM or unmounting its surface, so a caller (see
+     * `attachPopouts` in `popouts.mjs`) can move it elsewhere — another
+     * document, say — and keep its content and state alive. The next
+     * `commit` neither recreates nor sweeps it: it is simply gone from view
+     * until `adopt()` gives it back. Returns `undefined` if the view id
+     * isn't currently rendered.
+     */
+    release(id) {
+      const key = `view:${id}`;
+      const element = elements.get(key);
+      if (!element) return undefined;
+      elements.delete(key);
+      records.delete(key);
+      anchorSpecs.delete(key);
+      fallbackPositioned.delete(key);
+      fallbackSized.delete(key);
+      const surface = mounted.get(id);
+      mounted.delete(id);
+      return { element, surface };
+    },
+
+    /**
+     * The reverse of `release`: re-register `element` (and, if it was kept
+     * alive elsewhere, its mounted `surface`) under `id` so the next
+     * `commit` reuses it in place — patching it back to the current layout's
+     * styles/attrs — instead of asking `surfaceFor` to mount a fresh one.
+     */
+    adopt(id, element, surface) {
+      const key = `view:${id}`;
+      elements.set(key, element);
+      records.set(key, { attrs: {}, style: {} });
+      if (surface) mounted.set(id, surface);
     },
 
     destroy() {

@@ -200,7 +200,20 @@ export const createFakeDocument = () => {
   const listeners = new Map();
   const doc = {
     defaultView: { CSS: { supports: () => true } },
+    title: "",
     createElement: (tag) => new FakeElement(tag, doc),
+    /** Real `Document.adoptNode`: re-parents `node` (and its subtree) to this document. */
+    adoptNode(node) {
+      node.remove?.();
+      node.ownerDocument = doc;
+      return node;
+    },
+    querySelector(selector) {
+      return doc.querySelectorAll(selector)[0] ?? null;
+    },
+    querySelectorAll(selector) {
+      return [...doc.head.querySelectorAll(selector), ...doc.body.querySelectorAll(selector)];
+    },
     addEventListener(type, fn) {
       if (!listeners.has(type)) listeners.set(type, new Set());
       listeners.get(type).add(fn);
@@ -215,6 +228,37 @@ export const createFakeDocument = () => {
     listeners,
   };
   doc.body = new FakeElement("body", doc);
+  doc.head = new FakeElement("head", doc);
   doc.activeElement = doc.body;
   return doc;
+};
+
+/**
+ * A minimal `window.open()`-style popup: its own fake document, plus the
+ * handful of `Window` members `attachPopouts` uses (`close`, `closed`,
+ * `addEventListener`/`removeEventListener`, and dispatching those events for
+ * the test to simulate the user closing it or focusing it).
+ */
+export const createFakeWindow = () => {
+  const document = createFakeDocument();
+  const listeners = new Map();
+  const win = {
+    document,
+    closed: false,
+    close() {
+      win.closed = true;
+    },
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener(type, fn) {
+      listeners.get(type)?.delete(fn);
+    },
+    dispatch(type, event) {
+      for (const fn of listeners.get(type) ?? []) fn(event);
+    },
+  };
+  document.defaultView = win;
+  return win;
 };

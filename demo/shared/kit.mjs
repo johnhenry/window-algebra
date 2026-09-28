@@ -113,7 +113,14 @@ const ICONS = {
   // Shown while floating: dock the window back into the tiled layout.
   tile: `<svg viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 2.5v9M7 7h4.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
   close: `<svg viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  // Shown while in the layout: pop the window out into its own browser window.
+  popout: `<svg viewBox="0 0 14 14"><rect x="2" y="4" width="6.5" height="7.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 5.5h4.5v-3M11.5 2.5 6.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // Shown while popped out: bring the window back into this page's layout.
+  popin: `<svg viewBox="0 0 14 14"><rect x="2" y="4" width="6.5" height="7.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11.5 5.5H7v-3M6.5 7.5 11.5 2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
+
+/** The pop-out / pop-in icon markup, for a page (desktop.html) that wires that button itself. */
+export const POPOUT_ICONS = { popout: ICONS.popout, popin: ICONS.popin };
 
 export const SWATCHES = ["var(--swatch-1)", "var(--swatch-2)", "var(--swatch-3)", "var(--swatch-4)", "var(--swatch-5)", "var(--swatch-6)", "var(--swatch-7)", "var(--swatch-8)"];
 let swatchIndex = 0;
@@ -140,7 +147,10 @@ export const windowSurface = ({ id, title = id, color = nextSwatch(), body, acti
     target.style.setProperty("--wa-color", color);
     target.tabIndex = -1;
     const commandFor = { min: "window/minimize", max: "window/maximize", float: "window/toggle-floating", close: "window/close" };
-    const titles = { min: "Minimize", max: "Maximize", float: "Float (undock)", close: "Close" };
+    // "popout" has no data-wm-command: it needs the actual browser window
+    // (open/adopt/close), so the page wires its click to attachPopouts itself
+    // (see desktop.html) instead of the generic command-button dispatch.
+    const titles = { min: "Minimize", max: "Maximize", float: "Float (undock)", close: "Close", popout: "Pop out" };
     const buttons = actions.map((action) =>
       h("button", { type: "button", "data-wm-command": commandFor[action], "data-action": action, title: titles[action], "aria-label": titles[action], html: ICONS[action] }),
     );

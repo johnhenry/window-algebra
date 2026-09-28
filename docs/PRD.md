@@ -71,7 +71,7 @@ One command covers every case: `layout/resize-split { workspace?, path, index?, 
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 43 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 45 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history, EWMH/X11-style urgency hints (`window/set-urgent`, `focus/urgent`, `config.urgency.clearOnFocus`). |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), docking tree (stateful, n-ary row/column/tabs; `layout/to-tree` converts any other layout into one), and custom interpreters. |
 | Layout modifiers | xmonad-style, serializable (`spec.modifiers: [{ type, ... }]`): `smart-gaps`, `no-gaps`, `mirror`, `reflect-x`, `reflect-y`, `max-windows(n)` (overflow shares a hidden stack slot), applied via a `MODIFIERS` registry parallel to `LAYOUTS` and the `withModifiers(interpreter, mods)` combinator. `layout/toggle { a, b }` flips a workspace between two stored layouts (xmonad `ToggleLayouts`). Drop interpreters remap their zones to match `mirror`/`reflect-x`/`reflect-y` (`applyModifiersToOps`). |
@@ -87,6 +87,7 @@ One command covers every case: `layout/resize-split { workspace?, path, index?, 
 | Size hints | ICCCM `WM_NORMAL_HINTS`-style hints beyond min/max: `aspectRatio` (exact or `{ min, max }`) and `widthIncrement`/`heightIncrement` with `baseWidth`/`baseHeight` (terminal-style cells). Honoured by `constrainSize` for floating move/resize and `window/resize`; tiled windows get CSS `aspect-ratio` for an exact ratio, increments are advisory. |
 | Split sizing | Persistent, resizable splits for columns/rows/master-stack/BSP/spiral (see "Split sizing" above): `layout/resize-split`, rendered `[data-wm-splitter]` handles, pointer drag and arrow-key resizing, one undo step per gesture, min/max constraints respected best-effort. |
 | Snap zones | Windows-Snap/macOS-tiling-style edge/corner preview for floating windows (`config.snap.edges`/`threshold`/`zones`, pure `snapZoneAt`/`snapZoneRect`), applied on release as one `window/resize` (one undo step); magnetism (`config.snap.magnet`, pure `magnetize`/`magnetizeResize`) snaps floating move/resize to other visible windows' edges and the stage. Configurable, disable-able, constraint-respecting; does not interfere with tiled drag-and-drop or drag-to-tile. |
+| Pop-out windows | GoldenLayout/Dockview-style: `window/pop-out`/`window/pop-in` add a `"popped-out"` status — pure-state, the window leaves the layout like `window/minimize` but is "visible elsewhere" (`isVisible`, `isBlocked`, `isPoppedOut`). `attachPopouts({ wm, renderer, surfaceFor?, open? })` opens a real popup window, copies stylesheets, moves the view's live DOM with `adoptNode` (via the renderer's `release`/`adopt`, so the surface stays mounted), syncs title and WM focus, and pops back in on `window/pop-in`, the popup closing itself, or `window/close`. A blocked popup rejects with an event (`popup-blocked`) rather than throwing. |
 
 ## Open questions
 

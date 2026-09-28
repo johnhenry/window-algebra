@@ -199,6 +199,9 @@ export const createWindowManager = ({
     maximize: command("window/maximize"),
     fullscreen: command("window/fullscreen"),
     restore: command("window/restore"),
+    /** GoldenLayout/Dockview-style pop-out; see `attachPopouts` for the actual browser window. */
+    popOut: command("window/pop-out"),
+    popIn: command("window/pop-in"),
     promote: command("window/promote"),
     swap: (a, b) => dispatch({ type: "window/swap", a, b }),
     /** Drop a tiled window onto another: zone "center" | "left" | "right" | "top" | "bottom". */

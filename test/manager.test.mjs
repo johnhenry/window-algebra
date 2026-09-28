@@ -74,6 +74,26 @@ describe("createWindowManager facade", () => {
     assert.ok(wm.canRedo);
   });
 
+  test("popOut/popIn convenience; undo/redo and serialize round-trip a popped-out window", () => {
+    const wm = createWindowManager({ history: true });
+    wm.create({ id: "a" });
+    wm.create({ id: "b" });
+    wm.popOut("b");
+    assert.equal(wm.state.windows.b.status, "popped-out");
+    wm.undo();
+    assert.equal(wm.state.windows.b.status, "normal");
+    wm.redo();
+    assert.equal(wm.state.windows.b.status, "popped-out");
+
+    const other = createWindowManager();
+    other.load(wm.serialize());
+    assert.equal(other.state.windows.b.status, "popped-out");
+    assert.deepEqual(replay(createState(), wm.log), wm.state);
+
+    wm.popIn("b");
+    assert.equal(wm.state.windows.b.status, "normal");
+  });
+
   test("rejected commands do not create history entries", () => {
     const wm = createWindowManager({ history: true });
     wm.close("nope");
