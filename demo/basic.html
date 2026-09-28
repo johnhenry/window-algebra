@@ -8,10 +8,10 @@
     <style>
       #desktop { margin: 8px; border-radius: 10px; border: 1px solid var(--line); }
       .win { display: grid; grid-template-rows: auto 1fr; height: 100%; }
-      .win header { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: 8px 8px 0 0; user-select: none; }
+      .win header { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; padding: 4px 8px; border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: 8px 8px 0 0; user-select: none; }
       [data-mode="floating"] .win header { cursor: move; }
-      .win header strong { flex: 1; font-size: 13px; }
-      .win header button { font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; }
+      .win header strong { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+      .win header button { flex: none; font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; }
       .win .body { padding: 12px; overflow: auto; color: var(--muted); }
       .grip { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; }
       /* Windows are size containers: content adapts via container queries. */
