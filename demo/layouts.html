@@ -144,7 +144,7 @@
         schedule: createFrameScheduler(),
         history: true,
       });
-      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: 8 });
+      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: 8 });
       syncChrome(wm, root);
 
       let counter = 0;

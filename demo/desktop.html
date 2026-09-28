@@ -180,7 +180,7 @@
         focusable, modalTarget, blockedWindows, stackingOrder, paintOrder, inTiledBase, childrenOf, isBlocked, windowsIn, focusedWindow, activeWorkspace, visibleWindows, descendantsOf,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
-      import { initPage, h, $, $$, windowSurface, syncChrome, focusEffect, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, createLog, describe, fmtRect, isTyping, SWATCHES } from "./shared/kit.mjs";
 
       initPage({ current: "./desktop.html", title: "Tiling desktop" });
 
@@ -205,9 +205,8 @@
         renderer,
         schedule: createFrameScheduler(),
         history: 300,
-        onEffect: focusEffect(() => renderer),
       });
-      let detachInput = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      let detachInput = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
       syncChrome(wm, root);
 
       const S = () => wm.getState();
@@ -460,7 +459,7 @@
       $("#focus-raises").onchange = (event) => wm.dispatch({ type: "config/set", focusRaises: event.target.checked });
       $("#snap").onchange = (event) => {
         detachInput();
-        detachInput = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: event.target.checked ? 16 : undefined });
+        detachInput = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: event.target.checked ? 16 : undefined });
       };
       $("#undo").onclick = () => wm.undo();
       $("#redo").onclick = () => wm.redo();

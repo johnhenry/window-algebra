@@ -112,7 +112,7 @@
         createWindowManager, createState, update, derive, grid, row, column, stack, place, size, view, masterStack, visibleWindows, windowsIn, updateRatio,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, htmlSurface, lazySurface, iframeSurface, canvasSurface, createFrameScheduler } from "../src/browser/index.mjs";
-      import { initPage, h, $, $$, windowSurface, syncChrome, focusEffect, storage, currentTheme, isTyping } from "./shared/kit.mjs";
+      import { initPage, h, $, $$, windowSurface, syncChrome, storage, currentTheme, isTyping } from "./shared/kit.mjs";
 
       initPage({ current: "./ide.html", title: "IDE workspace (app)" });
 
@@ -436,9 +436,8 @@
         renderer,
         schedule: createFrameScheduler(),
         history: 200,
-        onEffect: focusEffect(() => renderer),
       });
-      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
       syncChrome(wm, root);
       wm.render();
 

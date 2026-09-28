@@ -20,10 +20,19 @@ const INTERACTIVE = "[data-wm-command], button, a, input, select, textarea, labe
  * @param {() => object} options.getState
  * @param {(command: object) => unknown} options.dispatch
  * @param {number} [options.snap] snap floating moves to a grid
+ * @param {(listener: (state: object, events: object[]) => void) => () => void} [options.subscribe]
+ *   the manager's `subscribe`. When given, keyboard focus follows WM focus: after
+ *   a window is focused by command (shortcut, taskbar, API), DOM focus moves into
+ *   it, back to the element last focused there, else the view itself. Focus is
+ *   never taken from a text field outside `root`.
+ * @param {(task: () => void) => void} [options.afterRender] when to move DOM focus
+ *   after a focus change (default: next animation frame, i.e. after the commit)
  * @returns {() => void} detach
  */
-export const attachInput = ({ root, getState, dispatch, snap }) => {
+export const attachInput = ({ root, getState, dispatch, snap, subscribe, afterRender }) => {
   let gesture = null;
+  const doc = root.ownerDocument;
+  const lastFocused = new Map(); // view id → element last focused inside it
 
   const viewOf = (target) => target.closest?.("wm-view[data-view]");
 
@@ -91,16 +100,62 @@ export const attachInput = ({ root, getState, dispatch, snap }) => {
     dispatch({ type: button.getAttribute("data-wm-command"), id });
   };
 
+  // Keyboard focus entering a window (Tab, a script calling .focus()) focuses it
+  // in the WM too, so it is raised like a click would raise it.
+  const onFocusIn = (event) => {
+    const viewElement = viewOf(event.target);
+    if (!viewElement) return;
+    const id = viewElement.getAttribute("data-view");
+    if (event.target !== viewElement) lastFocused.set(id, event.target);
+    const state = getState();
+    if (state.windows[id] && state.focus.window !== id && !isBlocked(state, id)) dispatch({ type: "window/focus", id });
+  };
+
+  /** Only move DOM focus when it is not somewhere the user is typing outside the WM. */
+  const mayTakeFocus = () => {
+    const active = doc?.activeElement;
+    if (!active || active === doc.body || root.contains?.(active)) return true;
+    const tag = active.localName;
+    const type = (active.getAttribute?.("type") ?? "text").toLowerCase();
+    const textEntry =
+      tag === "textarea" ||
+      tag === "select" ||
+      active.isContentEditable === true ||
+      (tag === "input" && !["button", "submit", "reset", "checkbox", "radio", "range", "color", "file", "image"].includes(type));
+    return !textEntry;
+  };
+
+  const moveFocusInto = (id) => {
+    const viewElement = root.querySelector?.(`wm-view[data-view="${id.replace(/["\\]/g, "\\$&")}"]`);
+    if (!viewElement || viewElement.contains?.(doc?.activeElement) || !mayTakeFocus()) return;
+    const remembered = lastFocused.get(id);
+    if (remembered?.isConnected && viewElement.contains?.(remembered) && !remembered.closest?.("[inert]")) {
+      remembered.focus?.({ preventScroll: true });
+      if (doc.activeElement === remembered) return;
+    }
+    if (!viewElement.hasAttribute("tabindex")) viewElement.setAttribute("tabindex", "-1");
+    viewElement.focus?.({ preventScroll: true });
+  };
+
+  const schedule = afterRender ?? ((task) => (doc?.defaultView?.requestAnimationFrame ?? setTimeout)(task));
+  const unsubscribe = subscribe?.((state, events = []) => {
+    const focused = events.findLast?.((event) => event.type === "window/focused");
+    if (focused?.id) schedule(() => getState().focus.window === focused.id && moveFocusInto(focused.id));
+  });
+
   root.addEventListener("pointerdown", onPointerDown);
   root.addEventListener("pointermove", onPointerMove);
   root.addEventListener("pointerup", onPointerUp);
   root.addEventListener("pointercancel", onPointerUp);
   root.addEventListener("click", onClick);
+  root.addEventListener("focusin", onFocusIn);
   return () => {
     root.removeEventListener("pointerdown", onPointerDown);
     root.removeEventListener("pointermove", onPointerMove);
     root.removeEventListener("pointerup", onPointerUp);
     root.removeEventListener("pointercancel", onPointerUp);
     root.removeEventListener("click", onClick);
+    root.removeEventListener("focusin", onFocusIn);
+    unsubscribe?.();
   };
 };

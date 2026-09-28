@@ -247,7 +247,7 @@
         addRow({ command, events: out.events, effects: out.effects, kind: rejected ? "rejected" : out.state === before ? "noop" : "" });
         return out;
       };
-      attachInput({ root: $("#preview"), getState: wm.getState, dispatch: run });
+      attachInput({ root: $("#preview"), getState: wm.getState, subscribe: wm.subscribe, dispatch: run });
 
       // Meta events (undo/redo/load) arrive through subscribe with command === null.
       wm.subscribe((state, events, command) => {

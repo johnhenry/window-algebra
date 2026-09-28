@@ -328,3 +328,54 @@ describe("paint order: background beneath the tiled base (regression)", () => {
     assert.equal(paintOrder(maxed).at(-1), "t2", "a maximized window leaves the base and stacks by rank");
   });
 });
+
+describe("input: keyboard focus and WM focus stay in sync (regression)", () => {
+  const withSync = () => {
+    const { doc, root, renderer } = setup();
+    const wm = createWindowManager({ renderer });
+    const tasks = [];
+    attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, subscribe: wm.subscribe, afterRender: (task) => tasks.push(task) });
+    const flush = () => tasks.splice(0).forEach((task) => task());
+    return { doc, root, renderer, wm, flush };
+  };
+
+  test("keyboard focus entering a window focuses (and raises) it in the WM", () => {
+    const { doc, renderer, wm } = withSync();
+    wm.create({ id: "a", mode: "floating", placement: { x: 0, y: 0, width: 100, height: 100 } });
+    wm.create({ id: "b", mode: "floating", placement: { x: 0, y: 0, width: 100, height: 100 } });
+    const field = doc.createElement("textarea");
+    renderer.elementFor("a").append(field);
+    assert.equal(wm.state.focus.window, "b");
+    field.focus(); // e.g. Tab moved focus into a window that is behind
+    assert.equal(wm.state.focus.window, "a");
+    assert.equal(wm.state.stack.normal.at(-1), "a");
+  });
+
+  test("focusing a window by command moves keyboard focus into it, back to the last focused element", () => {
+    const { doc, renderer, wm, flush } = withSync();
+    wm.create({ id: "a" });
+    wm.create({ id: "b" });
+    const field = doc.createElement("textarea");
+    renderer.elementFor("a").append(field);
+    field.focus();
+    flush();
+    wm.focus("b");
+    flush();
+    assert.equal(doc.activeElement, renderer.elementFor("b"), "a window with nothing focused yet gets focus on its view");
+    assert.equal(renderer.elementFor("b").getAttribute("tabindex"), "-1");
+    wm.focusPrevious(); // e.g. Alt+K
+    flush();
+    assert.equal(doc.activeElement, field, "returning to a window restores its last focused element");
+  });
+
+  test("focus is not taken from a text field outside the WM root", () => {
+    const { doc, wm, flush } = withSync();
+    wm.create({ id: "a" });
+    const outside = doc.createElement("input");
+    doc.body.append(outside);
+    outside.focus();
+    wm.create({ id: "b" }); // e.g. a command typed into the demo console
+    flush();
+    assert.equal(doc.activeElement, outside);
+  });
+});

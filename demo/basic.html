@@ -62,7 +62,7 @@
         schedule: createFrameScheduler(),
         history: 200,
       });
-      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
 
       let counter = 0;
       const makeSurface = (id, title) =>

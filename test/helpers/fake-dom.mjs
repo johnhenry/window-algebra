@@ -65,6 +65,15 @@ export class FakeElement {
   removeAttribute(name) {
     this.attributes.delete(name);
   }
+  contains(node) {
+    for (let n = node; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  }
+  /** Moves document.activeElement here and fires a bubbling-style "focusin" on every ancestor's listeners. */
+  focus() {
+    this.ownerDocument.activeElement = this;
+    for (let n = this; n; n = n.parentNode) n.dispatch?.("focusin", { target: this });
+  }
   /** Times this element left the document (a real iframe would reload each time). */
   disconnects = 0;
   get isConnected() {
@@ -185,5 +194,6 @@ export const createFakeDocument = () => {
     createElement: (tag) => new FakeElement(tag, doc),
   };
   doc.body = new FakeElement("body", doc);
+  doc.activeElement = doc.body;
   return doc;
 };

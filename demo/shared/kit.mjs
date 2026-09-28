@@ -196,15 +196,6 @@ export const syncChrome = (wm, root) => {
   return run;
 };
 
-/** Standard effect interpreter: move DOM focus to the focused view. */
-export const focusEffect = (getRenderer) => (effect) => {
-  if (effect.type !== "focus" || !effect.id) return;
-  requestAnimationFrame(() => {
-    const el = getRenderer()?.elementFor(effect.id);
-    if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
-  });
-};
-
 // ------------------------------------------------------------------ logging
 
 const time = () => {

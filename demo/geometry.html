@@ -186,7 +186,7 @@
         renderer: { commit: (tree) => (commits++, renderer.commit(tree)), measure: () => renderer.measure() },
         schedule: createFrameScheduler(),
       });
-      let detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      let detach = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
       syncChrome(wm, root);
       for (const [id, title, , options] of defs) wm.create({ id, title, ...options });
       const anchorTip = () => {
@@ -323,7 +323,7 @@
       $("#fallback").onchange = (event) => {
         makeRenderer(event.target.checked ? true : undefined);
         detach();
-        detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: $("#snap").checked ? 20 : undefined });
+        detach = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: $("#snap").checked ? 20 : undefined });
         wm.render();
         requestAnimationFrame(() => requestAnimationFrame(draw));
       };
@@ -383,7 +383,7 @@
       };
       $("#snap").onchange = (event) => {
         detach();
-        detach = attachInput({ root, getState: wm.getState, dispatch: wm.dispatch, snap: event.target.checked ? 20 : undefined });
+        detach = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: event.target.checked ? 20 : undefined });
       };
       $("#stress").onclick = () => {
         const before = commits;

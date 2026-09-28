@@ -57,7 +57,7 @@ export const CHECKLIST = [
   ...items("Events & effects", [
     ["events", "all event types rendered"],
     ["effect-render", "render effect"],
-    ["effect-focus", "focus effect (onEffect)"],
+    ["effect-focus", "WM focus ↔ keyboard focus (attachInput subscribe, focusin)"],
     ["subscribe"],
   ]),
   ...items("State & history", [

@@ -219,7 +219,7 @@
       const root = $("#stage");
       const renderer = createDomRenderer({ root, surfaceFor: surfaces });
       const wm = createWindowManager({ state: createState({ config: { gap: 8, inset: 8 } }), renderer, schedule: createFrameScheduler(), history: true });
-      attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
       syncChrome(wm, root);
       const ids = ["html", "frame", "lazy", "canvas"];
       ids.forEach((id, i) => wm.create({ id, title: id, placement: { x: 30 + i * 40, y: 30 + i * 36, width: 380, height: 260 } }));
