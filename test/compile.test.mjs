@@ -137,6 +137,51 @@ describe("compile: tree → CSS declarations", () => {
     assert.equal(anchorName("a b/c"), "--wm-a_b_c");
   });
 
+  test("anchor flip defaults to both axes; an empty flip array omits the fallback", () => {
+    const both = compile(overlay({}, view("editor"), anchor({ to: "editor", side: "bottom" }, view("menu"))));
+    assert.equal(both.children[1].style["position-try-fallbacks"], "flip-block, flip-inline");
+
+    const none = compile(overlay({}, view("editor"), anchor({ to: "editor", side: "bottom", flip: [] }, view("menu"))));
+    assert.equal(none.children[1].style["position-try-fallbacks"], undefined);
+
+    const yOnly = compile(overlay({}, view("editor"), anchor({ to: "editor", side: "bottom", flip: ["y"] }, view("menu"))));
+    assert.equal(yOnly.children[1].style["position-try-fallbacks"], "flip-block");
+  });
+
+  test("a gravity opposite the anchor side changes position-area; a same-side gravity is ignored", () => {
+    const flipped = compile(
+      overlay({}, view("editor"), anchor({ to: "editor", side: "bottom", align: "start", gravity: "top" }, view("menu"))),
+    );
+    assert.equal(flipped.children[1].style["position-area"], "top span-right");
+
+    const ignored = compile(
+      overlay({}, view("editor"), anchor({ to: "editor", side: "bottom", align: "start", gravity: "bottom" }, view("menu"))),
+    );
+    assert.equal(ignored.children[1].style["position-area"], "bottom span-right");
+  });
+
+  test("side-mode anchors carry their positioner options for the JS fallback; inside-mode anchors do not", () => {
+    const sideMode = compile(
+      overlay(
+        {},
+        view("editor"),
+        anchor({ to: "editor", side: "left", align: "end", offset: 6, gravity: "right", flip: ["x"], slide: ["y"], resize: ["y"] }, view("menu")),
+      ),
+    );
+    assert.deepEqual(JSON.parse(sideMode.children[1].attrs["data-wm-anchor-opts"]), {
+      side: "left",
+      align: "end",
+      offset: 6,
+      gravity: "right",
+      flip: ["x"],
+      slide: ["y"],
+      resize: ["y"],
+    });
+
+    const insideMode = compile(overlay({}, view("editor"), anchor({ to: "editor", inside: true, side: "top" }, view("sheet"))));
+    assert.equal(insideMode.children[1].attrs["data-wm-anchor-opts"], undefined);
+  });
+
   test("gap and inset map to CSS gap and padding", () => {
     const out = compile(inset({ all: 16 }, gap({ all: 8 }, row({}, view("a"), view("b")))));
     assert.equal(out.style.gap, "8px");

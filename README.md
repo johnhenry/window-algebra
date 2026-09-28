@@ -64,7 +64,7 @@ Serve the repository root with any static server and open `/demo/`. ES modules d
 | `desktop.html` | Workspaces, floating/tiled, dock panels, the 7 stacking layers, focus vs raise, nested modals with focus redirection, every role, keyboard shortcuts. |
 | `console.html` | Compose any command, a gallery of every rejection, events and effects per dispatch, undo/redo, replay scrubber, serialize/restore, versioning and migration. |
 | `surfaces.html` | html, lazy, iframe (`srcdoc`) and canvas surfaces keeping their state while windows move through layouts. |
-| `geometry.html` | Requested vs measured geometry, constraints on tiled windows, size hints (aspect ratio, width/height increments) with a live "80×24" cell readout, container queries, CSS anchors vs the forced JS fallback, geometry helpers. |
+| `geometry.html` | Requested vs measured geometry, constraints on tiled windows, size hints (aspect ratio, width/height increments) with a live "80×24" cell readout, container queries, CSS anchors vs the forced JS fallback, positioner rules (`gravity`/`flip`/`slide`/`resize`) with a "pin near a corner" overflow trigger, geometry helpers. |
 | `ide.html` | A realistic IDE built from the pieces: custom grid-areas layout, tab stacks, command palette, context menus, toasts, three workspaces, session persistence. |
 | `basic.html` | The minimal quick start. |
 
@@ -84,7 +84,7 @@ Every container and modifier takes an **options object first**, then its child o
 | Modifier  | `size(options, child)`            | allocation constraint (`weight`, `width`, `min`, `aspectRatio`, …) | flex, width/height, min/max, aspect-ratio |
 | Modifier  | `gap(options, child)`             | separation between siblings                      | `gap`                                      |
 | Modifier  | `inset(options, child)`           | padding around an allocation                     | `padding`                                  |
-| Modifier  | `anchor(options, child)`          | position relative to another view                | CSS anchor positioning, with a JS fallback |
+| Modifier  | `anchor(options, child)`          | position relative to another view, with `xdg_positioner`-style constraint adjustment (`flip`/`slide`/`resize`/`gravity`) | CSS anchor positioning, with a JS fallback |
 
 ```js
 import { overlay, inset, gap, row, column, size, anchor, view } from "@johnhenry/window-algebra";
@@ -143,7 +143,7 @@ The policy decisions baked into these commands:
 - **Paint order.** Tiled windows form the base of the normal layer: they are painted above the `background` layer and beneath every other non-tiled window, whatever their position in `state.stack`. `stackingOrder(state)` is the logical stack; `paintOrder(state)` is the visual order of the active workspace, bottom to top, exactly as `derive` paints it.
 - **Scratchpad (i3-style).** `window/to-scratchpad { id }` hides a window off every workspace: it is stored with `workspace: null`, dropped from any BSP tree, forced to floating mode, and marked `scratchpad: true` for as long as it remains one. `scratchpad/toggle { id? }` shows the given (or, with no `id`, the most recently touched) scratchpad window floating and centered (`placement: { x: "center", y: "center" }`, resolved purely in CSS) on the active workspace, focusing it; toggling the same window again hides it. Hiding the focused window refocuses from history, same as `window/close`. Moving a scratchpad window to a workspace directly (`window/move-to-workspace`) pulls it out of the scratchpad for good. `scratchpadWindows(state)` lists every scratchpad window (shown or hidden); `isScratchpadHidden(state, id)` tells which.
 - **Sticky (EWMH-style).** `window/set-sticky { id, sticky }` makes a window visible on every workspace: `isVisible`, `visibleWindows`, `focusable`, `derive` and `paintOrder` all agree, without needing the window to be duplicated into every workspace's own window list. A sticky window keeps its place in `state.stack` (its stacking is untouched by which workspace is active), is never counted into a layout's tiled base (it is always presented as a floating overlay, even if its `mode` is `"tiled"`), and focusing it never switches the active workspace. `window/move-to-workspace` still moves its "home" workspace (relevant if it is ever unstuck); it stays visible everywhere regardless. `stickyWindows(state)` lists every sticky window.
-- **Roles are semantic.** `dialog` anchors to its parent's center, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner. `derive` decides the presentation, not the application. A window's `anchor` option passes every anchor setting through (`side`, `align`, `offset`, `inside`, `x`, `y`).
+- **Roles are semantic.** `dialog` anchors to its parent's center, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner. `derive` decides the presentation, not the application. A window's `anchor` option passes every anchor setting through (`side`, `align`, `offset`, `inside`, `x`, `y`, `gravity`, `flip`, `slide`, `resize`; see "Positioner rules for anchored popups" below).
 - **The log is replayable.** `wm.log` holds the commands applied since `wm.origin` (the initial state, or the last `load()`); undo and redo keep it in step, so `replay(wm.origin, wm.log)` always equals `wm.getState()`.
 - **Gestures are one step.** Commands that carry the same `gesture` token in a row (the input adapter tags every `window/move` / `window/resize` of one floating drag) form one history entry and one log entry: runs of absolute setters collapse to their last command, so a drag undoes in one step and still replays exactly.
 - **BSP is a stateful layout expressed functionally.** Its tree lives in workspace state and is kept in sync as windows are created, closed, floated, or moved.
@@ -304,6 +304,19 @@ Toggle between two full layouts (rather than decorating one) with `layout/toggle
 ## compile: from layout tree to CSS
 
 `compile(tree, presentationContext(state))` returns a render tree of `{ tag, key, attrs, style, children }`. Views are `container-type: size`, except on an axis sized by its content (`height: "content"`), where they fall back to `inline-size` (or no containment) so the content can size them. `toHTML()` serializes it for server rendering or snapshots. View elements are keyed `view:<id>`, so a layout change moves elements instead of recreating them. When a view appears more than once, the extra copies become non-primary projections.
+
+### Positioner rules for anchored popups
+
+`anchor()`'s side-attached form (`{ to, side, align, offset }` — used by menus, popovers, tooltips and side-anchored dialogs) accepts Wayland `xdg_positioner`-style constraint adjustment for when the popup would overflow the stage:
+
+- **`gravity`** (default: `side`) — which way the popup grows from its attach point on the anchor's `side` edge. A `gravity` opposite `side` (e.g. `side: "bottom", gravity: "top"`) grows the popup back over the space just past the anchor instead of away from it; any other value falls back to `side`.
+- **`flip: ["x","y"]`** — axes allowed to flip to the opposite side (primary axis) or alignment (cross axis) instead of overflowing. Default: both axes.
+- **`slide: ["x","y"]`** — axes allowed to translate, unresized, back into the stage. Default: neither.
+- **`resize: ["x","y"]`** — axes allowed to shrink so the popup fits the stage, keeping the edge nearest its anchor point fixed. Default: neither.
+
+Each axis tries flip, then slide, then resize, in that order, using only the adjustments it was opted into; an axis with none of the three left alone can overflow the stage. The placement math is `positionPopup(anchorRect, popupSize, stage, options)` in `src/geometry/positioner.mjs` — a pure function with no DOM dependency, safe to call from a demo, a test, or your own layout code.
+
+`compile` maps as much of this to CSS anchor positioning as it can: `flip` becomes `position-try-fallbacks: flip-block, flip-inline` (whichever axes are included — `y` is the block axis for a `top`/`bottom` `side`, `x` for `left`/`right`), and a `gravity` opposite `side` picks a different `position-area`. `slide` and `resize` have no CSS anchor-positioning equivalent — `position-try-fallbacks` only swaps between discrete alternatives, it can't continuously clamp a position or shrink a box — so they only take effect under the JS anchor fallback (`anchorFallback: true`, or automatically wherever `CSS.supports("anchor-name: ...")` is false). A popup that needs `slide`/`resize` to look right everywhere should force the JS fallback rather than rely on native CSS anchor positioning.
 
 ## Browser adapters
 

@@ -9,6 +9,7 @@
  * Only this file (and input.mjs) touches `document`.
  */
 import { styleText } from "../css/compile.mjs";
+import { positionPopup } from "../geometry/positioner.mjs";
 
 const supportsAnchors = (win) => {
   try {
@@ -30,8 +31,9 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
   const records = new Map(); // key → { attrs, style }
   const mounted = new Map(); // view id → surface
   const retired = new Set(); // elements replaced by a same-key element of another tag
-  const anchorSpecs = new Map(); // key → { to, area, justify, align } (JS anchor fallback only)
+  const anchorSpecs = new Map(); // key → { mode, to, ... } (JS anchor fallback only); see effectiveStyle()
   let fallbackPositioned = new Set();
+  let fallbackSized = new Set(); // keys whose width/height the fallback's `resize` set directly
   const useFallback = anchorFallback ?? !supportsAnchors(doc.defaultView);
   root.setAttribute("data-wm-root", "");
 
@@ -52,15 +54,32 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       anchorSpecs.delete(node.key);
       if (!("anchor-name" in node.style)) return node.style;
     } else {
-      anchorSpecs.set(node.key, {
-        to,
-        area: node.style["position-area"],
-        justify: node.style["justify-self"],
-        align: node.style["align-self"],
-        // margin-right / margin-bottom do not move an element placed by left/top.
-        gapBefore: parseFloat(node.style["margin-right"]) || 0,
-        gapAbove: parseFloat(node.style["margin-bottom"]) || 0,
-      });
+      const raw = node.attrs["data-wm-anchor-opts"];
+      let positioner = null;
+      if (raw) {
+        try {
+          positioner = JSON.parse(raw);
+        } catch {
+          positioner = null;
+        }
+      }
+      anchorSpecs.set(
+        node.key,
+        positioner
+          ? { mode: "side", to, ...positioner }
+          : {
+              // "inside" mode (or an anchor without side/align/offset): positioned
+              // by the CSS declarations compile.mjs derived for it.
+              mode: "inside",
+              to,
+              area: node.style["position-area"],
+              justify: node.style["justify-self"],
+              align: node.style["align-self"],
+              // margin-right / margin-bottom do not move an element placed by left/top.
+              gapBefore: parseFloat(node.style["margin-right"]) || 0,
+              gapAbove: parseFloat(node.style["margin-bottom"]) || 0,
+            },
+      );
     }
     const style = { ...node.style };
     for (const prop of ANCHOR_PROPS) if (to !== undefined || prop === "anchor-name") delete style[prop];
@@ -160,10 +179,18 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     }
   };
 
-  /** Resolve the anchor-positioning declarations of a record into a JS placement. */
+  /**
+   * Resolve the anchor-positioning declarations of a record into a JS
+   * placement. "side" mode (`side`/`align`/`offset`/`gravity`/`flip`/`slide`/
+   * `resize`) runs the same `positionPopup` constraint adjustment the CSS
+   * path can only partially express (see `anchorStyle` in `src/css/compile.mjs`);
+   * "inside" mode keeps the simpler center-alignment math it always had.
+   */
   const positionAnchoredFallback = () => {
     const rootRect = root.getBoundingClientRect();
+    const stage = { x: 0, y: 0, width: rootRect.width, height: rootRect.height };
     const positioned = new Set();
+    const sized = new Set();
     for (const [key, spec] of anchorSpecs) {
       const element = elements.get(key);
       if (!element) continue;
@@ -171,32 +198,53 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       if (!target || !target.isConnected) continue;
       const t = target.getBoundingClientRect();
       const e = element.getBoundingClientRect();
-      const area = spec.area ?? "";
       let left;
       let top;
-      if (area === "center" || area === "") {
-        // Inside the anchor, aligned by justify-self / align-self.
-        const jx = spec.justify ?? "center";
-        const jy = spec.align ?? "center";
-        left = jx === "start" ? t.left : jx === "end" ? t.right - e.width : t.left + (t.width - e.width) / 2;
-        top = jy === "start" ? t.top : jy === "end" ? t.bottom - e.height : t.top + (t.height - e.height) / 2;
+      if (spec.mode === "side") {
+        const anchorRect = { x: t.left - rootRect.left, y: t.top - rootRect.top, width: t.width, height: t.height };
+        const placed = positionPopup(anchorRect, { width: e.width, height: e.height }, stage, {
+          side: spec.side,
+          align: spec.align,
+          offset: spec.offset,
+          gravity: spec.gravity,
+          flip: spec.flip,
+          slide: spec.slide,
+          resize: spec.resize,
+        });
+        left = placed.x + rootRect.left;
+        top = placed.y + rootRect.top;
+        if (placed.resized.x || placed.resized.y) {
+          if (placed.resized.x) element.style.setProperty("width", `${placed.width}px`);
+          if (placed.resized.y) element.style.setProperty("height", `${placed.height}px`);
+          sized.add(key);
+        }
       } else {
-        left = t.left + (t.width - e.width) / 2;
-        top = t.top + (t.height - e.height) / 2;
-        if (area.startsWith("bottom")) top = t.bottom;
-        if (area.startsWith("top")) top = t.top - e.height - spec.gapAbove;
-        if (area.startsWith("right")) left = t.right;
-        if (area.startsWith("left")) left = t.left - e.width - spec.gapBefore;
-        if (area.includes("span-right")) left = t.left;
-        if (area.includes("span-left")) left = t.right - e.width;
-        if (area.includes("span-bottom")) top = t.top;
-        if (area.includes("span-top")) top = t.bottom - e.height;
+        const area = spec.area ?? "";
+        if (area === "center" || area === "") {
+          // Inside the anchor, aligned by justify-self / align-self.
+          const jx = spec.justify ?? "center";
+          const jy = spec.align ?? "center";
+          left = jx === "start" ? t.left : jx === "end" ? t.right - e.width : t.left + (t.width - e.width) / 2;
+          top = jy === "start" ? t.top : jy === "end" ? t.bottom - e.height : t.top + (t.height - e.height) / 2;
+        } else {
+          left = t.left + (t.width - e.width) / 2;
+          top = t.top + (t.height - e.height) / 2;
+          if (area.startsWith("bottom")) top = t.bottom;
+          if (area.startsWith("top")) top = t.top - e.height - spec.gapAbove;
+          if (area.startsWith("right")) left = t.right;
+          if (area.startsWith("left")) left = t.left - e.width - spec.gapBefore;
+          if (area.includes("span-right")) left = t.left;
+          if (area.includes("span-left")) left = t.right - e.width;
+          if (area.includes("span-bottom")) top = t.top;
+          if (area.includes("span-top")) top = t.bottom - e.height;
+        }
       }
       element.style.setProperty("left", `${left - rootRect.left}px`);
       element.style.setProperty("top", `${top - rootRect.top}px`);
       positioned.add(key);
     }
-    // Elements that stopped being anchored lose the coordinates we gave them.
+    // Elements that stopped being anchored lose the coordinates (and, if a
+    // resize had shrunk them, the size) we gave them.
     for (const key of fallbackPositioned) {
       if (positioned.has(key)) continue;
       const element = elements.get(key);
@@ -204,7 +252,15 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       if (element && !("left" in style)) element.style.removeProperty("left");
       if (element && !("top" in style)) element.style.removeProperty("top");
     }
+    for (const key of fallbackSized) {
+      if (sized.has(key)) continue;
+      const element = elements.get(key);
+      const style = records.get(key)?.style ?? {};
+      if (element && !("width" in style)) element.style.removeProperty("width");
+      if (element && !("height" in style)) element.style.removeProperty("height");
+    }
     fallbackPositioned = positioned;
+    fallbackSized = sized;
   };
 
   let observer;

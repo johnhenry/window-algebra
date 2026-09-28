@@ -193,11 +193,35 @@ const AREA_BY_SIDE = {
   left: { start: "left span-bottom", center: "left", end: "left span-top" },
 };
 
-/** CSS anchor positioning for an anchored element. */
+const OPPOSITE_SIDE = { top: "bottom", bottom: "top", left: "right", right: "left" };
+
+/** True for the "inside the anchor" placement mode (as opposed to attached to one of its sides). */
+const isInsideAnchor = (options) => Boolean(options.inside || (!options.side && (options.x || options.y)));
+
+/**
+ * CSS anchor positioning for an anchored element — the "positioner rules"
+ * (`flip`/`slide`/`resize`/`gravity`) mapped as far as `position-try-fallbacks`
+ * and `position-area` can express them.
+ *
+ * - `flip` (default both axes): becomes `flip-block`/`flip-inline` fallbacks.
+ *   `y` is the block axis for a `top`/`bottom` anchor's side, `x` for
+ *   `left`/`right` (matching a horizontal writing mode, which is all this
+ *   compiler targets).
+ * - `gravity`: only representable when it names the side opposite `side` —
+ *   CSS's `position-area` keywords bake the anchor edge and growth direction
+ *   together (e.g. "bottom" always means "below the anchor, growing down"),
+ *   so a same-side gravity (attach at the bottom edge but grow upward, back
+ *   over the anchor) has no CSS keyword and is ignored here.
+ * - `slide` and `resize`: CSS anchor positioning has no built-in for either —
+ *   `position-try-fallbacks` only swaps between discrete alternatives, it
+ *   can't clamp a position continuously into the viewport or shrink a box to
+ *   fit. Both are JS-anchor-fallback-only (`src/browser/dom.mjs`); a page
+ *   relying on them should render with `anchorFallback: true`.
+ */
 const anchorStyle = (options) => {
-  const { to, side, align = "center", offset, x, y, inside } = options;
+  const { to, side, align = "center", offset, x, y, inside, gravity, flip } = options;
   const style = { position: "absolute", "position-anchor": anchorName(to) };
-  if (inside || (!side && (x || y))) {
+  if (isInsideAnchor(options)) {
     style["position-area"] = "center";
     const jx = selfAlign(x) ?? (side === "left" ? "start" : side === "right" ? "end" : selfAlign(align) ?? "center");
     const jy = selfAlign(y) ?? (side === "top" ? "start" : side === "bottom" ? "end" : "center");
@@ -205,11 +229,15 @@ const anchorStyle = (options) => {
     style["align-self"] = jy;
   } else {
     const s = side ?? "bottom";
-    style["position-area"] = AREA_BY_SIDE[s]?.[align] ?? AREA_BY_SIDE.bottom.start;
-    style["position-try-fallbacks"] = "flip-block, flip-inline";
+    const g = gravity === OPPOSITE_SIDE[s] ? gravity : s;
+    style["position-area"] = AREA_BY_SIDE[g]?.[align] ?? AREA_BY_SIDE.bottom.start;
+    const flipAxes = new Set(flip ?? ["x", "y"]);
+    const fallbacks = [];
+    if (flipAxes.has("y")) fallbacks.push("flip-block");
+    if (flipAxes.has("x")) fallbacks.push("flip-inline");
+    if (fallbacks.length) style["position-try-fallbacks"] = fallbacks.join(", ");
     if (offset !== undefined) {
-      const opposite = { top: "bottom", bottom: "top", left: "right", right: "left" }[s];
-      style[`margin-${opposite}`] = px(offset);
+      style[`margin-${OPPOSITE_SIDE[s]}`] = px(offset);
     }
   }
   return style;
@@ -329,6 +357,13 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
     const anchorMod = mods.find((mod) => mod.type === "anchor");
     if (anchorMod) {
       attrs["data-wm-anchor"] = anchorMod.options.to;
+      // The JS anchor fallback (src/browser/dom.mjs) re-derives full
+      // positioner semantics — including `slide`/`resize`, which CSS cannot
+      // express — from these, rather than from the CSS declarations above.
+      if (!isInsideAnchor(anchorMod.options)) {
+        const { side, align, offset, gravity, flip, slide, resize } = anchorMod.options;
+        attrs["data-wm-anchor-opts"] = JSON.stringify({ side, align, offset, gravity, flip, slide, resize });
+      }
     }
     if (positioned) attrs["data-wm-positioned"] = "anchor";
 
