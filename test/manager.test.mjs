@@ -105,4 +105,12 @@ describe("createWindowManager facade", () => {
     assert.deepEqual(wm.measure().a.width, 1);
     assert.deepEqual(createWindowManager().measure(), {});
   });
+
+  test("setRules dispatches rules/set and window/create matches them", () => {
+    const wm = createWindowManager();
+    wm.setRules([{ match: { idPrefix: "term-" }, set: { layer: "top" } }]);
+    assert.deepEqual(wm.state.config.rules, [{ match: { idPrefix: "term-" }, set: { layer: "top" } }]);
+    wm.create({ id: "term-1" });
+    assert.equal(wm.state.windows["term-1"].layer, "top");
+  });
 });

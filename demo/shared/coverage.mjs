@@ -35,6 +35,7 @@ export const CHECKLIST = [
     ["workspace/create"], ["workspace/activate"], ["workspace/remove"],
     ["layout/set"], ["layout/set-ratio"], ["layout/rotate-split"], ["config/set"],
     ["window/drop"], ["window/swap-next"], ["window/swap-previous"], ["window/move-before"], ["window/move-after"], ["window/set-draggable"], ["window/detach"],
+    ["rules/set"],
     ["extensions", "custom command handlers (extensions)"],
   ]),
   ...items("Rejections", [
@@ -42,6 +43,7 @@ export const CHECKLIST = [
     ["unknown-mode"], ["different-workspaces"], ["last-workspace"], ["invalid-layout"], ["unknown-layout", "unknown-layout (manager)"], ["invalid-ratio"], ["not-bsp"],
     ["unknown-command"], ["invalid-command"],
     ["same-window"], ["unknown-zone"], ["not-tiled"], ["blocked"], ["drag-disabled"], ["not-draggable"], ["zone-disabled"], ["too-small"], ["invalid-config"],
+    ["invalid-rules"],
   ]),
   ...items("Policies", [
     ["focus-raises", "focus vs raise (config.focusRaises)"],
@@ -59,6 +61,7 @@ export const CHECKLIST = [
     ["drop-semantics", "tiled drops: center swaps, edges insert (BSP: split), per layout axis"],
     ["drag-settings", "config.drag: tiled mode, edgeZone, preview, tooSmall; per-layout drag override"],
     ["pinned", "pinned windows (draggable: false)"],
+    ["window-rules", "declarative window rules: config.rules, matched at window/create, explicit fields win"],
   ]),
   ...items("Events & effects", [
     ["events", "all event types rendered"],
@@ -71,6 +74,7 @@ export const CHECKLIST = [
     ["constants", "LAYERS / ROLES / STATUSES / DEFAULT_CONFIG / COMMANDS / LAYOUTS"],
     ["update"], ["reduce"], ["replay"], ["derive"], ["presentationContext"],
     ["queries", "queries (focusable, modalTarget, stackingOrder, …)"],
+    ["matchRules", "matchRules(state, window) — pure rule-matching query"],
     ["undo-redo", "undo / redo (manager)"],
     ["history-fns", "createHistory / record / undo / redo / canUndo / canRedo"],
     ["serialize", "serialize / load"],
@@ -160,13 +164,14 @@ export const PAGES = [
       "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable",
       "drop-semantics", "drag-settings", "pinned", "tiled-drag", "drag-preview", "drag-shield", "drag-cancel", "drag-undo",
       "window/detach", "drag-to-float", "float-to-tile", "cross-workspace", "drag-children", "a11y-announce", "touch-longpress",
+      "rules/set", "window-rules", "matchRules", "invalid-rules",
     ],
   },
   {
     href: "./console.html",
     short: "Console",
     title: "Command console",
-    blurb: "Issue any of the 36 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
+    blurb: "Issue any of the 37 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
     covers: [
       ...[
         "window/create", "window/close", "window/focus", "window/blur", "focus/next", "focus/previous", "window/raise", "window/lower", "window/set-layer",
@@ -174,13 +179,14 @@ export const PAGES = [
         "window/set-title", "window/set-constraints", "window/swap", "window/promote", "window/move-to-workspace", "workspace/create", "workspace/activate",
         "workspace/remove", "layout/set", "layout/set-ratio", "layout/rotate-split", "config/set", "extensions",
         "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable", "window/detach",
+        "rules/set",
       ],
       "same-window", "unknown-zone", "not-tiled", "blocked", "drag-disabled", "not-draggable", "zone-disabled", "too-small", "invalid-config",
       "missing-id", "duplicate-id", "unknown-parent", "unknown-workspace", "unknown-window", "unknown-layer", "unknown-mode", "different-workspaces",
-      "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command",
+      "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command", "invalid-rules",
       "events", "effect-render", "effect-focus", "subscribe", "update", "reduce", "replay", "undo-redo", "history-fns", "serialize", "log-replay",
-      "createState", "createWorkspace", "createWindowRecord", "constants", "derive", "presentationContext", "queries", "createWindowManager",
-      "compile", "createDomRenderer", "immediateScheduler", "equals", "cascade-close", "modal-graph", "refocus",
+      "createState", "createWorkspace", "createWindowRecord", "constants", "derive", "presentationContext", "queries", "matchRules", "createWindowManager",
+      "compile", "createDomRenderer", "immediateScheduler", "equals", "cascade-close", "modal-graph", "refocus", "window-rules",
     ],
   },
   {

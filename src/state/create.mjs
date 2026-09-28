@@ -44,6 +44,11 @@ export const DEFAULT_CONFIG = Object.freeze({
     crossWorkspace: true,
     follow: false,
   }),
+  /**
+   * Declarative window rules, applied in order at `window/create`; see
+   * `rules.mjs`. Settable wholesale (`rules/set`) or via `config/set`.
+   */
+  rules: Object.freeze([]),
 });
 
 const emptyStack = () => Object.fromEntries(LAYERS.map((layer) => [layer, []]));
@@ -95,6 +100,7 @@ export const createWindowRecord = (
     workspace,
     data,
     draggable,
+    app,
   },
   state,
 ) => {
@@ -126,5 +132,7 @@ export const createWindowRecord = (
   if (data !== undefined) record.data = data;
   // Only the exception is stored: windows are draggable unless pinned.
   if (draggable === false) record.draggable = false;
+  // An app/window-class identifier for rule matching (EWMH WM_CLASS-like); not otherwise used.
+  if (app !== undefined) record.app = app;
   return record;
 };

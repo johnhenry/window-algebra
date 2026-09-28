@@ -16,6 +16,7 @@ import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate } from "../layouts/bsp.mjs";
 import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
+import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
 
 const RENDER = Object.freeze({ type: "render" });
 
@@ -120,6 +121,33 @@ const refocus = (state) => {
   ]);
 };
 
+/**
+ * Apply a folded rule `set` patch to a freshly built window record, skipping
+ * any field the create command set explicitly (those always win over rules).
+ * `placement` and `constraints` merge one level deep; `constraints` is
+ * re-clamped against the window's placement afterwards.
+ */
+const applyRulePatch = (win, patch, command) => {
+  let next = win;
+  for (const key of RULE_SET_FIELDS) {
+    if (patch[key] === undefined) continue;
+    if (Object.prototype.hasOwnProperty.call(command, key)) continue;
+    if (key === "placement") next = { ...next, placement: { ...next.placement, ...patch.placement } };
+    else if (key === "constraints") next = { ...next, constraints: { ...next.constraints, ...patch.constraints } };
+    else if (key === "draggable") {
+      if (patch.draggable === false) next = { ...next, draggable: false };
+      else {
+        const { draggable: _drop, ...rest } = next;
+        next = rest;
+      }
+    } else next = { ...next, [key]: patch[key] };
+  }
+  if (patch.constraints !== undefined && !Object.prototype.hasOwnProperty.call(command, "constraints")) {
+    next = { ...next, placement: { ...next.placement, ...constrainSize(next.placement, next.constraints) } };
+  }
+  return next;
+};
+
 const merge = (a, b) => result(b.state, [...a.events, ...b.events], [...a.effects, ...b.effects]);
 
 const dedupeEffects = (effects) => {
@@ -140,13 +168,17 @@ const handlers = {
     if (typeof id !== "string" || !id) return rejected(state, command, "missing-id");
     if (state.windows[id]) return rejected(state, command, "duplicate-id");
     if (command.parent && !state.windows[command.parent]) return rejected(state, command, "unknown-parent");
-    const win = createWindowRecord(command, state);
+    let win = createWindowRecord(command, state);
+    const appliedRules = matchRules(state, win);
+    if (appliedRules.length) win = applyRulePatch(win, foldRuleSets(state, appliedRules), command);
     if (!state.workspaces[win.workspace]) return rejected(state, command, "unknown-workspace");
     let next = { ...state, windows: { ...state.windows, [id]: win } };
     next = setWorkspace(next, win.workspace, { windows: [...next.workspaces[win.workspace].windows, id] });
     next = bspAdd(next, win, state.focus.window);
     next = { ...next, stack: { ...next.stack, [win.layer]: [...next.stack[win.layer], id] } };
-    const created = result(next, [{ type: "window/created", id }], [RENDER]);
+    const createdEvent = { type: "window/created", id };
+    if (appliedRules.length) createdEvent.rules = appliedRules;
+    const created = result(next, [createdEvent], [RENDER]);
     if (command.focus === false || win.workspace !== next.activeWorkspace) return created;
     return merge(created, applyFocus(next, id));
   },
@@ -464,11 +496,19 @@ const handlers = {
       if (drag.toFloating !== undefined && !["modifier", "threshold", "off"].includes(drag.toFloating)) return rejected(state, command, "invalid-config");
       if (drag.toTiled !== undefined && !["modifier", "always", "off"].includes(drag.toTiled)) return rejected(state, command, "invalid-config");
     }
+    if (patch.rules !== undefined && !validRules(patch.rules)) return rejected(state, command, "invalid-config");
     const config = { ...state.config };
     for (const [key, value] of Object.entries(patch)) {
       config[key] = isPlainObject(value) && isPlainObject(config[key]) ? { ...config[key], ...value } : value;
     }
     return result({ ...state, config }, [{ type: "config/changed", patch }], [RENDER]);
+  },
+
+  /** Replace `config.rules` wholesale. Shorthand for `config/set` with just `rules`. */
+  "rules/set"(state, command) {
+    const { rules } = command;
+    if (!validRules(rules)) return rejected(state, command, "invalid-rules");
+    return result({ ...state, config: { ...state.config, rules: [...rules] } }, [{ type: "rules/changed", rules }], [RENDER]);
   },
 
   ...dropHandlers(),

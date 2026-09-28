@@ -129,6 +129,7 @@ Built-in commands (see `COMMANDS`):
 - **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`
 - **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`
 - **Config:** `config/set`
+- **Rules:** `rules/set`
 
 The policy decisions baked into these commands:
 
@@ -144,6 +145,29 @@ The policy decisions baked into these commands:
 - **BSP is a stateful layout expressed functionally.** Its tree lives in workspace state and is kept in sync as windows are created, closed, floated, or moved.
 
 Add your own commands with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`.
+
+## Window rules
+
+Declarative window placement, in the spirit of xmonad's `ManageHooks`, i3's `for_window`, or EWMH window types: `config.rules` is an ordered array of `{ match, set }` rules, matched against every window at `window/create`.
+
+```js
+update(state, {
+  type: "rules/set",
+  rules: [
+    { match: { role: "dialog" }, set: { layer: "modal" } },
+    { match: { idPrefix: "term-" }, set: { layer: "top", mode: "floating" } },
+    { match: { titleRegex: "^Log " }, set: { status: "minimized" } },
+  ],
+});
+```
+
+- `match` (all present fields must agree; an absent or empty `match` matches every window): `role`, `id`, `idPrefix`, `title`, `titleRegex` (a regex *source* string, compiled fresh each check — rules stay JSON-serializable), `app` (an optional identifier a create command may set, like a WM_CLASS), `parent`.
+- `set`: `mode`, `layer`, `workspace`, `placement`, `status`, `draggable`, `constraints`, `anchor` — the same fields a create command can set. `placement` and `constraints` merge one level deep.
+- Rules apply in array order; a later rule overrides an earlier one on the same field. Whatever fields the `window/create` command sets explicitly always win over every rule (a rule only fills in what the caller left unspecified).
+- `matchRules(state, window)` is the pure query behind it: the indices of `config.rules` a window (or a window-shaped object) matches, in order, without applying anything.
+- The `window/created` event lists which rules applied: `{ type: "window/created", id, rules: [0, 2] }` (omitted when none matched).
+- Set the whole list with `rules/set { rules }` or `config/set { rules }`; both validate the same way and reject malformed rules as `invalid-rules` / `invalid-config` without throwing. A rule that sends a window to an unknown workspace still rejects the `window/create` itself with `unknown-workspace`.
+- `MATCH_FIELDS` / `SET_FIELDS` list the recognised keys; `validRules(rules)` checks a rule list is well-formed. The manager exposes `wm.setRules(rules)`.
 
 ## Drag and drop in layouts
 
