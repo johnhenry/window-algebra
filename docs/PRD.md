@@ -56,7 +56,7 @@ These candidates were considered and rejected (or left as derived helpers):
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 30 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 29 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history. |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), and custom interpreters. |
 | Hybrid | Tiled base plus floating, dialog, popover, and notification layers in a single overlay. |
