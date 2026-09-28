@@ -5,7 +5,7 @@
  * contract), and a small event log.
  */
 import { lazySurface } from "../../src/browser/index.mjs";
-import { BASE_CSS } from "../../src/index.mjs";
+import { BASE_CSS, geometry } from "../../src/index.mjs";
 import { PAGES } from "./coverage.mjs";
 
 /** Tiny hyperscript: h("div", { class: "x", onclick }, child, "text"). */
@@ -208,6 +208,11 @@ export const syncChrome = (wm, root) => {
       if (!win) continue;
       const titleEl = viewEl.querySelector(":scope > .wa-win [data-wa-title]");
       if (titleEl && titleEl.textContent !== win.title) titleEl.textContent = win.title || win.id;
+      const metaEl = viewEl.querySelector(":scope > .wa-win [data-wa-meta]");
+      if (metaEl) {
+        const next = fmtSize(win.placement, win.constraints);
+        if (metaEl.textContent !== next) metaEl.textContent = next;
+      }
       for (const [action, describeButton] of Object.entries(BUTTON_STATES)) {
         const button = viewEl.querySelector(`:scope > .wa-win [data-action="${action}"]`);
         if (!button) continue;
@@ -256,6 +261,17 @@ export const describe = (object) => {
 };
 
 export const fmtRect = (r) => (r ? `${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}×${Math.round(r.height)}` : "—");
+
+/**
+ * Live size readout for the title-bar chrome: pixel dimensions, or terminal-style
+ * cells (e.g. "80×24") when the window's constraints set widthIncrement/heightIncrement.
+ */
+export const fmtSize = (placement, constraints) => {
+  if (!placement) return "";
+  const cells = geometry.sizeToCells(placement, constraints);
+  if (cells) return `${cells.cols ?? Math.round(placement.width)}×${cells.rows ?? Math.round(placement.height)}`;
+  return `${Math.round(placement.width)}×${Math.round(placement.height)}`;
+};
 
 /** Is the event target a text-entry control (so global shortcuts should stand aside)? */
 export const isTyping = (event) => {

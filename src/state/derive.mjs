@@ -106,12 +106,16 @@ export const derive = (state, { layouts = {} } = {}) => {
   let base = interpreter(ws.layout, tiledIds, { state, workspace: ws, focused });
   if (!isNode(base)) throw new TypeError(`derive(): layout "${ws.layout?.type}" did not return a layout node.`);
 
-  // Size constraints are honoured for tiled windows too: CSS min/max sizes on the view.
+  // Size constraints are honoured for tiled windows too: CSS min/max sizes on the
+  // view, and an exact aspectRatio becomes CSS aspect-ratio. A range ({ min, max })
+  // has no single CSS value, and widthIncrement/heightIncrement are advisory for
+  // tiled windows (CSS decides tiled sizes) — neither is applied here.
   const constrained = (id) => {
     const c = state.windows[id]?.constraints ?? {};
     const picked = Object.fromEntries(
       ["minWidth", "minHeight", "maxWidth", "maxHeight"].filter((k) => Number.isFinite(c[k])).map((k) => [k, c[k]]),
     );
+    if (typeof c.aspectRatio === "number" && Number.isFinite(c.aspectRatio) && c.aspectRatio > 0) picked.aspectRatio = c.aspectRatio;
     return Object.keys(picked).length ? picked : null;
   };
   if (tiledIds.some(constrained)) {

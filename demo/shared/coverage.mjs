@@ -70,6 +70,7 @@ export const CHECKLIST = [
     ["scratchpad", "i3-style scratchpad: hide a window off every workspace, toggle it back floating and centered"],
     ["sticky", "EWMH sticky windows: visible on every workspace, keep their stacking"],
     ["urgency", "urgency hints (EWMH/X11-style): config.urgency.clearOnFocus, focus/urgent picks the oldest urgent window"],
+    ["tiled-aspect-ratio", "exact constraints.aspectRatio becomes CSS aspect-ratio for tiled windows"],
   ]),
   ...items("Events & effects", [
     ["events", "all event types rendered"],
@@ -125,6 +126,7 @@ export const CHECKLIST = [
     ["drag-fns", "createDrag / updateDrag / createResize / updateResize / EDGES"],
     ["drop-fns", "dropZoneAt / dropTargetAt / previewDrop / zoneRect"],
     ["updateRatio", "updateRatio (divider drag)"],
+    ["size-hints", "constrainSize honours aspectRatio, widthIncrement/heightIncrement, baseWidth/baseHeight; sizeToCells"],
   ]),
 ];
 
@@ -227,7 +229,7 @@ export const PAGES = [
       "requested-actual", "tiled-constraints", "measure", "window/move", "window/resize", "window/set-constraints", "container-queries",
       "anchor-css", "anchor-fallback", "anchor", "anchorName", "rect-helpers", "drag-fns", "snap", "createFrameScheduler",
       "drag-move", "resize-edges", "roles", "styleOf", "createDomRenderer", "destroy", "createWindowManager", "attachInput", "px",
-      "window/toggle-floating",
+      "window/toggle-floating", "size-hints", "tiled-aspect-ratio",
     ],
   },
   {

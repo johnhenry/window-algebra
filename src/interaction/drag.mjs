@@ -38,7 +38,10 @@ export const updateResize = (resize, pointer) => {
   if (edge.includes("w")) width = start.width - dx;
   if (edge.includes("s")) height = start.height + dy;
   if (edge.includes("n")) height = start.height - dy;
-  const constrained = constrainSize({ width, height }, constraints);
+  // A single-axis edge (n/s/e/w) drives one dimension; an aspect ratio should
+  // adjust the other one, not fight the axis the pointer is actually moving.
+  const preserve = edge === "n" || edge === "s" ? "height" : edge === "e" || edge === "w" ? "width" : undefined;
+  const constrained = constrainSize({ width, height }, constraints, { preserve });
   const x = edge.includes("w") ? start.x + (start.width - constrained.width) : start.x;
   const y = edge.includes("n") ? start.y + (start.height - constrained.height) : start.y;
   return { x, y, width: constrained.width, height: constrained.height };

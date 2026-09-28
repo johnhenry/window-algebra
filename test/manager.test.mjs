@@ -124,6 +124,19 @@ describe("createWindowManager facade", () => {
     assert.deepEqual(wm.state.urgent, ["a"]);
   });
 
+  test("serialize/load round-trips size hints (aspectRatio, increments)", () => {
+    const wm = createWindowManager();
+    wm.create({ id: "a", mode: "floating", constraints: { aspectRatio: { min: 1, max: 2 }, widthIncrement: 10, heightIncrement: 20, baseWidth: 0, baseHeight: 0 } });
+    const saved = wm.serialize();
+    const other = createWindowManager();
+    other.load(saved);
+    assert.deepEqual(other.state.windows.a.constraints, wm.state.windows.a.constraints);
+    other.dispatch({ type: "window/resize", id: "a", width: 84, height: 28 });
+    // The loaded aspectRatio range (1..2) also applies before increments snap the result.
+    assert.deepEqual(other.state.windows.a.placement.width, 80);
+    assert.deepEqual(other.state.windows.a.placement.height, 40);
+  });
+
   test("measure delegates to the renderer", () => {
     const wm = createWindowManager({ renderer: { commit() {}, measure: () => ({ a: { x: 0, y: 0, width: 1, height: 1 } }) } });
     assert.deepEqual(wm.measure().a.width, 1);

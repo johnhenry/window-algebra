@@ -168,6 +168,35 @@ describe("input adapter", () => {
     assert.deepEqual(wm.state.windows.a.placement, { x: 0, y: 0, width: 150, height: 250 });
   });
 
+  test("resize gesture honours size hints: aspectRatio and increments", () => {
+    const { doc, root, renderer } = setup();
+    const wm = createWindowManager({ renderer });
+    wm.create({
+      id: "a",
+      mode: "floating",
+      placement: { x: 0, y: 0, width: 100, height: 100 },
+      constraints: { widthIncrement: 10, heightIncrement: 20 },
+    });
+    attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+    const grip = doc.createElement("div");
+    grip.setAttribute("data-wm-handle", "resize-se");
+    renderer.elementFor("a").append(grip);
+    root.dispatch("pointerdown", { target: grip, clientX: 100, clientY: 100, preventDefault() {} });
+    root.dispatch("pointermove", { clientX: 124, clientY: 124 });
+    // 124 -> nearest multiple of 10 (120); 124 -> nearest multiple of 20 (120).
+    assert.deepEqual(wm.state.windows.a.placement, { x: 0, y: 0, width: 120, height: 120 });
+    root.dispatch("pointerup", {});
+
+    wm.dispatch({ type: "window/set-constraints", id: "a", constraints: { aspectRatio: 1, widthIncrement: undefined, heightIncrement: undefined } });
+    const gripE = doc.createElement("div");
+    gripE.setAttribute("data-wm-handle", "resize-e");
+    renderer.elementFor("a").append(gripE);
+    root.dispatch("pointerdown", { target: gripE, clientX: 120, clientY: 120, preventDefault() {} });
+    root.dispatch("pointermove", { clientX: 220, clientY: 120 });
+    // Dragging only the east edge grows width to 220; height follows the aspect ratio, not the pointer.
+    assert.deepEqual(wm.state.windows.a.placement, { x: 0, y: 0, width: 220, height: 220 });
+  });
+
   test("tab buttons focus their window", () => {
     const { root, renderer } = setup();
     const wm = createWindowManager({ renderer });

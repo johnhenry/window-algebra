@@ -174,6 +174,44 @@ describe("windows", () => {
     assert.equal(state.windows.a.title, "Terminal");
     assert.equal(state.windows.a.placement.width, 100);
   });
+
+  test("size hints: window/resize honours aspectRatio and width/height increments", () => {
+    let state = reduce(createState(), {
+      type: "window/create",
+      id: "a",
+      mode: "floating",
+      constraints: { widthIncrement: 10, heightIncrement: 20, baseWidth: 0, baseHeight: 0 },
+    });
+    state = reduce(state, { type: "window/resize", id: "a", width: 84, height: 28 });
+    // 84 -> nearest multiple of 10 (80); 28 -> nearest multiple of 20 (20).
+    assert.deepEqual(state.windows.a.placement.width, 80);
+    assert.deepEqual(state.windows.a.placement.height, 20);
+
+    state = reduce(state, {
+      type: "window/set-constraints",
+      id: "a",
+      constraints: { aspectRatio: 1, widthIncrement: undefined, heightIncrement: undefined },
+    });
+    state = reduce(state, { type: "window/resize", id: "a", width: 200, height: 50 });
+    // aspectRatio 1 forces a square; height changes less (50 -> 50 stays, width recomputed) or vice versa —
+    // either way width and height end up equal.
+    assert.equal(state.windows.a.placement.width, state.windows.a.placement.height);
+  });
+
+  test("size hints: window/set-constraints immediately re-clamps the stored placement", () => {
+    let state = reduce(createState(), { type: "window/create", id: "a", mode: "floating", placement: { width: 87, height: 42 } });
+    state = reduce(state, { type: "window/set-constraints", id: "a", constraints: { widthIncrement: 10, heightIncrement: 20 } });
+    assert.deepEqual(state.windows.a.placement.width, 90);
+    assert.deepEqual(state.windows.a.placement.height, 40);
+  });
+
+  test("size hints: window/detach honours aspectRatio too", () => {
+    let state = withWindows(["a", "b"]);
+    state = reduce(state, { type: "window/set-constraints", id: "a", constraints: { aspectRatio: 1 } });
+    state = reduce(state, { type: "window/detach", id: "a", width: 200, height: 50 });
+    assert.equal(state.windows.a.mode, "floating");
+    assert.equal(state.windows.a.placement.width, state.windows.a.placement.height);
+  });
 });
 
 describe("focus, stacking and modality", () => {

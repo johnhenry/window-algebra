@@ -105,7 +105,19 @@
             <label>maxWidth <input type="number" id="cmaxw" placeholder="—" /></label>
             <label>maxHeight <input type="number" id="cmaxh" placeholder="—" /></label>
           </div>
+          <div class="grid4">
+            <label>aspect min <input type="number" id="caspectmin" step="0.01" placeholder="—" /></label>
+            <label>aspect max <input type="number" id="caspectmax" step="0.01" placeholder="—" /></label>
+            <label>widthInc <input type="number" id="cwinc" placeholder="—" /></label>
+            <label>heightInc <input type="number" id="chinc" placeholder="—" /></label>
+          </div>
+          <div class="grid4">
+            <label>baseWidth <input type="number" id="cbasew" placeholder="0" /></label>
+            <label>baseHeight <input type="number" id="cbaseh" placeholder="0" /></label>
+            <label class="field">terminal preset (10×20, 8×16 cells) <button class="btn small" id="preset-terminal" type="button">80×24 @ 10×20</button></label>
+          </div>
           <div class="row"><button class="btn small" id="constrain">window/set-constraints</button><span class="note" id="flow"></span></div>
+          <div class="note">Aspect min = max ⇒ an exact ratio (tiled windows get CSS <code>aspect-ratio</code> too). Increments snap size to <code>base + n × increment</code> (terminal-style cells); the title bar shows the cell count once both are set.</div>
         </section>
         <section>
           <h2>Requested vs actual</h2>
@@ -281,6 +293,13 @@
         $("#cminh").value = win.constraints.minHeight ?? "";
         $("#cmaxw").value = win.constraints.maxWidth ?? "";
         $("#cmaxh").value = win.constraints.maxHeight ?? "";
+        const ar = win.constraints.aspectRatio;
+        $("#caspectmin").value = typeof ar === "number" ? ar : ar?.min ?? "";
+        $("#caspectmax").value = typeof ar === "number" ? ar : ar?.max ?? "";
+        $("#cwinc").value = win.constraints.widthIncrement ?? "";
+        $("#chinc").value = win.constraints.heightIncrement ?? "";
+        $("#cbasew").value = win.constraints.baseWidth ?? "";
+        $("#cbaseh").value = win.constraints.baseHeight ?? "";
         $("#toggle-mode").textContent = win.mode === "tiled" ? "make floating" : "make tiled";
       };
       target.onchange = fillFields;
@@ -303,8 +322,33 @@
       $("#toggle-mode").onclick = () => wm.toggleFloating(target.value);
       $("#constrain").onclick = () => {
         const read = (el) => (el.value === "" ? undefined : Number(el.value));
-        const constraints = { minWidth: read($("#cminw")), minHeight: read($("#cminh")), maxWidth: read($("#cmaxw")), maxHeight: read($("#cmaxh")) };
+        const aspectMin = read($("#caspectmin"));
+        const aspectMax = read($("#caspectmax"));
+        const aspectRatio = aspectMin === undefined && aspectMax === undefined ? undefined : aspectMin === aspectMax ? aspectMin : { min: aspectMin, max: aspectMax };
+        const constraints = {
+          minWidth: read($("#cminw")),
+          minHeight: read($("#cminh")),
+          maxWidth: read($("#cmaxw")),
+          maxHeight: read($("#cmaxh")),
+          aspectRatio,
+          widthIncrement: read($("#cwinc")),
+          heightIncrement: read($("#chinc")),
+          baseWidth: read($("#cbasew")),
+          baseHeight: read($("#cbaseh")),
+        };
         wm.dispatch({ type: "window/set-constraints", id: target.value, constraints });
+      };
+      $("#preset-terminal").onclick = () => {
+        $("#cwinc").value = 10;
+        $("#chinc").value = 20;
+        $("#cbasew").value = 0;
+        $("#cbaseh").value = 0;
+        wm.dispatch({
+          type: "window/set-constraints",
+          id: target.value,
+          constraints: { widthIncrement: 10, heightIncrement: 20, baseWidth: 0, baseHeight: 0 },
+        });
+        wm.dispatch({ type: "window/resize", id: target.value, width: 800, height: 480 });
       };
 
       // ---------------------------------------------------------------- anchors
