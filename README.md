@@ -125,6 +125,7 @@ const out = update(state, { type: "window/create", id: "editor" });
 Built-in commands (see `COMMANDS`):
 
 - **Windows:** `window/create`, `window/close` (cascades to child windows), `window/focus`, `window/blur`, `focus/next`, `focus/previous`, `window/raise`, `window/lower`, `window/set-layer`, `window/move`, `window/resize`, `window/set-mode`, `window/toggle-floating`, `window/minimize`, `window/maximize`, `window/fullscreen`, `window/restore`, `window/set-title`, `window/set-constraints`, `window/swap`, `window/promote`, `window/move-to-workspace`
+- **Drag and drop:** `window/drop`, `window/swap-next`, `window/swap-previous`, `window/move-before`, `window/move-after`, `window/set-draggable`
 - **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`
 - **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`
 - **Config:** `config/set`
@@ -139,9 +140,49 @@ The policy decisions baked into these commands:
 - **Paint order.** Tiled windows form the base of the normal layer: they are painted above the `background` layer and beneath every other non-tiled window, whatever their position in `state.stack`. `stackingOrder(state)` is the logical stack; `paintOrder(state)` is the visual order of the active workspace, bottom to top, exactly as `derive` paints it.
 - **Roles are semantic.** `dialog` anchors to its parent's center, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner. `derive` decides the presentation, not the application. A window's `anchor` option passes every anchor setting through (`side`, `align`, `offset`, `inside`, `x`, `y`).
 - **The log is replayable.** `wm.log` holds the commands applied since `wm.origin` (the initial state, or the last `load()`); undo and redo keep it in step, so `replay(wm.origin, wm.log)` always equals `wm.getState()`.
+- **Gestures are one step.** Commands that carry the same `gesture` token in a row (the input adapter tags every `window/move` / `window/resize` of one floating drag) form one history entry and one log entry: runs of absolute setters collapse to their last command, so a drag undoes in one step and still replays exactly.
 - **BSP is a stateful layout expressed functionally.** Its tree lives in workspace state and is kept in sync as windows are created, closed, floated, or moved.
 
 Add your own commands with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`.
+
+## Drag and drop in layouts
+
+Tiled windows own no geometry: their slots come from the workspace order (or the BSP tree) plus the layout interpreter. Dragging a tiled window therefore edits *logical structure*, never pixels, through one pure command:
+
+```js
+update(state, { type: "window/drop", id: "b", target: "a", zone: "left" });
+// zone: "center" | "left" | "right" | "top" | "bottom"
+// → events [{ type: "window/dropped", id, target, zone, op, workspace }], effects [render]
+```
+
+What a zone means depends on the layout, through a registry of **drop interpreters** (`DROPS`) parallel to `LAYOUTS`:
+
+| Layout | center | edges |
+| --- | --- | --- |
+| columns, grid, tabs, monocle | swap | left = insert before, right = insert after; top/bottom swap |
+| rows | swap | top = before, bottom = after; left/right swap |
+| master-stack | swap | a lone master reads horizontally (mirrored for `side: "right"`); masters and the stack column read vertically |
+| spiral | swap | window *i* reads horizontally when *i* is even, vertically when odd (the last one shares its predecessor's split) |
+| bsp | swap leaves | remove the dragged leaf and split the target on that side (`left`/`right` horizontally, `top`/`bottom` vertically) |
+| custom types | swap | reading order: left/top before, right/bottom after |
+
+"Before/after" is position in `ws.windows`; every other window keeps its slot. Grids read along rows, so only left/right insert there. Override or extend the registry with `createWindowManager({ drops: { mine: orderDrops((spec, ids, target) => "y") } })`, or build a handler for the pure core with `createDropHandler({ ...DROPS, mine })`. An interpreter is `{ ops(spec, ids, target) → { zone: op }, apply?(spec, ids, drop) → { ids, layout? } }`.
+
+Rejections: `unknown-window`, `unknown-zone`, `same-window`, `different-workspaces`, `not-tiled` (floating, maximized, minimized, non-window roles, or the `floating` layout), `blocked` (by a modal), `drag-disabled`, `not-draggable`, `zone-disabled` (the mode forbids that op), `too-small`.
+
+**Settings** (`config.drag`, set with `config/set { drag: { … } }`, which merges):
+
+- `tiled`: `"swap-or-insert"` (default), `"swap"`, `"insert"`, or `"off"`. A layout spec's own `drag` (`{ type: "master-stack", drag: "swap" }`) overrides it for that workspace.
+- `edgeZone`: fraction of a window's width/height that counts as an edge (default `0.25`).
+- `preview`: draw the ghost preview while dragging (default `true`).
+- `tooSmall`: `"allow"` (default) or `"reject"`, which refuses a drop whose resulting slot would violate the dragged or target window's min/max constraints. The pure core has no pixels, so the command takes an optional `geometry: { [id]: { width, height } }` estimate; the input adapter measures its preview and sends it. Without geometry the setting is advisory.
+- Per window: `draggable: false` (at create time, or `window/set-draggable`) pins a window: it cannot be dragged, nor swapped away (inserting beside it is fine). Pinned views render `data-wm-draggable="false"`.
+
+**Pure helpers** (`src/interaction/drop.mjs`): `dropZoneAt(rect, point, edgeZone)` → a zone; `dropTargetAt(state, geometry, point, draggedId)` → `{ target, zone, op } | null` from measured rects (a floating window covering the point blocks the drop; hidden stack children never count; a zone the mode forbids falls back to the nearest permitted one); `previewDrop(state, drop)` → the next state, or `null` if rejected. It is only `update` on the immutable state.
+
+**Keyboard equivalents:** `window/swap-next` / `window/swap-previous` (wrapping; BSP uses leaf order) and `window/move-before` / `window/move-after` (one slot, or relative to a `target`; in BSP they split the neighbour along its own split). The manager exposes `drop`, `swapNext`, `swapPrevious`, `moveBefore`, `moveAfter`, and `setDraggable`.
+
+**In the browser**, `attachInput` makes a tiled window's move handle (its title bar) draggable once the pointer travels `threshold` px (default 5), so clicks stay clicks. While dragging, an overlay inside `root` covers every surface, which keeps iframes from swallowing the pointer. It also holds the preview: the hypothetical next state goes through the same `derive → compile` pipeline into a second renderer, drawn as ghost outlines of where every window would land, plus a highlight of the drop zone. CSS solves the hypothetical layout exactly as it will solve the real one (weights, gaps, `auto-fit` grids, BSP ratios), so the ghost cannot drift from the result, and measuring the ghost gives the slot sizes `tooSmall` needs. Constraints are left out of the ghost so it shows each window's *slot*; slots that would violate a window's constraints are outlined in red. Pointerup dispatches exactly one `window/drop`; Escape or `pointercancel` aborts. Pass `present: wm.present, simulate: wm.simulate` so the preview uses your custom layouts and drop interpreters, and `dragPreview(ctx)` to draw your own preview. Theme the ghost with `--wm-ghost-line`, `--wm-ghost-fill`, `--wm-zone-fill` and friends.
 
 ## derive: from state to presentation
 
@@ -162,7 +203,7 @@ derive(state, {
 ## Browser adapters
 
 - `createDomRenderer({ root, surfaceFor })` reconciles the keyed DOM, mounts and unmounts surfaces, measures realized geometry with `measure()`, and positions anchors with JS when CSS anchor positioning isn't supported (force it with `anchorFallback: true`; `reposition()` re-runs it). Reconciliation is top-down and moves views with `moveBefore()` where the browser has it, so an iframe, a playing animation or a focused input survives a layout change.
-- `attachInput({ root, getState, dispatch })` turns pointer events into commands. The markup contract is: `data-wm-handle="move"`, `data-wm-handle="resize-se"` (any edge or corner), `data-wm-command="window/close"`, and tab buttons with `data-wm-tab`.
+- `attachInput({ root, getState, dispatch })` turns pointer events into commands. The markup contract is: `data-wm-handle="move"` (moves a floating window; drags a tiled one to a new slot), `data-wm-handle="resize-se"` (any edge or corner), `data-wm-command="window/close"`, and tab buttons with `data-wm-tab`. Options: `subscribe`, `snap`, `threshold`, `present`, `simulate`, `dragPreview` (see *Drag and drop in layouts*).
 - Surfaces share one contract, `{ mount(target), unmount() }`. Provided implementations: `htmlSurface`, `lazySurface`, `iframeSurface`, and `canvasSurface` (an html-in-canvas style surface that repaints when its size changes).
 - `createFrameScheduler()` coalesces many commands into one commit per animation frame.
 

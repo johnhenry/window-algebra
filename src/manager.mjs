@@ -10,26 +10,55 @@ import { derive, presentationContext, LAYOUTS } from "./state/derive.mjs";
 import { createHistory, record, undo as undoHistory, redo as redoHistory, canUndo, canRedo } from "./state/history.mjs";
 import { compile } from "./css/compile.mjs";
 import { immediateScheduler } from "./browser/scheduler.mjs";
+import { DROPS, dropHandlers } from "./state/drops.mjs";
+
+/**
+ * Commands whose last application within a gesture subsumes the earlier ones
+ * (absolute setters), so a coalesced gesture keeps only the last of a run.
+ */
+const absolute = (command) =>
+  command.type === "window/move"
+    ? command.x != null && command.y != null
+    : command.type === "window/resize"
+      ? ["x", "y", "width", "height"].every((key) => command[key] != null)
+      : false;
+
+const coalesce = (commands, command) => {
+  const previous = commands[commands.length - 1];
+  return absolute(command) && previous?.type === command.type && previous.id === command.id
+    ? [...commands.slice(0, -1), command]
+    : [...commands, command];
+};
 
 /**
  * @param {object} [options]
  * @param {object} [options.state] initial state (default: createState())
  * @param {object} [options.layouts] extra layout interpreters for derive
  * @param {object} [options.extensions] extra command handlers for update
+ * @param {object} [options.drops] extra/override drop interpreters for window/drop, keyed by layout type
  * @param {{ commit(renderTree): void, measure?(): object }} [options.renderer]
  * @param {(task: () => void) => void} [options.schedule] commit scheduler (default: immediate)
  * @param {boolean|number} [options.history] enable undo/redo (number = limit)
  * @param {(effect: object, wm: object) => void} [options.onEffect] interpret effects
+ *
+ * Gestures: commands carrying the same `gesture` token in a row (a floating
+ * drag's stream of window/move, say) form one history step and one log entry.
+ * Runs of absolute setters (window/move with x and y, window/resize with
+ * x, y, width and height) collapse to their last command, so a whole drag
+ * logs as one command and `replay(origin, log)` still equals the state.
  */
 export const createWindowManager = ({
   state: initial = createState(),
   layouts,
-  extensions,
+  extensions: extraHandlers,
+  drops,
   renderer,
   schedule = immediateScheduler,
   history: historyOption = false,
   onEffect,
 } = {}) => {
+  const dropRegistry = { ...DROPS, ...drops };
+  const extensions = drops ? { ...dropHandlers(dropRegistry), ...extraHandlers } : extraHandlers;
   let history = createHistory(initial, { limit: typeof historyOption === "number" ? historyOption : 100 });
   const listeners = new Set();
   // The command log mirrors history: undo moves the last entry aside and redo
@@ -67,17 +96,30 @@ export const createWindowManager = ({
     return !(layout.type in LAYOUTS) && !(layouts && layout.type in layouts);
   };
 
-  const dispatch = (command) => {
-    const out = unknownLayout(command)
+  /** What a command would do, without doing it: no history, render, or notification. */
+  const simulate = (command, state = getState()) =>
+    unknownLayout(command)
       ? {
-          state: getState(),
+          state,
           events: [{ type: "command/rejected", command: command.type, id: command.id, reason: "unknown-layout" }],
           effects: [],
         }
-      : update(getState(), command, extensions);
+      : update(state, command, extensions);
+
+  const dispatch = (command) => {
+    const out = simulate(command);
     if (out.state !== getState()) {
-      history = historyOption ? record(history, out.state) : { ...history, present: out.state };
-      entries.push({ command });
+      const last = entries[entries.length - 1];
+      const token = command?.gesture;
+      if (token != null && undone.length === 0 && last?.gesture === token) {
+        // Same gesture: replace the present (the gesture's first command already
+        // pushed the pre-gesture state) and extend the entry.
+        history = { ...history, present: out.state, future: [] };
+        entries[entries.length - 1] = { gesture: token, commands: coalesce(last.commands, command) };
+      } else {
+        history = historyOption ? record(history, out.state) : { ...history, present: out.state };
+        entries.push(token != null ? { gesture: token, commands: [command] } : { command });
+      }
       undone = [];
     }
     const wm = api;
@@ -109,6 +151,11 @@ export const createWindowManager = ({
       return getState();
     },
     dispatch,
+    simulate,
+    /** The drop-interpreter registry in effect (DROPS plus the `drops` option). */
+    drops: dropRegistry,
+    /** Command handlers passed to `update` (the `extensions` option plus custom drops), for pure dry runs. */
+    extensions,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -118,7 +165,7 @@ export const createWindowManager = ({
     render,
     /** Commands applied since `origin` (for replay/sync); undone commands are excluded. */
     get log() {
-      return entries.slice(lastLoad() + 1).map((entry) => entry.command);
+      return entries.slice(lastLoad() + 1).flatMap((entry) => entry.commands ?? [entry.command]);
     },
     /** The state `log` replays from: the initial state, or the last loaded one. */
     get origin() {
@@ -146,6 +193,13 @@ export const createWindowManager = ({
     restore: command("window/restore"),
     promote: command("window/promote"),
     swap: (a, b) => dispatch({ type: "window/swap", a, b }),
+    /** Drop a tiled window onto another: zone "center" | "left" | "right" | "top" | "bottom". */
+    drop: (id, target, zone, rest = {}) => dispatch({ ...rest, type: "window/drop", id, target, zone }),
+    swapNext: (id) => dispatch({ type: "window/swap-next", id }),
+    swapPrevious: (id) => dispatch({ type: "window/swap-previous", id }),
+    moveBefore: (id, target) => dispatch({ type: "window/move-before", id, ...(target ? { target } : {}) }),
+    moveAfter: (id, target) => dispatch({ type: "window/move-after", id, ...(target ? { target } : {}) }),
+    setDraggable: (id, draggable) => dispatch({ type: "window/set-draggable", id, draggable }),
     moveToWorkspace: (id, workspace) => dispatch({ type: "window/move-to-workspace", id, workspace }),
     createWorkspace: (id, options = {}) => dispatch({ ...options, type: "workspace/create", id }),
     activateWorkspace: command("workspace/activate"),

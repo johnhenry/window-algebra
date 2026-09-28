@@ -19,6 +19,16 @@ export const DEFAULT_CONFIG = Object.freeze({
   inset: 0,
   /** Default placement for newly created floating windows. */
   defaultPlacement: { x: 40, y: 40, width: 480, height: 320 },
+  /**
+   * Dragging windows within layouts.
+   * - tiled: "swap-or-insert" | "swap" | "insert" | "off" — which drops a tiled
+   *   window may make (a layout spec's own `drag` overrides it)
+   * - edgeZone: fraction of a target's width/height that counts as an edge
+   * - preview: show where every window would land while dragging
+   * - tooSmall: "allow" | "reject" — refuse drops whose resulting slot violates
+   *   min/max constraints (needs the geometry estimate the adapter supplies)
+   */
+  drag: Object.freeze({ tiled: "swap-or-insert", edgeZone: 0.25, preview: true, tooSmall: "allow" }),
 });
 
 const emptyStack = () => Object.fromEntries(LAYERS.map((layer) => [layer, []]));
@@ -44,7 +54,7 @@ export const createState = ({ workspaces = ["main"], layout, config = {} } = {})
   if (list.length === 0) throw new TypeError("createState(): at least one workspace is required.");
   return {
     version: 1,
-    config: { ...DEFAULT_CONFIG, ...config },
+    config: { ...DEFAULT_CONFIG, ...config, drag: { ...DEFAULT_CONFIG.drag, ...config.drag } },
     windows: {},
     workspaces: Object.fromEntries(list.map((ws) => [ws.id, ws])),
     workspaceOrder: list.map((ws) => ws.id),
@@ -69,6 +79,7 @@ export const createWindowRecord = (
     anchor = null,
     workspace,
     data,
+    draggable,
   },
   state,
 ) => {
@@ -98,5 +109,7 @@ export const createWindowRecord = (
     workspace: workspace ?? (parent && state.windows[parent]?.workspace) ?? state.activeWorkspace,
   };
   if (data !== undefined) record.data = data;
+  // Only the exception is stored: windows are draggable unless pinned.
+  if (draggable === false) record.draggable = false;
   return record;
 };

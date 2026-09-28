@@ -54,6 +54,48 @@ export const bspRemove = (tree, id) => {
   return { ...tree, first, second };
 };
 
+/**
+ * Insert `id` next to the leaf `target` on a given side: "left"/"right" split
+ * horizontally, "top"/"bottom" vertically, and `id` lands on that side. Without
+ * a side this is `bspInsert`. A tree lacking `target` is returned unchanged.
+ */
+export const bspPlace = (tree, { id, target, side, ratio = 0.5 }) => {
+  if (!side) return bspInsert(tree, { id, target, ratio });
+  if (!tree || !bspIds(tree).includes(target) || bspIds(tree).includes(id)) return tree;
+  const direction = side === "left" || side === "right" ? "horizontal" : "vertical";
+  const first = side === "left" || side === "top";
+  const visit = (node) => {
+    if (node.type === "leaf") {
+      if (node.id !== target) return node;
+      return first ? bspSplit(direction, ratio, bspLeaf(id), node) : bspSplit(direction, ratio, node, bspLeaf(id));
+    }
+    return { ...node, first: visit(node.first), second: visit(node.second) };
+  };
+  return visit(tree);
+};
+
+/** Exchange two leaves' positions. */
+export const bspSwap = (tree, a, b) => {
+  if (!tree) return tree;
+  if (tree.type === "leaf") return tree.id === a ? { ...tree, id: b } : tree.id === b ? { ...tree, id: a } : tree;
+  return { ...tree, first: bspSwap(tree.first, a, b), second: bspSwap(tree.second, a, b) };
+};
+
+/** The direction of the split directly containing `id` (null for a lone leaf or a missing id). */
+export const bspParentDirection = (tree, id) => {
+  if (!tree || tree.type === "leaf") return null;
+  if ([tree.first, tree.second].some((child) => child.type === "leaf" && child.id === id)) return tree.direction;
+  return bspParentDirection(tree.first, id) ?? bspParentDirection(tree.second, id);
+};
+
+/** Make a stored tree agree with the windows present: drop missing leaves, append new ones. */
+export const bspReconcile = (tree, ids) => {
+  let next = tree ?? null;
+  for (const id of bspIds(next)) if (!ids.includes(id)) next = bspRemove(next, id);
+  for (const id of ids) if (!bspIds(next).includes(id)) next = bspInsert(next, { id });
+  return next;
+};
+
 /** Set the ratio of the split that directly contains `id`. */
 export const bspSetRatio = (tree, id, ratio) => {
   if (!tree || tree.type === "leaf") return tree;

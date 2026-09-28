@@ -126,8 +126,11 @@ export class FakeElement {
     this.childNodes = [];
     this.#text = String(value);
   }
+  /** Tests may assign `rect = { left, top, width, height }`; the default is 100×100 at the origin. */
+  rect = null;
   getBoundingClientRect() {
-    return { left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100 };
+    const { left = 0, top = 0, width = 100, height = 100 } = this.rect ?? {};
+    return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top };
   }
   addEventListener(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -189,9 +192,22 @@ function compileSelector(selector) {
 }
 
 export const createFakeDocument = () => {
+  const listeners = new Map();
   const doc = {
     defaultView: { CSS: { supports: () => true } },
     createElement: (tag) => new FakeElement(tag, doc),
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener(type, fn) {
+      listeners.get(type)?.delete(fn);
+    },
+    /** Test helper: deliver an event to document listeners. */
+    dispatch(type, event) {
+      for (const fn of listeners.get(type) ?? []) fn(event);
+    },
+    listeners,
   };
   doc.body = new FakeElement("body", doc);
   doc.activeElement = doc.body;

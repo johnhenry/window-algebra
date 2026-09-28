@@ -163,7 +163,7 @@
     <script type="module">
       import {
         createWindowManager, createState, createWorkspace, createWindowRecord, update, reduce, replay, derive, compile, toHTML, presentationContext, equals,
-        COMMANDS, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, LAYOUTS,
+        COMMANDS, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, LAYOUTS, DROP_ZONES,
         getWindow, activeWorkspace, focusedWindow, windowsIn, isVisible, visibleWindows, childrenOf, modalTarget, isBlocked, blockedWindows, stackingOrder, focusable, descendantsOf,
         createHistory, record, undo as undoHistory, redo as redoHistory, canUndo, canRedo,
       } from "../src/index.mjs";
@@ -273,6 +273,8 @@
         "window/set-title": ["id", "title"], "window/set-constraints": ["id", "constraints"], "window/swap": ["a", "b"], "window/promote": ["id"],
         "window/move-to-workspace": ["id", "workspace"], "workspace/create": ["newWs", "activate"], "workspace/activate": ["wsId"], "workspace/remove": ["wsId"],
         "layout/set": ["layout"], "layout/set-ratio": ["ratio"], "layout/rotate-split": ["idOpt"], "config/set": ["config"],
+        "window/drop": ["id", "target", "zone"], "window/swap-next": ["idOpt"], "window/swap-previous": ["idOpt"],
+        "window/move-before": ["id", "targetOpt"], "window/move-after": ["id", "targetOpt"], "window/set-draggable": ["id", "draggable"],
         "demo/cascade": [], "demo/close-all": [],
       };
       let createCounter = 0;
@@ -298,6 +300,10 @@
           idOpt: () => field("id", select("id", ["", ...ids()], focused)),
           a: () => field("a", select("a", ids(), ids()[0])),
           b: () => field("b", select("b", ids(), ids()[1] ?? ids()[0])),
+          target: () => field("target", select("target", ids(), ids().find((x) => x !== focused) ?? focused)),
+          targetOpt: () => field("target", select("target", ["", ...ids()], "")),
+          zone: () => field("zone", select("zone", DROP_ZONES, "left")),
+          draggable: () => field("draggable", select("draggable", ["false", "true"], state.windows[focused]?.draggable === false ? "true" : "false")),
           layer: () => field("layer", select("layer", LAYERS, "top")),
           xy: () => field("x · y", h("div", { class: "xy" }, h("input", { type: "number", name: "x", value: 40 }), h("input", { type: "number", name: "y", value: 30 }))),
           wh: () => field("w · h", h("div", { class: "xy" }, h("input", { type: "number", name: "width", value: 220 }), h("input", { type: "number", name: "height", value: 140 }))),
@@ -325,6 +331,7 @@
           }
           if (el.type === "number") value = Number(value);
           if (name === "constraints") value = JSON.parse(value);
+          if (name === "draggable") value = value === "true";
           if (name === "layout") value = { type: value, ...(value === "grid" ? { min: 120 } : {}) };
           if (name === "config") {
             Object.assign(command, JSON.parse(value));
@@ -448,9 +455,32 @@
         ["unknown-layout", { type: "layout/set", layout: { type: "nope" } }],
         ["invalid-ratio", { type: "layout/set-ratio", ratio: "wide" }],
         ["not-bsp", { type: "layout/rotate-split", workspace: "side" }],
+        // Drag-and-drop rejections, shown on a small pure state (columns a | b | c)
+        // so they do not depend on what the live manager holds.
+        ["same-window", () => pureRejection({ type: "window/drop", id: "a", target: "a", zone: "center" })],
+        ["unknown-zone", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "middle" })],
+        ["not-tiled", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "center" }, [{ type: "window/set-mode", id: "a", mode: "floating" }])],
+        ["blocked", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "center" }, [{ type: "window/create", id: "m", role: "dialog", modal: true, parent: "b" }])],
+        ["drag-disabled", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "center" }, [{ type: "config/set", drag: { tiled: "off" } }])],
+        ["not-draggable", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "center" }, [{ type: "window/set-draggable", id: "a", draggable: false }])],
+        ["zone-disabled", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "left" }, [{ type: "config/set", drag: { tiled: "swap" } }])],
+        ["too-small", () => pureRejection({ type: "window/drop", id: "a", target: "b", zone: "center", geometry: { a: { width: 90, height: 300 } } }, [
+          { type: "config/set", drag: { tooSmall: "reject" } }, { type: "window/set-constraints", id: "a", constraints: { minWidth: 200 } },
+        ])],
+        ["invalid-config", { type: "config/set", drag: { tiled: "sometimes" } }],
         ["unknown-command", { type: "window/teleport", id: "x" }],
         ["invalid-command", { kind: "no type field" }],
       ];
+      /** Run a command on a small pure state (after `setup`) and log it as a pure-core row. */
+      const pureRejection = (command, setup = []) => {
+        const base = replay(createState({ layout: { type: "columns" } }), [
+          ...["a", "b", "c"].map((id) => ({ type: "window/create", id })),
+          ...setup,
+        ]);
+        const out = update(base, command);
+        addRow({ command: { ...command, note: `pure update(columns a|b|c${setup.length ? ` + ${setup.map((c) => c.type).join(", ")}` : ""}, …)` }, events: out.events, effects: out.effects, kind: "rejected" });
+        return null;
+      };
       $("#rejects").append(
         ...REJECTS.map(([reason, command]) =>
           h("button", { type: "button", title: typeof command === "function" ? "built from current state" : JSON.stringify(command), onclick: () => {

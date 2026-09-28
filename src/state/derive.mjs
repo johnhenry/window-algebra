@@ -16,9 +16,7 @@ import {
   spiral,
   floating,
   bspToLayout,
-  bspInsert,
-  bspIds,
-  bspRemove,
+  bspReconcile,
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
 import { isVisible, isBlocked, inTiledBase } from "./queries.mjs";
@@ -37,13 +35,8 @@ export const LAYOUTS = Object.freeze({
   tabs: (spec, ids, { focused }) => tabs({ active: activeOf(ids, focused, spec) }, ids),
   grid: (spec, ids) => (spec.columns ? fixedGrid(spec, ids) : autoGrid(spec, ids)),
   spiral: (spec, ids) => spiral(spec, ids),
-  bsp: (spec, ids) => {
-    // Reconcile the stored tree with the windows actually present.
-    let tree = spec.tree ?? null;
-    for (const id of bspIds(tree)) if (!ids.includes(id)) tree = bspRemove(tree, id);
-    for (const id of ids) if (!bspIds(tree).includes(id)) tree = bspInsert(tree, { id });
-    return bspToLayout(tree);
-  },
+  // Reconcile the stored tree with the windows actually present.
+  bsp: (spec, ids) => bspToLayout(bspReconcile(spec.tree, ids)),
   // Everything floats; the tiled base is empty.
   floating: () => row({}),
 });
@@ -149,4 +142,5 @@ export const presentationContext = (state) => ({
   titles: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.title])),
   modes: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.mode])),
   roles: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.role])),
+  pinned: Object.values(state.windows).filter((win) => win.draggable === false).map((win) => win.id),
 });

@@ -56,7 +56,7 @@ These candidates were considered and rejected (or left as derived helpers):
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 29 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 35 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history. |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), and custom interpreters. |
 | Hybrid | Tiled base plus floating, dialog, popover, and notification layers in a single overlay. |
@@ -64,12 +64,12 @@ These candidates were considered and rejected (or left as derived helpers):
 | CSS | Flex weights, grid tracks and areas, stack visibility plus `inert`, overlay translate, anchor positioning, gap/padding, size containers. |
 | DOM | Keyed reconciliation, stable view elements, surface mount/unmount, realized-geometry measurement, anchor fallback. |
 | Input | Pure drag, resize, and ratio math, plus a pointer adapter with a markup contract. |
-| History | Undo/redo of window management, a command log, replay, and serialize/load. |
+| Drag and drop | `window/drop` edits tiled structure (order or BSP tree) per layout through drop interpreters; `config.drag` modes, edge zone, preview, and a `tooSmall` check; pinned windows; keyboard equivalents; a ghost preview rendered by the same derive → compile pipeline. |
+| History | Undo/redo of window management, a command log, replay, and serialize/load. A gesture (commands sharing a `gesture` token) is one undo step and one log entry. |
 
 ## Open questions
 
 - Should the five container kinds collapse into one internal `container(strategy, …)` node? The constructors already go through that function, but the node `type` still records the kind.
 - Should struts / `reserve()` for panels be a primitive or live in `Output.workArea`?
 - Should views split into authoritative views and synchronized projections? Today the second occurrence of a view is rendered but receives no surface.
-- Should continuous gestures such as drag coalesce history entries? Today every pointer move is its own undo step.
 - Should the tab strip become a general presentation node for chrome that isn't a window?

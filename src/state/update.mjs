@@ -15,6 +15,7 @@ import { LAYERS, STATUSES, createWindowRecord, createWorkspace } from "./create.
 import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate } from "../layouts/bsp.mjs";
 import { modalTarget, descendantsOf, focusable, isVisible } from "./queries.mjs";
+import { dropHandlers, swapWindows, DRAG_MODES } from "./drops.mjs";
 
 const RENDER = Object.freeze({ type: "render" });
 
@@ -292,22 +293,7 @@ const handlers = {
     const wb = state.windows[b];
     if (!wa || !wb) return rejected(state, command, "unknown-window");
     if (wa.workspace !== wb.workspace) return rejected(state, command, "different-workspaces");
-    const ws = state.workspaces[wa.workspace];
-    const windows = ws.windows.map((id) => (id === a ? b : id === b ? a : id));
-    let next = setWorkspace(state, ws.id, { windows });
-    if (ws.layout.type === "bsp" && ws.layout.tree) {
-      const swapLeaves = (node) =>
-        !node
-          ? node
-          : node.type === "leaf"
-            ? node.id === a
-              ? { ...node, id: b }
-              : node.id === b
-                ? { ...node, id: a }
-                : node
-            : { ...node, first: swapLeaves(node.first), second: swapLeaves(node.second) };
-      next = setLayout(next, ws.id, (layout) => ({ ...layout, tree: swapLeaves(layout.tree) }));
-    }
+    const next = swapWindows(state, a, b);
     return result(next, [{ type: "window/swapped", a, b }], [RENDER]);
   },
 
@@ -430,11 +416,29 @@ const handlers = {
     return result(next, [{ type: "layout/split-rotated", workspace: wsId }], [RENDER]);
   },
 
+  /** Shallow patch; plain-object values (drag, defaultPlacement) merge one level deep. */
   "config/set"(state, command) {
     const { type: _type, ...patch } = command;
-    return result({ ...state, config: { ...state.config, ...patch } }, [{ type: "config/changed", patch }], [RENDER]);
+    const drag = patch.drag;
+    if (drag !== undefined) {
+      if (!isPlainObject(drag)) return rejected(state, command, "invalid-config");
+      if (drag.tiled !== undefined && !DRAG_MODES.includes(drag.tiled)) return rejected(state, command, "invalid-config");
+      if (drag.tooSmall !== undefined && drag.tooSmall !== "allow" && drag.tooSmall !== "reject") return rejected(state, command, "invalid-config");
+      if (drag.edgeZone !== undefined && !(Number(drag.edgeZone) >= 0 && Number(drag.edgeZone) <= 0.5)) return rejected(state, command, "invalid-config");
+    }
+    const config = { ...state.config };
+    for (const [key, value] of Object.entries(patch)) {
+      config[key] = isPlainObject(value) && isPlainObject(config[key]) ? { ...config[key], ...value } : value;
+    }
+    return result({ ...state, config }, [{ type: "config/changed", patch }], [RENDER]);
   },
+
+  ...dropHandlers(),
 };
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
 function cycleFocus(state, direction) {
   const ids = focusable(state);

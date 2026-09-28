@@ -73,6 +73,11 @@
       .sysbar::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--danger); animation: pulse 1.2s infinite; }
       @keyframes pulse { 50% { opacity: 0.25; } }
       wm-view[data-view^="sys"] { border-radius: 99px; }
+      .drag-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; padding: 4px 12px 6px; font-size: 12.5px; align-items: end; }
+      .drag-settings label:not(.inline) { display: grid; gap: 2px; color: var(--muted); min-width: 0; }
+      .drag-settings select, .drag-settings input[type="range"] { width: 100%; min-width: 0; }
+      .drag-settings output { font: 11px var(--mono); color: var(--fg); }
+      .drag-note { padding: 0 12px 10px; margin: 0; font-size: 11.5px; }
       #help { position: fixed; inset: 0; display: none; place-items: center; background: rgb(0 0 0 / 0.45); z-index: 100; padding: 16px; }
       #help.open { display: grid; }
       #help .card { background: var(--surface); border-radius: 12px; padding: 18px 20px; max-width: 560px; width: 100%; box-shadow: var(--shadow-lg); max-height: 90dvh; overflow: auto; }
@@ -132,6 +137,22 @@
           </div>
         </section>
         <section>
+          <h2>Drag &amp; drop <span class="spacer"></span><span class="chip" id="drag-chip">config.drag</span></h2>
+          <div class="drag-settings" id="drag-settings">
+            <label title="config.drag.tiled: which drops a tiled window may make">tiled
+              <select id="drag-mode"><option>swap-or-insert</option><option>swap</option><option>insert</option><option>off</option></select></label>
+            <label title="Layout spec override: { type, drag } wins over config.drag.tiled for this workspace">this layout
+              <select id="drag-layout"><option value="">(inherit)</option><option>swap-or-insert</option><option>swap</option><option>insert</option><option>off</option></select></label>
+            <label title="config.drag.edgeZone: fraction of a window's width/height that counts as an edge">edge zone <output id="edge-out"></output>
+              <input type="range" id="drag-edge" min="0" max="0.5" step="0.01" /></label>
+            <label title="config.drag.tooSmall: reject drops whose slot would violate min/max constraints (the adapter measures its preview)">too small
+              <select id="drag-small"><option>allow</option><option>reject</option></select></label>
+            <label class="inline" title="config.drag.preview: ghost outlines of where every window would land"><input type="checkbox" id="drag-preview" /> preview</label>
+            <button class="btn small" id="pin" title="window/set-draggable on the focused window (Alt+L)">Pin focused</button>
+          </div>
+          <p class="note drag-note">Drag a tiled window's title bar onto another: the center swaps, an edge inserts before/after (BSP: splits). A dashed ghost shows where every window would land; Esc cancels. One drop = one undo step.</p>
+        </section>
+        <section>
           <h2>Focus <span class="spacer"></span><span class="chip" id="focus-chip">—</span></h2>
           <dl class="kv" id="focus"></dl>
         </section>
@@ -157,6 +178,10 @@
           <tr><td><kbd>Alt</kbd> <kbd>J</kbd> / <kbd>K</kbd></td><td>focus next / previous (focus/next, focus/previous)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>Enter</kbd></td><td>toggle floating</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>P</kbd></td><td>promote to master</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>J</kbd> / <kbd>K</kbd></td><td>swap with next / previous tiled window (window/swap-next, window/swap-previous)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>[</kbd> / <kbd>]</kbd></td><td>move before / after its neighbour (window/move-before, window/move-after)</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>L</kbd></td><td>pin / unpin: toggle dragging (window/set-draggable)</td></tr>
+          <tr><td><kbd>Esc</kbd> while dragging</td><td>cancel the drag</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd></td><td>raise / lower within its layer</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>T</kbd></td><td>toggle "always on top" (window/set-layer top ⇄ normal)</td></tr>
           <tr><td><kbd>Alt</kbd> <kbd>M</kbd> · <kbd>X</kbd> · <kbd>F</kbd></td><td>minimize · maximize/restore · fullscreen/restore</td></tr>
@@ -169,7 +194,7 @@
           <tr><td><kbd>Esc</kbd></td><td>close focused transient (menu, dialog, …) or leave fullscreen</td></tr>
           <tr><td><kbd>?</kbd></td><td>this sheet</td></tr>
         </table>
-        <p class="note">Double-click a title to rename it (window/set-title). Drag title bars of floating windows; resize from any edge or corner.</p>
+        <p class="note">Double-click a title to rename it (window/set-title). Drag title bars of floating windows; resize from any edge or corner. Drag a <em>tiled</em> window's title bar onto another tiled window: center swaps, edges insert (BSP: split); Esc cancels.</p>
         <div style="text-align: right; margin-top: 8px"><button class="btn" id="help-close">Close</button></div>
       </div>
     </div>
@@ -206,7 +231,9 @@
         schedule: createFrameScheduler(),
         history: 300,
       });
-      let detachInput = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
+      // present/simulate let the drag preview use this manager's custom layouts and drop interpreters.
+      const inputOptions = { root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, present: wm.present, simulate: wm.simulate };
+      let detachInput = attachInput(inputOptions);
       syncChrome(wm, root);
 
       const S = () => wm.getState();
@@ -275,6 +302,7 @@
               item("Toggle floating", () => wm.toggleFloating(target), "⌥↵"),
               item("Always on top", () => toggleOnTop(target), "⌥T"),
               item("Minimize", () => wm.minimize(target), "⌥M"),
+              item(S().windows[target]?.draggable === false ? "Unpin (allow dragging)" : "Pin (no dragging)", () => togglePin(target), "⌥L"),
               h("hr"),
               ...others.map((ws) => item(`Move to “${ws}”`, () => wm.moveToWorkspace(target, ws))),
               h("hr"),
@@ -367,6 +395,11 @@
         wm.create({ id, title, ...KIND_OPTIONS.notification });
       };
 
+      const togglePin = (id) => {
+        const win = S().windows[id];
+        if (win) wm.setDraggable(id, win.draggable === false);
+      };
+
       const toggleOnTop = (id) => {
         const win = S().windows[id];
         if (win) wm.dispatch({ type: "window/set-layer", id, layer: win.layer === "top" ? "normal" : "top" });
@@ -443,7 +476,27 @@
         const layout = activeWorkspace(state).layout;
         $("#layout").value = layout.type;
         $("#focus-raises").checked = state.config.focusRaises;
+        const drag = state.config.drag;
+        $("#drag-mode").value = drag.tiled;
+        $("#drag-layout").value = layout.drag ?? "";
+        $("#drag-edge").value = drag.edgeZone;
+        $("#edge-out").textContent = Number(drag.edgeZone).toFixed(2);
+        $("#drag-small").value = drag.tooSmall;
+        $("#drag-preview").checked = drag.preview;
+        const focused = focusedWindow(state);
+        $("#pin").textContent = focused?.draggable === false ? "Unpin focused" : "Pin focused";
+        $("#drag-chip").textContent = `effective: ${layout.drag ?? drag.tiled}`;
       };
+      const setDrag = (patch) => wm.dispatch({ type: "config/set", drag: patch });
+      $("#drag-mode").onchange = (event) => setDrag({ tiled: event.target.value });
+      $("#drag-edge").oninput = (event) => setDrag({ edgeZone: Number(event.target.value) });
+      $("#drag-small").onchange = (event) => setDrag({ tooSmall: event.target.value });
+      $("#drag-preview").onchange = (event) => setDrag({ preview: event.target.checked });
+      $("#drag-layout").onchange = (event) => {
+        const { drag: _drag, ...spec } = activeWorkspace(S()).layout;
+        wm.setLayout(event.target.value ? { ...spec, drag: event.target.value } : spec);
+      };
+      $("#pin").onclick = () => focusedId() && togglePin(focusedId());
       $("#workspaces").addEventListener("click", (event) => {
         const rm = event.target.closest("[data-rm]");
         if (rm) return wm.dispatch({ type: "workspace/remove", id: rm.dataset.rm });
@@ -459,7 +512,7 @@
       $("#focus-raises").onchange = (event) => wm.dispatch({ type: "config/set", focusRaises: event.target.checked });
       $("#snap").onchange = (event) => {
         detachInput();
-        detachInput = attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: event.target.checked ? 16 : undefined });
+        detachInput = attachInput({ ...inputOptions, snap: event.target.checked ? 16 : undefined });
       };
       $("#undo").onclick = () => wm.undo();
       $("#redo").onclick = () => wm.redo();
@@ -609,7 +662,14 @@
           if (event.shiftKey && id) return wm.moveToWorkspace(id, ws);
           return wm.activateWorkspace(ws);
         }
+        if (event.shiftKey && (event.code === "KeyJ" || event.code === "KeyK")) {
+          event.preventDefault();
+          return id && (event.code === "KeyJ" ? wm.swapNext(id) : wm.swapPrevious(id));
+        }
         const actions = {
+          BracketLeft: () => id && wm.moveBefore(id),
+          BracketRight: () => id && wm.moveAfter(id),
+          KeyL: () => id && togglePin(id),
           KeyJ: () => wm.focusNext(),
           KeyK: () => wm.focusPrevious(),
           Enter: () => id && wm.toggleFloating(id),

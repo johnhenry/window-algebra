@@ -394,11 +394,16 @@
       // ------------------------------------------------------------------ manager
       const root = $("#stage");
       const renderer = createDomRenderer({ root, surfaceFor });
+      // Slot layouts place windows by their data, not their order, so tiled
+      // drag-and-drop is switched off for them (a per-layout override); the
+      // review workspace (master-stack) keeps it.
+      const IDE_SPEC = { type: "ide", sidebar: 220, panel: 190, ratio: 0.42, drag: "off" };
+      const SLOT_LAYOUTS = ["ide", "debug"];
       const initialState = () => {
         let state = createState({
           workspaces: [
-            { id: "code", layout: { type: "ide", sidebar: 220, panel: 190, ratio: 0.42 } },
-            { id: "debug", layout: { type: "debug" } },
+            { id: "code", layout: IDE_SPEC },
+            { id: "debug", layout: { type: "debug", drag: "off" } },
             { id: "review", layout: { type: "master-stack", ratio: 0.62, masterCount: 2 } },
           ],
           config: { gap: 6, inset: 6, defaultPlacement: { x: 80, y: 60, width: 520, height: 340 } },
@@ -424,6 +429,12 @@
         restored = saved?.state ? JSON.parse(saved.state) : null;
         // Transient windows are not worth restoring.
         if (restored) for (const [id, w] of Object.entries(restored.windows)) if (["palette", "ctx", "toast"].includes(w.data?.slot)) restored = update(restored, { type: "window/close", id }).state;
+        // Sessions saved before the drag override existed get it now.
+        if (restored) {
+          for (const ws of Object.values(restored.workspaces)) {
+            if (SLOT_LAYOUTS.includes(ws.layout?.type) && !ws.layout.drag) ws.layout = { ...ws.layout, drag: "off" };
+          }
+        }
         // A saved session must still derive with today's interpreters.
         if (restored) for (const ws of restored.workspaceOrder) derive({ ...restored, activeWorkspace: ws }, { layouts });
       } catch {
@@ -437,7 +448,7 @@
         schedule: createFrameScheduler(),
         history: 200,
       });
-      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch });
+      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, present: wm.present, simulate: wm.simulate });
       syncChrome(wm, root);
       wm.render();
 
@@ -610,7 +621,7 @@
           open: () => (files.has(args[0]) ? openFile(args[0]) : print(out, `open: ${args[0]}: no such file`, "err")),
           wm: () => print(out, `workspace ${s.activeWorkspace} · ${Object.keys(s.windows).length} windows · focused ${lastFocus}\nlog: ${wm.log.length} commands · undo: ${wm.canUndo}`, "ok"),
           layout: () => {
-            const out2 = wm.setLayout(args[0] === "ide" ? { type: "ide", sidebar: 220, panel: 190, ratio: 0.42 } : { type: args[0] });
+            const out2 = wm.setLayout(args[0] === "ide" ? IDE_SPEC : SLOT_LAYOUTS.includes(args[0]) ? { type: args[0], drag: "off" } : { type: args[0] });
             const rej = out2.events.find((e) => e.type === "command/rejected");
             print(out, rej ? `rejected: ${rej.reason}` : `layout → ${args[0]}`, rej ? "err" : "ok");
           },

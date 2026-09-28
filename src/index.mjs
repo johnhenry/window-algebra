@@ -49,11 +49,25 @@ export * from "./layouts/index.mjs";
 // Geometry and interaction (pure)
 export * as geometry from "./geometry/rect.mjs";
 export { createDrag, updateDrag, createResize, updateResize, updateRatio, EDGES } from "./interaction/drag.mjs";
+export { dropZoneAt, dropTargetAt, previewDrop, zoneRect } from "./interaction/drop.mjs";
 
 // Logical state: update / derive
 export { createState, createWorkspace, createWindowRecord, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG } from "./state/create.mjs";
 export { update, reduce, replay, COMMANDS } from "./state/update.mjs";
 export { derive, presentationContext, LAYOUTS } from "./state/derive.mjs";
+export {
+  DROPS,
+  DROP_ZONES,
+  DRAG_MODES,
+  orderDrops,
+  createDropHandler,
+  dropInterpreterFor,
+  dragMode,
+  opAllowed,
+  tiledOrder,
+  isDroppable,
+  reorder,
+} from "./state/drops.mjs";
 export * from "./state/queries.mjs";
 export { createHistory, record, undo, redo, canUndo, canRedo } from "./state/history.mjs";
 

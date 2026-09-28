@@ -450,3 +450,18 @@ table.data td.num { font-family: var(--mono); text-align: right; white-space: no
   .toolbar .sep { display: none; }
   body.app { height: auto; min-height: 100dvh; overflow: auto; }
 }
+
+/* ------------------------------------------------------------------ tiled drag & drop (attachInput) */
+/* The adapter's ghost and zone highlight read these custom properties. */
+[data-wm-root] {
+  --wm-ghost-line: var(--accent);
+  --wm-ghost-fill: color-mix(in oklab, var(--accent) 9%, transparent);
+  --wm-ghost-fill-strong: color-mix(in oklab, var(--accent) 24%, transparent);
+  --wm-zone-line: var(--accent);
+  --wm-zone-fill: color-mix(in oklab, var(--accent) 16%, transparent);
+  --wm-ghost-bad: var(--danger);
+  --wm-ghost-radius: 8px;
+}
+wm-view[data-wm-drag-source] { opacity: 0.5; }
+wm-view[data-wm-draggable="false"] > .wa-win > .wa-bar { cursor: not-allowed; }
+wm-view[data-wm-draggable="false"] > .wa-win > .wa-bar .wa-title::after { content: " · pinned"; font-weight: 400; color: var(--faint); }

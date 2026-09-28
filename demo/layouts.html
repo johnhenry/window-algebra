@@ -43,6 +43,9 @@
       .win-body .n { font-size: 32px; font-weight: 700; color: var(--wa-color); line-height: 1; }
       .win-body .pos { font: 11px var(--mono); color: var(--muted); }
       @container wm-view (height < 110px) { .win-body .n { font-size: 18px; } .win-body .pos { display: none; } }
+      .dragset { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--line); font-size: 12.5px; }
+      .dragset .title { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+      .dragset output { font: 11px var(--mono); }
       .keys { font-size: 12px; color: var(--muted); padding: 6px 12px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 10px; }
       @media (max-width: 980px) {
         main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(480px, 70dvh) auto; }
@@ -71,15 +74,24 @@
             <button class="btn small primary" id="add">+ Window</button>
             <button class="btn small" id="close">Close</button>
             <button class="btn small" id="promote" title="window/promote">Promote</button>
-            <button class="btn small" id="swap" title="window/swap with the next window">Swap →</button>
+            <button class="btn small" id="swap" title="window/swap-next (s)">Swap →</button>
             <button class="btn small" id="prev" title="focus/previous">◀</button>
             <button class="btn small" id="next" title="focus/next">▶</button>
             <button class="btn small" id="rotate" title="layout/rotate-split (BSP only — rejected elsewhere)">Rotate split</button>
           </div>
           <div class="keys">
             <span><kbd>1</kbd>–<kbd>0</kbd> layout</span><span><kbd>n</kbd> new</span><span><kbd>x</kbd> close</span><span><kbd>j</kbd>/<kbd>k</kbd> focus</span><span><kbd>Enter</kbd> promote</span><span><kbd>[</kbd>/<kbd>]</kbd> ratio</span><span><kbd>r</kbd> rotate</span>
+            <span><kbd>s</kbd>/<kbd>S</kbd> swap next/prev</span><span><kbd>,</kbd>/<kbd>.</kbd> move before/after</span><span>drag a title bar: swap / insert</span>
           </div>
-          <div class="note" id="status" style="padding: 0 12px 8px"></div>
+          <div class="dragset" id="dragset">
+            <span class="title" title="config.drag">Drag</span>
+            <label class="inline" title="config.drag.tiled">mode <select id="drag-mode"><option>swap-or-insert</option><option>swap</option><option>insert</option><option>off</option></select></label>
+            <label class="inline" title="config.drag.edgeZone">edge <input type="range" id="drag-edge" min="0" max="0.5" step="0.01" style="width: 80px" /> <output id="edge-out"></output></label>
+            <label class="inline" title="config.drag.tooSmall">too small <select id="drag-small"><option>allow</option><option>reject</option></select></label>
+            <label class="inline" title="config.drag.preview"><input type="checkbox" id="drag-preview" /> preview</label>
+          </div>
+          <div class="note" id="status" style="padding: 0 12px 4px"></div>
+          <div class="note" id="hover" style="padding: 0 12px 8px; font-family: var(--mono); font-size: 11.5px" title="Pure helpers, evaluated as you hover the stage: dropZoneAt, dropTargetAt and previewDrop for the focused window">hover the stage…</div>
         </div>
         <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0">
           <h2>All layouts, same windows <span class="spacer"></span><span class="chip">derive + compile + toHTML</span></h2>
@@ -96,6 +108,7 @@
       import {
         createWindowManager, createState, derive, compile, toHTML, presentationContext, LAYOUTS, COMMANDS,
         columns, dock, centered, hybrid, fixedGrid, count, updateRatio, isContainer, isModifier,
+        orderDrops, dropTargetAt, dropZoneAt, previewDrop,
       } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
       import { initPage, h, $, $$, windowSurface, syncChrome, SWATCHES, isTyping } from "./shared/kit.mjs";
@@ -114,6 +127,12 @@
           if (!hero) return columns({}, []);
           return hybrid(fixedGrid({ columns: Math.max(1, Math.ceil(Math.sqrt(rest.length))) }, rest), [centered({ width: "62%", height: "74%" }, hero)]);
         },
+      };
+
+      // Custom drop interpreter for the custom "dock" layout: the docked-left window
+      // and the columns read horizontally, the bottom dock vertically.
+      const drops = {
+        dock: orderDrops((spec, ids, target) => (ids.length >= 3 && ids.indexOf(target) === 1 ? "y" : "x")),
       };
 
       const CATALOG = [
@@ -140,11 +159,13 @@
       const wm = createWindowManager({
         state: createState({ layout: byKey["master-stack"].spec, config: { gap: 8, inset: 8 } }),
         layouts,
+        drops,
         renderer: { commit: (tree) => renderer.commit(tree), measure: () => renderer.measure() },
         schedule: createFrameScheduler(),
         history: true,
       });
-      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: 8 });
+      // present/simulate: the drag preview derives custom layouts (dock, spotlight) like the manager does.
+      attachInput({ root, getState: wm.getState, subscribe: wm.subscribe, dispatch: wm.dispatch, snap: 8, present: wm.present, simulate: wm.simulate });
       syncChrome(wm, root);
 
       let counter = 0;
@@ -299,6 +320,12 @@
         $("#tree").innerHTML = treeText(tree);
         $("#nodes").textContent = `${count(tree)} nodes`;
         requestAnimationFrame(updateGeometry);
+        const drag = wm.state.config.drag;
+        $("#drag-mode").value = drag.tiled;
+        $("#drag-edge").value = drag.edgeZone;
+        $("#edge-out").textContent = Number(drag.edgeZone).toFixed(2);
+        $("#drag-small").value = drag.tooSmall;
+        $("#drag-preview").checked = drag.preview;
         const focused = wm.state.focus.window;
         $("#status").textContent = `${Object.keys(wm.state.windows).length} windows · focused ${focused ?? "none"}${lastRejection ? ` · last rejection: ${lastRejection}` : ""}`;
       };
@@ -315,26 +342,49 @@
 
       // ------------------------------------------------------------- actions
       const focused = () => wm.state.focus.window;
-      const tiledOrder = () => wm.state.workspaces[wm.state.activeWorkspace].windows;
       const actions = {
         add,
         close: () => focused() && wm.close(focused()),
         promote: () => focused() && wm.promote(focused()),
-        swap: () => {
-          const ids = tiledOrder();
-          const i = ids.indexOf(focused());
-          if (i >= 0 && ids.length > 1) wm.swap(ids[i], ids[(i + 1) % ids.length]);
-        },
+        swap: () => focused() && wm.swapNext(focused()),
         prev: () => wm.focusPrevious(),
         next: () => wm.focusNext(),
         rotate: () => wm.dispatch({ type: "layout/rotate-split", id: focused() }),
       };
       for (const [name, fn] of Object.entries(actions)) $(`#${name}`).onclick = fn;
+      // Pure helpers, live: what would dropping the focused window here do?
+      let hoverFrame = 0;
+      root.addEventListener("pointermove", (event) => {
+        cancelAnimationFrame(hoverFrame);
+        hoverFrame = requestAnimationFrame(() => {
+          const box = root.getBoundingClientRect();
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top };
+          const geometry = wm.measure();
+          const state = wm.state;
+          const id = state.focus.window;
+          const under = Object.entries(geometry).find(([, r]) => dropZoneAt(r, point));
+          const zone = under ? `${under[0]}:${dropZoneAt(under[1], point, state.config.drag.edgeZone)}` : "—";
+          const found = id ? dropTargetAt(state, geometry, point, id, { drops: wm.drops }) : null;
+          const next = found && previewDrop(state, { id, ...found }, { extensions: wm.extensions });
+          $("#hover").textContent = `dropZoneAt ${zone} · dropTargetAt(${id ?? "—"}) ${found ? `${found.op} ${found.target} (${found.zone})` : "null"}${next ? ` · previewDrop → ${next.workspaces[next.activeWorkspace].windows.join(" ")}` : ""}`;
+        });
+      });
+
+      const setDrag = (patch) => wm.dispatch({ type: "config/set", drag: patch });
+      $("#drag-mode").onchange = (e) => setDrag({ tiled: e.target.value });
+      $("#drag-edge").oninput = (e) => setDrag({ edgeZone: Number(e.target.value) });
+      $("#drag-small").onchange = (e) => setDrag({ tooSmall: e.target.value });
+      $("#drag-preview").onchange = (e) => setDrag({ preview: e.target.checked });
 
       document.addEventListener("keydown", (event) => {
         if (isTyping(event) || event.metaKey || event.ctrlKey || event.altKey) return;
         const digit = "1234567890".indexOf(event.key);
         if (digit >= 0 && CATALOG[digit]) return setLayout(CATALOG[digit].key);
+        const keyed = { S: () => focused() && wm.swapPrevious(focused()), ",": () => focused() && wm.moveBefore(focused()), ".": () => focused() && wm.moveAfter(focused()) };
+        if (keyed[event.key]) {
+          event.preventDefault();
+          return keyed[event.key]();
+        }
         const map = { n: "add", x: "close", j: "next", k: "prev", Enter: "promote", r: "rotate", s: "swap" };
         if (map[event.key]) {
           event.preventDefault();

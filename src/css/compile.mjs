@@ -320,6 +320,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       if (context.modes?.[id]) attrs["data-mode"] = context.modes[id];
       if (context.roles?.[id]) attrs["data-role"] = context.roles[id];
       if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
+      if (context.pinned?.includes(id)) attrs["data-wm-draggable"] = "false";
       return {
         tag: "wm-view",
         key: occurrence > 1 ? `view:${id}#${occurrence}` : `view:${id}`,
@@ -411,4 +412,7 @@ wm-root, [data-wm-root] { display: block; position: relative; overflow: hidden; 
 [data-wm-root] > wm-overlay { width: 100%; height: 100%; }
 wm-view[inert], wm-view[data-wm-blocked] { filter: saturate(0.6); }
 wm-tabs > button[aria-selected="true"] { font-weight: 600; }
+[data-wm-dragging], [data-wm-dragging] * { cursor: grabbing !important; user-select: none; }
+[data-wm-ghost-label]::after { content: attr(data-wm-ghost-label); position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 10px; border-radius: 999px; font: 600 12px/1.4 system-ui, sans-serif; color: var(--wm-ghost-label-fg, #fff); background: var(--wm-ghost-line, rgb(59 130 246)); }
+wm-view[data-wm-draggable="false"] [data-wm-handle="move"] { cursor: not-allowed; }
 `.trim();
