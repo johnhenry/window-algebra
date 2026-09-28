@@ -106,7 +106,12 @@ export const initPage = ({ current, title } = {}) => {
 const ICONS = {
   min: `<svg viewBox="0 0 14 14"><path d="M3 10h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   max: `<svg viewBox="0 0 14 14"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`,
-  float: `<svg viewBox="0 0 14 14"><rect x="2" y="5" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5V3.2A1.2 1.2 0 0 1 6.2 2H10.8A1.2 1.2 0 0 1 12 3.2V7.8A1.2 1.2 0 0 1 10.8 9H9" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`,
+  // Shown while maximized: the classic "restore down" pair of windows.
+  restore: `<svg viewBox="0 0 14 14"><rect x="2" y="5" width="7" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5V3.2A1.2 1.2 0 0 1 6.2 2H10.8A1.2 1.2 0 0 1 12 3.2V7.8A1.2 1.2 0 0 1 10.8 9H9" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`,
+  // Shown while tiled: pop the window out of the layout.
+  float: `<svg viewBox="0 0 14 14"><path d="M6.5 2.5H3.7A1.2 1.2 0 0 0 2.5 3.7v6.6a1.2 1.2 0 0 0 1.2 1.2h6.6a1.2 1.2 0 0 0 1.2-1.2V7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8.5 2.5h3v3M11.5 2.5 7 7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // Shown while floating: dock the window back into the tiled layout.
+  tile: `<svg viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 2.5v9M7 7h4.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
   close: `<svg viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
 };
 
@@ -135,7 +140,7 @@ export const windowSurface = ({ id, title = id, color = nextSwatch(), body, acti
     target.style.setProperty("--wa-color", color);
     target.tabIndex = -1;
     const commandFor = { min: "window/minimize", max: "window/maximize", float: "window/toggle-floating", close: "window/close" };
-    const titles = { min: "Minimize", max: "Maximize / restore", float: "Toggle floating", close: "Close" };
+    const titles = { min: "Minimize", max: "Maximize", float: "Float (undock)", close: "Close" };
     const buttons = actions.map((action) =>
       h("button", { type: "button", "data-wm-command": commandFor[action], "data-action": action, title: titles[action], "aria-label": titles[action], html: ICONS[action] }),
     );
@@ -176,8 +181,24 @@ export const swatchBody = (label) => (el) => {
 };
 
 /**
- * Keep chrome in sync with state: titles, maximize button semantics, and the
- * live size readout. The "max" button toggles between maximize and restore.
+ * How the stateful title-bar buttons look for a window. `state` is also written
+ * to `data-state` so pages can style it (e.g. `[data-action="max"][data-state="maximized"]`).
+ */
+const BUTTON_STATES = {
+  max: (win) =>
+    win.status === "maximized"
+      ? { state: "maximized", command: "window/restore", icon: "restore", label: "Restore", pressed: "true" }
+      : { state: "normal", command: "window/maximize", icon: "max", label: "Maximize", pressed: "false" },
+  float: (win) =>
+    win.mode === "floating"
+      ? { state: "floating", command: "window/toggle-floating", icon: "tile", label: "Tile (dock into layout)", pressed: "true" }
+      : { state: "tiled", command: "window/toggle-floating", icon: "float", label: "Float (undock)", pressed: "false" },
+};
+
+/**
+ * Keep chrome in sync with state: titles, the stateful buttons (maximize ↔
+ * restore, float ↔ tile: command, icon, label, aria-pressed, data-state) and the
+ * live size readout.
  */
 export const syncChrome = (wm, root) => {
   const run = () => {
@@ -187,8 +208,18 @@ export const syncChrome = (wm, root) => {
       if (!win) continue;
       const titleEl = viewEl.querySelector(":scope > .wa-win [data-wa-title]");
       if (titleEl && titleEl.textContent !== win.title) titleEl.textContent = win.title || win.id;
-      const max = viewEl.querySelector(':scope > .wa-win [data-action="max"]');
-      if (max) max.setAttribute("data-wm-command", win.status === "maximized" ? "window/restore" : "window/maximize");
+      for (const [action, describeButton] of Object.entries(BUTTON_STATES)) {
+        const button = viewEl.querySelector(`:scope > .wa-win [data-action="${action}"]`);
+        if (!button) continue;
+        const next = describeButton(win);
+        if (button.getAttribute("data-state") === next.state) continue;
+        button.setAttribute("data-state", next.state);
+        button.setAttribute("data-wm-command", next.command);
+        button.setAttribute("title", next.label);
+        button.setAttribute("aria-label", next.label);
+        button.setAttribute("aria-pressed", next.pressed);
+        button.innerHTML = ICONS[next.icon];
+      }
     }
   };
   wm.subscribe(() => requestAnimationFrame(run));

@@ -370,6 +370,9 @@ wm-view[data-focused] > .wa-win > .wa-win.bare { grid-template-rows: minmax(0, 1
 .wa-actions button:hover { background: var(--surface-3); color: var(--fg); }
 .wa-actions button[data-wm-command="window/close"]:hover { background: var(--danger-soft); color: var(--danger); }
 .wa-actions svg { width: 14px; height: 14px; }
+/* Stateful buttons (data-state is kept in sync by syncChrome). */
+.wa-actions button[aria-pressed="true"] { color: var(--accent); }
+.wa-actions button[aria-pressed="true"]:hover { background: var(--accent-soft); color: var(--accent); }
 .wa-body { min-height: 0; overflow: auto; position: relative; }
 .wa-pad { padding: 12px; }
 
