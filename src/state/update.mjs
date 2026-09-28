@@ -13,7 +13,8 @@
  */
 import { LAYERS, STATUSES, createWindowRecord, createWorkspace } from "./create.mjs";
 import { constrainSize } from "../geometry/rect.mjs";
-import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt } from "../layouts/bsp.mjs";
+import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile } from "../layouts/bsp.mjs";
+import { treeFrom, treeFromBsp, treeNodeAt, treeSetSizesAt } from "../layouts/tree.mjs";
 import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
@@ -53,6 +54,13 @@ const seedBspTree = (state, ws, layout) => {
   if (layout.type !== "bsp" || layout.tree) return layout;
   const tiled = ws.windows.filter((id) => isTiled(state.windows[id]));
   return { ...layout, tree: tiled.reduce((tree, id) => bspInsert(tree, { id }), null) };
+};
+
+/** Seed a docking-tree spec without a tree from the workspace's current tiled order. */
+const seedTree = (state, ws, layout) => {
+  if (layout.type !== "tree" || layout.tree !== undefined) return layout;
+  const tiled = ws.windows.filter((id) => isTiled(state.windows[id]));
+  return { ...layout, tree: treeFrom(tiled) };
 };
 
 const raiseOne = (state, id) => {
@@ -587,7 +595,57 @@ const handlers = {
     const ws = state.workspaces[wsId];
     if (!ws) return rejected(state, command, "unknown-workspace");
     if (!isValidLayoutSpec(command.layout)) return rejected(state, command, "invalid-layout");
-    const layout = seedBspTree(state, ws, command.layout);
+    const layout = seedTree(state, ws, seedBspTree(state, ws, command.layout));
+    return result(setWorkspace(state, wsId, { layout }), [{ type: "layout/changed", workspace: wsId, layout }], [RENDER]);
+  },
+
+  /**
+   * Convert the current layout to a docking tree, so a user can start from
+   * any layout: BSP's binary tree maps over exactly (`treeFromBsp`,
+   * preserving every split's ratio); columns/rows become a single row/column
+   * with their stored sizes carried over; master-stack becomes a row of two
+   * columns (or a single column below `masterCount`); tabs/monocle become a
+   * `tabs` container; anything else (spiral, grid, floating, a function
+   * spec) falls back to a flat row of the current tiled order.
+   */
+  "layout/to-tree"(state, command) {
+    const wsId = command.workspace ?? state.activeWorkspace;
+    const ws = state.workspaces[wsId];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    const ids = ws.windows.filter((id) => isTiled(state.windows[id]));
+    const spec = ws.layout;
+    const type = spec && typeof spec === "object" ? spec.type : null;
+    let tree;
+    if (type === "bsp") {
+      tree = treeFromBsp(bspReconcile(spec.tree, ids));
+    } else if (type === "columns" || type === "rows") {
+      const container = type === "columns" ? "row" : "column";
+      const stored = spec.sizes?.[""];
+      const sizes = Array.isArray(stored) && stored.length === ids.length ? stored : undefined;
+      tree = ids.length > 1 ? { type: container, children: [...ids], ...(sizes ? { sizes } : {}) } : treeFrom(ids);
+    } else if (type === "master-stack") {
+      const masterCount = Math.max(1, Number.isInteger(spec.masterCount) ? spec.masterCount : 1);
+      if (ids.length <= masterCount) {
+        tree = treeFrom(ids, { type: "column" });
+      } else {
+        const masters = ids.slice(0, masterCount);
+        const rest = ids.slice(masterCount);
+        const masterNode = masters.length === 1 ? masters[0] : { type: "column", children: masters };
+        const restNode = rest.length === 1 ? rest[0] : { type: "column", children: rest };
+        const ratio = typeof spec.ratio === "number" ? spec.ratio : 0.5;
+        const side = spec.side === "right" ? "right" : "left";
+        tree = {
+          type: "row",
+          children: side === "right" ? [restNode, masterNode] : [masterNode, restNode],
+          sizes: side === "right" ? [1 - ratio, ratio] : [ratio, 1 - ratio],
+        };
+      }
+    } else if (type === "tabs" || type === "monocle") {
+      tree = treeFrom(ids, { type: "tabs" });
+    } else {
+      tree = treeFrom(ids, { type: "row" });
+    }
+    const layout = { type: "tree", tree };
     return result(setWorkspace(state, wsId, { layout }), [{ type: "layout/changed", workspace: wsId, layout }], [RENDER]);
   },
 
@@ -691,6 +749,27 @@ const handlers = {
         weights[index + 1] = total - a;
       }
       layout = { ...spec, sizes: { ...(spec.sizes ?? {}), "": weights } };
+    } else if (spec.type === "tree") {
+      if (!/^(\d+(,\d+)*)?$/.test(path)) return rejected(state, command, "invalid-path");
+      const node = treeNodeAt(spec.tree ?? null, path);
+      if (!node || node.type === "tabs") return rejected(state, command, "unknown-split");
+      const n = node.children.length;
+      const index = Number.isInteger(command.index) ? command.index : 0;
+      let weights;
+      if (hasWeights) {
+        if (command.weights.length !== n) return rejected(state, command, "invalid-weights");
+        weights = command.weights.slice();
+      } else {
+        if (index < 0 || index + 1 >= n) return rejected(state, command, "invalid-index");
+        const stored = Array.isArray(node.sizes) && node.sizes.length === n ? node.sizes : new Array(n).fill(1);
+        weights = stored.slice();
+        const total = weights[index] + weights[index + 1];
+        const min = total * 0.05;
+        const a = Math.min(total - min, Math.max(min, weights[index] + command.delta));
+        weights[index] = a;
+        weights[index + 1] = total - a;
+      }
+      layout = { ...spec, tree: treeSetSizesAt(spec.tree, path, weights) };
     } else {
       return rejected(state, command, "not-resizable");
     }
@@ -716,7 +795,7 @@ const handlers = {
     if (!isValidLayoutSpec(a) || !isValidLayoutSpec(b)) return rejected(state, command, "invalid-layout");
     const sameType = (x, y) => (typeof x === "function" || typeof y === "function" ? x === y : x.type === y.type);
     const target = sameType(ws.layout, a) ? b : a;
-    const layout = seedBspTree(state, ws, target);
+    const layout = seedTree(state, ws, seedBspTree(state, ws, target));
     const next = setWorkspace(state, wsId, { layout, toggleLayouts: [a, b] });
     return result(next, [{ type: "layout/toggled", workspace: wsId, layout }], [RENDER]);
   },

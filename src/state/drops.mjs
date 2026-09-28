@@ -16,6 +16,7 @@
  * `createDropHandler({ ...DROPS, mine })` or the manager's `drops` option.
  */
 import { bspIds, bspPlace, bspReconcile, bspRemove, bspSwap, bspInsert, bspParentDirection } from "../layouts/bsp.mjs";
+import { treeIds, treeReconcile, treeRemove, treeSwap, treeSplit, treeAddTab, treeInsertTab, treeParentType } from "../layouts/tree.mjs";
 import { inTiledBase, isBlocked } from "./queries.mjs";
 import { applyModifiersToOps } from "./modifiers.mjs";
 
@@ -102,6 +103,39 @@ const bspDrops = {
 };
 
 /**
+ * Docking tree: edges split the leaf directly containing `target` into a new
+ * row ("left"/"right") or column ("top"/"bottom") with the dragged window on
+ * that side, mirroring `bspDrops`. When `target`'s direct parent is already
+ * a `tabs` container, "left"/"right" instead reorder within it ("before"/
+ * "after" — this is also what a tab-strip drag resolves to, letting a tab
+ * insert at any index) and "top"/"bottom" still split, pulling that tab out.
+ * Center adds the dragged window as a tab alongside `target` — as a new
+ * sibling in `target`'s `tabs` container, or wrapping `target` in a fresh
+ * one — unless `spec.tabMode` is `"swap"`, which exchanges the two leaves
+ * (or, for a window with no slot to trade, degrades to the same tab-add).
+ */
+const treeDrops = {
+  ops(spec, ids, target) {
+    const tree = treeReconcile(spec.tree, ids);
+    const center = spec.tabMode === "swap" ? "swap" : "tab";
+    if (treeParentType(tree, target) === "tabs") return { center, left: "before", right: "after", top: "split", bottom: "split" };
+    return { center, left: "split", right: "split", top: "split", bottom: "split" };
+  },
+  apply(spec, ids, { id, target, zone, op }) {
+    let tree = treeReconcile(spec.tree, ids);
+    if (op === "swap" && treeIds(tree).includes(id)) {
+      tree = treeSwap(tree, id, target);
+    } else {
+      tree = treeRemove(tree, id);
+      if (op === "before" || op === "after") tree = treeInsertTab(tree, { id, target, position: op });
+      else if (op === "split") tree = treeSplit(tree, { id, target, side: zone });
+      else tree = treeAddTab(tree, { id, target });
+    }
+    return { ids: treeIds(tree), layout: { ...spec, tree } };
+  },
+};
+
+/**
  * Built-in drop interpreters. The order-based axes:
  *   columns, grid, tabs, monocle  x      (grid: reading order runs along rows)
  *   rows                          y
@@ -118,6 +152,7 @@ export const DROPS = Object.freeze({
   monocle: orderDrops(() => "x"),
   tabs: orderDrops(() => "x"),
   bsp: bspDrops,
+  tree: treeDrops,
   default: orderDrops(() => "both"),
 });
 

@@ -122,12 +122,14 @@
             <option value="master-stack">master-stack</option>
             <option value="sidebar">sidebar (dock)</option>
             <option value="bsp">bsp</option>
+            <option value="tree">tree (docking)</option>
             <option value="columns">columns</option>
             <option value="grid">grid</option>
             <option value="tabs">tabs</option>
             <option value="monocle">monocle</option>
             <option value="floating">floating</option>
           </select>
+          <button class="btn small ghost" id="to-tree" title="layout/to-tree: convert this workspace's current layout into a docking tree">⇥ To docking tree</button>
           <label class="inline" title="config.focusRaises: focusing a window also raises it within its layer"><input type="checkbox" id="focus-raises" checked /> focus raises</label>
           <label class="inline" title="attachInput({ snap }): floating moves snap to a 16px grid"><input type="checkbox" id="snap" /> snap 16px</label>
           <span class="sep"></span>
@@ -179,6 +181,7 @@
             <button class="btn small" id="pin" title="window/set-draggable on the focused window (Alt+L)">Pin focused</button>
           </div>
           <p class="note drag-note">Drag a tiled window's title bar onto another: the center swaps, an edge inserts before/after (BSP: splits). Hold <kbd>Shift</kbd> to float it at the pointer; Shift-drag a floating window onto a tiled one to tile it there; drop on a workspace tab to move it. Touch: long-press the title bar. Esc cancels; one drag = one undo step.</p>
+          <p class="note drag-note">Docking tree (the "dock" workspace, or "⇥ To docking tree"): drag a window's edge onto another to split (row/column); drag onto its center to add it as a tab; drag a tab within a group's strip to reorder or insert at that index; Shift-drag out to undock as floating (<code>window/detach</code>) — same gestures, interpreted by <code>DROPS.tree</code>.</p>
           <p class="note drag-note" aria-hidden="true">announced: <span id="announced">—</span></p>
         </section>
         <section>
@@ -294,6 +297,7 @@
             { id: "main", layout: { type: "master-stack", ratio: 0.58 } },
             { id: "web", layout: { type: "sidebar", extent: 220 } },
             { id: "chat", layout: { type: "tabs" } },
+            { id: "dock", layout: { type: "tree" } },
           ],
           config: { gap: 8, inset: 8, defaultPlacement: { x: 60, y: 50, width: 420, height: 280 } },
         }),
@@ -560,6 +564,12 @@
       spawn("app", { title: "#general" });
       spawn("app", { title: "#random" });
       spawn("app", { title: "@alex" });
+      wm.activateWorkspace("dock");
+      const dockA = spawn("app", { title: "Files" });
+      const dockB = spawn("app", { title: "Output" });
+      const dockC = spawn("app", { title: "Problems" });
+      // A starter arrangement: Files beside a tab group of Output/Problems (drag to split/tab/undock from here).
+      wm.setLayout({ type: "tree", tree: { type: "row", children: [dockA, { type: "tabs", children: [dockB, dockC] }], sizes: [0.32, 0.68] } });
       wm.activateWorkspace("main");
       wm.focus("app-1");
 
@@ -662,8 +672,9 @@
       $("#ws-add").onclick = () => wm.createWorkspace(`ws-${++wsCounter}`, { activate: true, layout: { type: "bsp" } });
       $("#layout").onchange = (event) => {
         const type = event.target.value;
-        wm.setLayout(type === "grid" ? { type, min: 260 } : type === "sidebar" ? { type, extent: 220 } : { type, ratio: 0.58 });
+        wm.setLayout(type === "grid" ? { type, min: 260 } : type === "sidebar" ? { type, extent: 220 } : type === "tree" ? { type } : { type, ratio: 0.58 });
       };
+      $("#to-tree").onclick = () => wm.dispatch({ type: "layout/to-tree" });
       $("#focus-raises").onchange = (event) => wm.dispatch({ type: "config/set", focusRaises: event.target.checked });
       $("#snap").onchange = (event) => {
         detachInput();

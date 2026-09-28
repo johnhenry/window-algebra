@@ -93,6 +93,7 @@
             <label class="inline" title="modifier: reflect-y — flip top-bottom"><input type="checkbox" id="mod-reflect-y" /> reflect-y</label>
             <label class="inline" title="modifier: max-windows(n) — 0 disables; extra windows share a hidden stack slot">max <input type="number" id="mod-max" min="0" max="8" value="0" style="width: 42px" /></label>
             <button class="btn small" id="toggle-layout" title="layout/toggle { a, b } (xmonad ToggleLayouts): flips this workspace between master-stack and monocle">⇄ toggle a/b</button>
+            <button class="btn small ghost" id="to-tree" title="layout/to-tree: convert the current layout into a docking tree">⇥ to docking tree</button>
           </div>
           <div class="dragset" id="dragset">
             <span class="title" title="config.drag">Drag</span>
@@ -159,6 +160,7 @@
         { key: "monocle", label: "monocle", spec: { type: "monocle" }, desc: "monocle(): a stack; only the focused window is visible, the others stay mounted but hidden and inert." },
         { key: "tabs", label: "tabs", spec: { type: "tabs" }, desc: "tabs(): monocle with tab chrome. Tab buttons are compiled chrome (data-wm-tab), not windows." },
         { key: "bsp", label: "bsp", spec: { type: "bsp" }, desc: "BSP: a stateful tree kept in workspace state. New windows split the focused one; ratio and rotate-split act on the focused window's split. Every split also renders its own splitter (layout/resize-split), addressed by an L/R path independent of that ratio/rotate-split id addressing." },
+        { key: "tree", label: "tree (dock)", spec: { type: "tree" }, desc: "Docking tree: an n-ary counterpart to BSP — row/column/tabs containers kept in workspace state. Drag a window's edge onto another to split, its center to add it as a tab, or a tab within a strip to reorder/insert at that index; \"To docking tree\" (layout/to-tree) converts whatever's on screen into one." },
         { key: "floating", label: "floating", spec: { type: "floating" }, desc: "floating: the tiled base is empty and every window uses its requested placement. Drag title bars; resize from any edge." },
         { key: "dock", label: "dock", custom: true, spec: { type: "dock", extent: 200 }, desc: "Custom interpreter built from dock(): first window docked left, second docked bottom, the rest in columns." },
         { key: "spotlight", label: "spotlight", custom: true, spec: { type: "spotlight" }, desc: "Custom interpreter built from hybrid() + centered() + fixedGrid(): the focused window floats centered over a grid of the rest." },
@@ -430,6 +432,7 @@
       // layout/toggle { a, b } (xmonad ToggleLayouts): a/b are optional after the
       // first call — wm.toggleLayout() with no arguments reuses the stored pair.
       $("#toggle-layout").onclick = () => wm.toggleLayout(toggleLayoutAB.a, toggleLayoutAB.b);
+      $("#to-tree").onclick = () => wm.dispatch({ type: "layout/to-tree" });
 
       document.addEventListener("keydown", (event) => {
         if (isTyping(event) || event.metaKey || event.ctrlKey || event.altKey) return;

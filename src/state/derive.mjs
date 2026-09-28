@@ -17,6 +17,8 @@ import {
   floating,
   bspToLayout,
   bspReconcile,
+  treeToLayout,
+  treeReconcile,
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
 import { isVisible, isBlocked, inTiledBase, visibleWindows, urgentWindows } from "./queries.mjs";
@@ -38,6 +40,8 @@ export const LAYOUTS = Object.freeze({
   spiral: (spec, ids) => spiral(spec, ids),
   // Reconcile the stored tree with the windows actually present.
   bsp: (spec, ids) => bspToLayout(bspReconcile(spec.tree, ids)),
+  // Docking tree: an n-ary counterpart to BSP, with row/column/tabs containers.
+  tree: (spec, ids, { focused }) => treeToLayout(treeReconcile(spec.tree, ids), { focused }),
   // Everything floats; the tiled base is empty.
   floating: () => row({}),
 });

@@ -262,7 +262,7 @@ describe("drag settings", () => {
 
 describe("drop interpreters are a registry", () => {
   test("DROPS covers every built-in tiled layout plus a default", () => {
-    for (const type of ["master-stack", "columns", "rows", "grid", "spiral", "monocle", "tabs", "bsp", "default"]) assert.ok(DROPS[type], type);
+    for (const type of ["master-stack", "columns", "rows", "grid", "spiral", "monocle", "tabs", "bsp", "tree", "default"]) assert.ok(DROPS[type], type);
   });
 
   test("createDropHandler / manager drops override per layout type", () => {
