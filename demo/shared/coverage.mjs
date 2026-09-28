@@ -191,6 +191,17 @@ export const CHECKLIST = [
     ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
     ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
   ]),
+  ...items("Framework bindings", [
+    ["createReactBindings", "createReactBindings(React) → { useWindowManager, useWindowState, WindowManagerStage }"],
+    ["useWindowManager", "useWindowManager(options): creates a wm once, subscribes via useSyncExternalStore"],
+    ["useWindowState", "useWindowState(wm, selector): subscribes to a derived slice of state"],
+    ["WindowManagerStage", "WindowManagerStage: mounts createDomRenderer + attachInput into a ref'd host"],
+    ["react-portal-surfaces", "renderSurface + createPortal: window content as ordinary React trees, mounted as portals"],
+    ["defineWindowAlgebraElement", "defineWindowAlgebraElement(name): a framework-agnostic <wa-stage> custom element"],
+    ["attachStage", "attachStage(host, options): the element's reusable DOM-shaped core (wm + renderer + input)"],
+    ["wa-stage-configure", "<wa-stage>.configure(options) / .wm: set or swap the manager live, read it back"],
+    ["bindings-exports", "package.json exports subpaths ./react and ./element"],
+  ]),
 ];
 
 export const PAGES = [
@@ -343,6 +354,27 @@ export const PAGES = [
       "window/create", "window/close", "window/toggle-floating", "focus/next", "workspace/create", "workspace/activate",
       "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry",
       "present", "derive", "subscribe",
+    ],
+  },
+  {
+    href: "./element.html",
+    short: "wa-stage",
+    title: "<wa-stage> custom element",
+    blurb: "A framework-agnostic custom element that owns its own manager, DOM renderer and input adapter, exposing the live manager as `.wm`. Works fully offline.",
+    covers: [
+      "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
+      "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
+      "window/create", "focus/next",
+    ],
+  },
+  {
+    href: "./react.html",
+    short: "React",
+    title: "React bindings",
+    blurb: "createReactBindings(React): useWindowManager, useWindowState, and WindowManagerStage rendering window content as React portals. Loads React from esm.sh — needs network.",
+    covers: [
+      "createReactBindings", "useWindowManager", "useWindowState", "WindowManagerStage", "react-portal-surfaces", "bindings-exports",
+      "createWindowManager", "layout/set", "window/close", "window/create", "undo-redo", "subscribe",
     ],
   },
 ];

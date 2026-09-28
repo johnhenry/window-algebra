@@ -68,6 +68,8 @@ Serve the repository root with any static server and open `/demo/`. ES modules d
 | `ide.html` | A realistic IDE built from the pieces: custom grid-areas layout, tab stacks, command palette, context menus, toasts, three workspaces, session persistence. |
 | `basic.html` | The minimal quick start. |
 | `outputs.html` | Multiple outputs (sway-style displays): two stages side by side, each with its own workspaces, renderer and input adapter, driven by one manager. Move workspaces between outputs, focus either one by clicking into it, and watch `focus/next` cross both. |
+| `element.html` | The `<wa-stage>` custom element: no framework, no build step, works fully offline. |
+| `react.html` | The React bindings: `useWindowManager`, `useWindowState`, `WindowManagerStage` with window content as React portals. Loads React from esm.sh — needs network. |
 
 ## The layout algebra
 
@@ -393,6 +395,59 @@ Because every view is a size container, applications adapt with container querie
 ```css
 @container wm-view (width < 400px) { .sidebar { display: none; } }
 ```
+
+## Framework bindings
+
+No dependency is added for either binding; each is a subpath export that pulls in only the library's own modules.
+
+### React — `@johnhenry/window-algebra/react`
+
+`createReactBindings(React)` takes your own copy of React (any version with `useSyncExternalStore`) and returns three things:
+
+```js
+import { createReactBindings } from "@johnhenry/window-algebra/react";
+import { createPortal } from "react-dom";
+
+const { useWindowManager, useWindowState, WindowManagerStage } = createReactBindings(React);
+
+function Desktop() {
+  const { wm } = useWindowManager({ history: true }); // created once, subscribed via useSyncExternalStore
+  const count = useWindowState(wm, (state) => Object.keys(state.windows).length); // a derived slice
+
+  return (
+    <WindowManagerStage
+      wm={wm}
+      className="stage"
+      renderSurface={(id) => <MyWindowContent wm={wm} id={id} />}
+      createPortal={createPortal}
+    />
+  );
+}
+```
+
+- `useWindowManager(options)` creates a manager once (`createWindowManager(options)`) and re-renders the component on every dispatch.
+- `useWindowState(wm, selector?)` re-renders only when the selected slice changes (`Object.is`); omit `selector` for the whole state.
+- `WindowManagerStage` mounts a `createDomRenderer` + `attachInput` pair into a ref'd host element for the component's lifetime. Pass `renderSurface(id)` together with `createPortal` (react-dom's) to make each window's content an ordinary React tree — state, effects, context all intact — mounted as a portal into that window's view, while the WM still owns layout and chrome. Omit both for plain-DOM surfaces (`surfaceFor`-style, wired up yourself). `input` is merged into `attachInput`'s own options; `anchorFallback` and `as` (host tag, default `"div"`) are forwarded too; everything else (`className`, `style`, ...) lands on the host element.
+
+See `demo/react.html` (loads React from esm.sh — needs network; everything else in this repo works offline).
+
+### A framework-agnostic custom element — `@johnhenry/window-algebra/element`
+
+`defineWindowAlgebraElement(name = "wa-stage")` registers a `<wa-stage>` custom element (via the platform's own `customElements.define`) that owns a manager, a `createDomRenderer`, and an `attachInput` for as long as it is connected:
+
+```js
+import { defineWindowAlgebraElement } from "@johnhenry/window-algebra/element";
+
+defineWindowAlgebraElement(); // registers <wa-stage>
+document.querySelector("wa-stage").configure({ wm, surfaceFor });
+document.querySelector("wa-stage").wm.create({ id: "editor" });
+```
+
+- `.configure(options)` sets (or replaces) the element's options — same shape as `attachStage` below — at any time; if the element is already connected it detaches and re-attaches immediately with the new ones.
+- `.wm` is the live window manager while connected, `null` otherwise.
+- `attachStage(host, options)` is the reusable, DOM-shaped core the element wraps (`{ wm?, manager?, anchorFallback?, surfaceFor?, input? }` in, `{ wm, renderer, detach() }` out) — anything with the usual Element methods can be a host, including in tests against the fake DOM.
+
+See `demo/element.html` (works fully offline: no framework, no build step).
 
 ## Scripts
 
