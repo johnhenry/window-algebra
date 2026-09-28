@@ -181,6 +181,8 @@ export const createWindowManager = ({
     blur: () => dispatch({ type: "window/blur" }),
     focusNext: () => dispatch({ type: "focus/next" }),
     focusPrevious: () => dispatch({ type: "focus/previous" }),
+    /** Focus the oldest urgent window (switching workspace if needed). */
+    focusUrgent: () => dispatch({ type: "focus/urgent" }),
     raise: command("window/raise"),
     lower: command("window/lower"),
     move: (id, x, y) => dispatch({ type: "window/move", id, x, y }),
@@ -200,6 +202,8 @@ export const createWindowManager = ({
     moveBefore: (id, target) => dispatch({ type: "window/move-before", id, ...(target ? { target } : {}) }),
     moveAfter: (id, target) => dispatch({ type: "window/move-after", id, ...(target ? { target } : {}) }),
     setDraggable: (id, draggable) => dispatch({ type: "window/set-draggable", id, draggable }),
+    /** Mark (or clear) a window's urgency hint; `urgent` defaults to true. */
+    setUrgent: (id, urgent = true) => dispatch({ type: "window/set-urgent", id, urgent }),
     moveToWorkspace: (id, workspace) => dispatch({ type: "window/move-to-workspace", id, workspace }),
     toScratchpad: command("window/to-scratchpad"),
     toggleScratchpad: (id) => dispatch({ type: "scratchpad/toggle", ...(id ? { id } : {}) }),

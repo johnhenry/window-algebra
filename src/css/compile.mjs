@@ -227,7 +227,7 @@ const isActiveChild = (child, active) => active === undefined || views(child).in
  * Compile a layout tree into a render tree.
  *
  * @param {object} tree layout-algebra tree
- * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, roles }
+ * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, roles, urgent }
  * @param {object} [options]
  * @param {string} [options.key] key of the root element
  */
@@ -241,6 +241,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
   collect(tree);
 
   const blocked = new Set(context.blocked ?? []);
+  const urgent = new Set(context.urgent ?? []);
   const seen = new Map();
 
   const visit = (node, parent, index, elementKey) => {
@@ -317,6 +318,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       // view itself hit-testable, so a click on it is not passed through to
       // whatever lies underneath (inert elements are skipped by hit-testing).
       if (blocked.has(id)) Object.assign(attrs, { "data-wm-blocked": "", "aria-disabled": "true" });
+      if (urgent.has(id)) attrs["data-wm-urgent"] = "";
       if (context.modes?.[id]) attrs["data-mode"] = context.modes[id];
       if (context.roles?.[id]) attrs["data-role"] = context.roles[id];
       if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
@@ -359,6 +361,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
                 role: "tab",
                 "data-wm-tab": id,
                 "aria-selected": String(id === target.options.active),
+                ...(urgent.has(id) ? { "data-wm-urgent": "" } : {}),
               },
               style: {},
               children: [],
@@ -413,6 +416,7 @@ wm-root, [data-wm-root] { display: block; position: relative; overflow: hidden; 
 [data-wm-root] > wm-overlay { width: 100%; height: 100%; }
 wm-view[inert], wm-view[data-wm-blocked] { filter: saturate(0.6); }
 wm-tabs > button[aria-selected="true"] { font-weight: 600; }
+wm-view[data-wm-urgent], wm-tabs > button[data-wm-urgent] { outline: 2px solid var(--wm-urgent-line, rgb(234 88 12)); outline-offset: -2px; }
 [data-wm-dragging], [data-wm-dragging] * { cursor: grabbing !important; user-select: none; }
 [data-wm-ghost-label]::after { content: attr(data-wm-ghost-label); position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 10px; border-radius: 999px; font: 600 12px/1.4 system-ui, sans-serif; color: var(--wm-ghost-label-fg, #fff); background: var(--wm-ghost-line, rgb(59 130 246)); }
 wm-view[data-wm-draggable="false"] [data-wm-handle="move"], [data-wm-drag-denied] { cursor: not-allowed; }

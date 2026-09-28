@@ -101,6 +101,10 @@ const applyFocus = (state, requested) => {
     events.push({ type: "window/restored", id: target });
   }
   if (next.config.focusRaises) next = raiseInStack(next, target);
+  if (next.config.urgency?.clearOnFocus !== false && next.urgent.includes(target)) {
+    next = { ...next, urgent: without(next.urgent, target) };
+    events.push({ type: "window/urgent-changed", id: target, urgent: false });
+  }
   next = {
     ...next,
     focus: { window: target, history: [...without(next.focus.history, target), target] },
@@ -207,6 +211,7 @@ const handlers = {
           history: without(next.focus.history, victim),
         },
         lastScratchpad: next.lastScratchpad === victim ? null : next.lastScratchpad,
+        urgent: without(next.urgent, victim),
       };
     }
     const closed = result(
@@ -237,6 +242,31 @@ const handlers = {
 
   "focus/previous"(state) {
     return cycleFocus(state, -1);
+  },
+
+  /**
+   * Focus the oldest urgent window (EWMH/X11-style urgency hint), switching
+   * workspace if needed. Clearing the hint is a side effect of `applyFocus`
+   * (see `config.urgency.clearOnFocus`).
+   */
+  "focus/urgent"(state, command) {
+    const id = state.urgent.find((wid) => state.windows[wid]);
+    if (!id) return rejected(state, command, "no-urgent-window");
+    return applyFocus(state, id);
+  },
+
+  /**
+   * Mark or clear a window's urgency hint. Urgency clears automatically when
+   * the window gains focus, unless `config.urgency.clearOnFocus` is false.
+   */
+  "window/set-urgent"(state, command) {
+    const { id } = command;
+    if (!state.windows[id]) return rejected(state, command, "unknown-window");
+    const urgent = command.urgent === undefined ? true : command.urgent;
+    if (typeof urgent !== "boolean") return rejected(state, command, "invalid-urgent");
+    if (state.urgent.includes(id) === urgent) return result(state);
+    const next = { ...state, urgent: urgent ? [...state.urgent, id] : without(state.urgent, id) };
+    return result(next, [{ type: "window/urgent-changed", id, urgent }], [RENDER]);
   },
 
   "window/raise"(state, command) {
@@ -588,6 +618,11 @@ const handlers = {
       if (drag.toTiled !== undefined && !["modifier", "always", "off"].includes(drag.toTiled)) return rejected(state, command, "invalid-config");
     }
     if (patch.rules !== undefined && !validRules(patch.rules)) return rejected(state, command, "invalid-config");
+    const urgency = patch.urgency;
+    if (urgency !== undefined) {
+      if (!isPlainObject(urgency)) return rejected(state, command, "invalid-config");
+      if (urgency.clearOnFocus !== undefined && typeof urgency.clearOnFocus !== "boolean") return rejected(state, command, "invalid-config");
+    }
     const config = { ...state.config };
     for (const [key, value] of Object.entries(patch)) {
       config[key] = isPlainObject(value) && isPlainObject(config[key]) ? { ...config[key], ...value } : value;

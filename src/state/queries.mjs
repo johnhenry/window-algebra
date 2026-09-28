@@ -59,6 +59,9 @@ export const isBlocked = (state, id) => modalTarget(state, id) !== id;
 
 export const blockedWindows = (state) => Object.keys(state.windows).filter((id) => isBlocked(state, id));
 
+/** Ids currently marked urgent (EWMH/X11-style hint), oldest first. */
+export const urgentWindows = (state) => state.urgent.filter((id) => state.windows[id]);
+
 /** Every window id, bottom to top, across all layers. */
 export const stackingOrder = (state) => LAYERS.flatMap((layer) => state.stack[layer] ?? []);
 

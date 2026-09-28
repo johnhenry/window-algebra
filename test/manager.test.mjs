@@ -100,6 +100,30 @@ describe("createWindowManager facade", () => {
     assert.deepEqual(views(other.present().tree), ["a"]);
   });
 
+  test("setUrgent / focusUrgent, and log/replay + serialize preserve urgency", () => {
+    const wm = createWindowManager({ history: true });
+    wm.create({ id: "a" });
+    wm.create({ id: "b" });
+    wm.setUrgent("b");
+    assert.deepEqual(wm.state.urgent, ["b"]);
+    wm.focusUrgent();
+    assert.equal(wm.state.focus.window, "b");
+    assert.deepEqual(wm.state.urgent, []);
+
+    assert.deepEqual(replay(createState(), wm.log), wm.state);
+
+    const saved = wm.serialize();
+    const other = createWindowManager();
+    other.load(saved);
+    assert.deepEqual(other.state, wm.state);
+
+    wm.setUrgent("a", true);
+    wm.undo();
+    assert.deepEqual(wm.state.urgent, []);
+    wm.redo();
+    assert.deepEqual(wm.state.urgent, ["a"]);
+  });
+
   test("measure delegates to the renderer", () => {
     const wm = createWindowManager({ renderer: { commit() {}, measure: () => ({ a: { x: 0, y: 0, width: 1, height: 1 } }) } });
     assert.deepEqual(wm.measure().a.width, 1);

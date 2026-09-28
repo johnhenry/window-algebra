@@ -37,6 +37,7 @@ export const CHECKLIST = [
     ["window/drop"], ["window/swap-next"], ["window/swap-previous"], ["window/move-before"], ["window/move-after"], ["window/set-draggable"], ["window/detach"],
     ["rules/set"],
     ["window/to-scratchpad"], ["scratchpad/toggle"], ["window/set-sticky"],
+    ["window/set-urgent"], ["focus/urgent"],
     ["extensions", "custom command handlers (extensions)"],
   ]),
   ...items("Rejections", [
@@ -46,6 +47,7 @@ export const CHECKLIST = [
     ["same-window"], ["unknown-zone"], ["not-tiled"], ["blocked"], ["drag-disabled"], ["not-draggable"], ["zone-disabled"], ["too-small"], ["invalid-config"],
     ["invalid-rules"],
     ["not-scratchpad"], ["empty-scratchpad"], ["invalid-sticky"],
+    ["invalid-urgent"], ["no-urgent-window"],
   ]),
   ...items("Policies", [
     ["focus-raises", "focus vs raise (config.focusRaises)"],
@@ -66,12 +68,14 @@ export const CHECKLIST = [
     ["window-rules", "declarative window rules: config.rules, matched at window/create, explicit fields win"],
     ["scratchpad", "i3-style scratchpad: hide a window off every workspace, toggle it back floating and centered"],
     ["sticky", "EWMH sticky windows: visible on every workspace, keep their stacking"],
+    ["urgency", "urgency hints (EWMH/X11-style): config.urgency.clearOnFocus, focus/urgent picks the oldest urgent window"],
   ]),
   ...items("Events & effects", [
     ["events", "all event types rendered"],
     ["effect-render", "render effect"],
     ["effect-focus", "WM focus ↔ keyboard focus (attachInput subscribe, focusin)"],
     ["subscribe"],
+    ["window/urgent-changed"],
   ]),
   ...items("State & history", [
     ["createState"], ["createWorkspace"], ["createWindowRecord"],
@@ -170,13 +174,14 @@ export const PAGES = [
       "window/detach", "drag-to-float", "float-to-tile", "cross-workspace", "drag-children", "a11y-announce", "touch-longpress",
       "rules/set", "window-rules", "matchRules", "invalid-rules",
       "window/to-scratchpad", "scratchpad/toggle", "window/set-sticky", "scratchpad", "sticky", "not-scratchpad", "empty-scratchpad", "invalid-sticky",
+      "window/set-urgent", "focus/urgent", "urgency", "window/urgent-changed", "invalid-urgent", "no-urgent-window",
     ],
   },
   {
     href: "./console.html",
     short: "Console",
     title: "Command console",
-    blurb: "Issue any of the 40 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
+    blurb: "Issue any of the 42 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
     covers: [
       ...[
         "window/create", "window/close", "window/focus", "window/blur", "focus/next", "focus/previous", "window/raise", "window/lower", "window/set-layer",
@@ -186,11 +191,13 @@ export const PAGES = [
         "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable", "window/detach",
         "rules/set",
         "window/to-scratchpad", "scratchpad/toggle", "window/set-sticky",
+        "window/set-urgent", "focus/urgent",
       ],
       "same-window", "unknown-zone", "not-tiled", "blocked", "drag-disabled", "not-draggable", "zone-disabled", "too-small", "invalid-config",
       "not-scratchpad", "empty-scratchpad", "invalid-sticky",
       "missing-id", "duplicate-id", "unknown-parent", "unknown-workspace", "unknown-window", "unknown-layer", "unknown-mode", "different-workspaces",
       "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command", "invalid-rules",
+      "invalid-urgent", "no-urgent-window", "urgency", "window/urgent-changed",
       "events", "effect-render", "effect-focus", "subscribe", "update", "reduce", "replay", "undo-redo", "history-fns", "serialize", "log-replay",
       "createState", "createWorkspace", "createWindowRecord", "constants", "derive", "presentationContext", "queries", "matchRules", "createWindowManager",
       "compile", "createDomRenderer", "immediateScheduler", "equals", "cascade-close", "modal-graph", "refocus", "window-rules",
