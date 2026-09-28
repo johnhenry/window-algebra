@@ -35,6 +35,7 @@ export const CHECKLIST = [
     ["workspace/create"], ["workspace/activate"], ["workspace/remove"],
     ["layout/set"], ["layout/set-ratio"], ["layout/rotate-split"], ["config/set"],
     ["window/drop"], ["window/swap-next"], ["window/swap-previous"], ["window/move-before"], ["window/move-after"], ["window/set-draggable"], ["window/detach"],
+    ["window/to-scratchpad"], ["scratchpad/toggle"], ["window/set-sticky"],
     ["extensions", "custom command handlers (extensions)"],
   ]),
   ...items("Rejections", [
@@ -42,6 +43,7 @@ export const CHECKLIST = [
     ["unknown-mode"], ["different-workspaces"], ["last-workspace"], ["invalid-layout"], ["unknown-layout", "unknown-layout (manager)"], ["invalid-ratio"], ["not-bsp"],
     ["unknown-command"], ["invalid-command"],
     ["same-window"], ["unknown-zone"], ["not-tiled"], ["blocked"], ["drag-disabled"], ["not-draggable"], ["zone-disabled"], ["too-small"], ["invalid-config"],
+    ["not-scratchpad"], ["empty-scratchpad"], ["invalid-sticky"],
   ]),
   ...items("Policies", [
     ["focus-raises", "focus vs raise (config.focusRaises)"],
@@ -59,6 +61,8 @@ export const CHECKLIST = [
     ["drop-semantics", "tiled drops: center swaps, edges insert (BSP: split), per layout axis"],
     ["drag-settings", "config.drag: tiled mode, edgeZone, preview, tooSmall; per-layout drag override"],
     ["pinned", "pinned windows (draggable: false)"],
+    ["scratchpad", "i3-style scratchpad: hide a window off every workspace, toggle it back floating and centered"],
+    ["sticky", "EWMH sticky windows: visible on every workspace, keep their stacking"],
   ]),
   ...items("Events & effects", [
     ["events", "all event types rendered"],
@@ -160,13 +164,14 @@ export const PAGES = [
       "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable",
       "drop-semantics", "drag-settings", "pinned", "tiled-drag", "drag-preview", "drag-shield", "drag-cancel", "drag-undo",
       "window/detach", "drag-to-float", "float-to-tile", "cross-workspace", "drag-children", "a11y-announce", "touch-longpress",
+      "window/to-scratchpad", "scratchpad/toggle", "window/set-sticky", "scratchpad", "sticky", "not-scratchpad", "empty-scratchpad", "invalid-sticky",
     ],
   },
   {
     href: "./console.html",
     short: "Console",
     title: "Command console",
-    blurb: "Issue any of the 36 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
+    blurb: "Issue any of the 39 built-in commands (or broken ones), watch every event and effect, time-travel with undo/redo and a replay scrubber, serialize and restore.",
     covers: [
       ...[
         "window/create", "window/close", "window/focus", "window/blur", "focus/next", "focus/previous", "window/raise", "window/lower", "window/set-layer",
@@ -174,8 +179,10 @@ export const PAGES = [
         "window/set-title", "window/set-constraints", "window/swap", "window/promote", "window/move-to-workspace", "workspace/create", "workspace/activate",
         "workspace/remove", "layout/set", "layout/set-ratio", "layout/rotate-split", "config/set", "extensions",
         "window/drop", "window/swap-next", "window/swap-previous", "window/move-before", "window/move-after", "window/set-draggable", "window/detach",
+        "window/to-scratchpad", "scratchpad/toggle", "window/set-sticky",
       ],
       "same-window", "unknown-zone", "not-tiled", "blocked", "drag-disabled", "not-draggable", "zone-disabled", "too-small", "invalid-config",
+      "not-scratchpad", "empty-scratchpad", "invalid-sticky",
       "missing-id", "duplicate-id", "unknown-parent", "unknown-workspace", "unknown-window", "unknown-layer", "unknown-mode", "different-workspaces",
       "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command",
       "events", "effect-render", "effect-focus", "subscribe", "update", "reduce", "replay", "undo-redo", "history-fns", "serialize", "log-replay",
