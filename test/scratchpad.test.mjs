@@ -322,6 +322,25 @@ describe("sticky", () => {
     assert.equal(wm.getState().windows.b.sticky, true);
   });
 
+  test("unsticking a focused window whose home workspace is inactive refocuses (or blurs)", () => {
+    let state = withWindows(["a"]);
+    state = reduce(state, { type: "workspace/create", id: "side", activate: true });
+    // "a" lives on "main" but is sticky, so it stays focused while "side" is active.
+    state = reduce(state, { type: "window/set-sticky", id: "a", sticky: true });
+    state = reduce(state, { type: "window/focus", id: "a" });
+    assert.equal(state.focus.window, "a");
+    assert.equal(state.activeWorkspace, "side");
+
+    const out = update(state, { type: "window/set-sticky", id: "a", sticky: false });
+    assert.equal(isVisible(out.state, "a"), false);
+    // Focus must not keep pointing at a window that just became invisible.
+    assert.notEqual(out.state.focus.window, "a");
+    assert.equal(
+      out.events.some((e) => e.type === "window/blurred" || e.type === "window/focused"),
+      true,
+    );
+  });
+
   test("compile marks a sticky view with data-wm-sticky", () => {
     let state = withWindows(["a", "b"]);
     state = reduce(state, { type: "window/set-sticky", id: "a", sticky: true });

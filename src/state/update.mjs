@@ -450,7 +450,8 @@ const handlers = {
       const { sticky: _sticky, ...rest } = win;
       next = { ...state, windows: { ...state.windows, [id]: rest } };
     }
-    return result(next, [{ type: "window/sticky-changed", id, sticky }], [RENDER]);
+    const changed = result(next, [{ type: "window/sticky-changed", id, sticky }], [RENDER]);
+    return merge(changed, refocus(next));
   },
 
   "workspace/create"(state, command) {
