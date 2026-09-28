@@ -48,6 +48,7 @@ export const CHECKLIST = [
     ["invalid-rules"],
     ["not-scratchpad"], ["empty-scratchpad"], ["invalid-sticky"],
     ["invalid-urgent"], ["no-urgent-window"],
+    ["future-version", "load() refuses a state newer than STATE_VERSION"],
   ]),
   ...items("Policies", [
     ["focus-raises", "focus vs raise (config.focusRaises)"],
@@ -87,6 +88,8 @@ export const CHECKLIST = [
     ["history-fns", "createHistory / record / undo / redo / canUndo / canRedo"],
     ["serialize", "serialize / load"],
     ["log-replay", "command log + replay from log"],
+    ["version", "STATE_VERSION stamped on every state, incl. serialize()"],
+    ["migrate", "migrate(state): upgrades older states through MIGRATIONS"],
   ]),
   ...items("CSS compiler", [
     ["compile"], ["toHTML"], ["styleText"], ["tracks"], ["px"], ["anchorName"], ["BASE_CSS"],
@@ -199,6 +202,7 @@ export const PAGES = [
       "last-workspace", "invalid-layout", "unknown-layout", "invalid-ratio", "not-bsp", "unknown-command", "invalid-command", "invalid-rules",
       "invalid-urgent", "no-urgent-window", "urgency", "window/urgent-changed",
       "events", "effect-render", "effect-focus", "subscribe", "update", "reduce", "replay", "undo-redo", "history-fns", "serialize", "log-replay",
+      "version", "migrate", "future-version",
       "createState", "createWorkspace", "createWindowRecord", "constants", "derive", "presentationContext", "queries", "matchRules", "createWindowManager",
       "compile", "createDomRenderer", "immediateScheduler", "equals", "cascade-close", "modal-graph", "refocus", "window-rules",
     ],
@@ -232,7 +236,7 @@ export const PAGES = [
     title: "IDE workspace (app)",
     blurb: "A realistic app: file tree, editor tabs, terminal, live preview iframe, command palette, context menus, toasts, problems panel, three workspaces, and session persistence.",
     covers: [
-      "custom-layout", "grid-tracks", "stack-inert", "roles", "keyboard", "serialize", "undo-redo",
+      "custom-layout", "grid-tracks", "stack-inert", "roles", "keyboard", "serialize", "undo-redo", "version", "migrate",
       "workspace/activate", "window/create", "window/close", "window/focus", "window/set-title", "window/toggle-floating", "window/maximize", "window/restore",
       "layout/set", "layout/set-ratio", "config/set", "iframeSurface", "lazySurface", "canvasSurface", "state-preserving", "effect-focus",
       "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "container-queries", "updateRatio", "extensions",

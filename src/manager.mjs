@@ -11,6 +11,7 @@ import { createHistory, record, undo as undoHistory, redo as redoHistory, canUnd
 import { compile } from "./css/compile.mjs";
 import { immediateScheduler } from "./browser/scheduler.mjs";
 import { DROPS, dropHandlers } from "./state/drops.mjs";
+import { migrate } from "./state/migrate.mjs";
 
 /**
  * Commands whose last application within a gesture subsumes the earlier ones
@@ -226,9 +227,27 @@ export const createWindowManager = ({
 
     /** Serialize the logical state (the WM topology is just data). */
     serialize: () => JSON.stringify(getState()),
-    /** Replace the logical state wholesale (restore a saved session). */
+    /**
+     * Replace the logical state wholesale (restore a saved session). The
+     * incoming state is migrated to the current version first; a state this
+     * build cannot understand (parse failure, or a newer version than
+     * `STATE_VERSION`) is rejected — a `state/load-rejected` event fires and
+     * the manager's own state is left untouched.
+     */
     load(state) {
-      const next = typeof state === "string" ? JSON.parse(state) : state;
+      let parsed;
+      try {
+        parsed = typeof state === "string" ? JSON.parse(state) : state;
+      } catch {
+        notify([{ type: "state/load-rejected", reason: "invalid-json" }], null);
+        return null;
+      }
+      const migrated = migrate(parsed);
+      if (!migrated.ok) {
+        notify([{ type: "state/load-rejected", reason: migrated.reason, version: migrated.version }], null);
+        return null;
+      }
+      const next = migrated.state;
       history = historyOption ? record(history, next) : { ...history, present: next };
       entries.push({ load: next });
       undone = [];

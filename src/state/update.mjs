@@ -17,6 +17,7 @@ import { bspInsert, bspRemove, bspSetRatio, bspRotate } from "../layouts/bsp.mjs
 import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
+import { migrate } from "./migrate.mjs";
 
 const RENDER = Object.freeze({ type: "render" });
 
@@ -683,5 +684,14 @@ export const update = (state, command, extensions) => {
 /** `update` returning only the next state. */
 export const reduce = (state, command, extensions) => update(state, command, extensions).state;
 
-/** Replay a list of commands from an initial state (event-log style). */
-export const replay = (state, commands, extensions) => commands.reduce((acc, cmd) => reduce(acc, cmd, extensions), state);
+/**
+ * Replay a list of commands from an initial state (event-log style). The
+ * starting state is migrated first, so replaying from an older saved origin
+ * still lands on the same state a fresh `createState()` origin would.
+ * A state migrate rejects (a future version, or no migration path) is
+ * replayed as given, since there is nothing sound to upgrade it to.
+ */
+export const replay = (state, commands, extensions) => {
+  const migrated = migrate(state);
+  return commands.reduce((acc, cmd) => reduce(acc, cmd, extensions), migrated.ok ? migrated.state : state);
+};

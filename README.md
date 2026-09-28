@@ -62,7 +62,7 @@ Serve the repository root with any static server and open `/demo/`. ES modules d
 | `playground.html` | Edit a layout tree as JSON or with constructors, apply every transform, read the compiled CSS / `toHTML` / render tree beside a live preview. |
 | `layouts.html` | Every derived layout (plus two custom interpreters) switchable live, small multiples of all of them at once, divider drag via `updateRatio`. |
 | `desktop.html` | Workspaces, floating/tiled, dock panels, the 7 stacking layers, focus vs raise, nested modals with focus redirection, every role, keyboard shortcuts. |
-| `console.html` | Compose any command, a gallery of every rejection, events and effects per dispatch, undo/redo, replay scrubber, serialize/restore. |
+| `console.html` | Compose any command, a gallery of every rejection, events and effects per dispatch, undo/redo, replay scrubber, serialize/restore, versioning and migration. |
 | `surfaces.html` | html, lazy, iframe (`srcdoc`) and canvas surfaces keeping their state while windows move through layouts. |
 | `geometry.html` | Requested vs measured geometry, constraints on tiled windows, container queries, CSS anchors vs the forced JS fallback, geometry helpers. |
 | `ide.html` | A realistic IDE built from the pieces: custom grid-areas layout, tab stacks, command palette, context menus, toasts, three workspaces, session persistence. |
@@ -172,6 +172,34 @@ update(state, {
 - The `window/created` event lists which rules applied: `{ type: "window/created", id, rules: [0, 2] }` (omitted when none matched).
 - Set the whole list with `rules/set { rules }` or `config/set { rules }`; both validate the same way and reject malformed rules as `invalid-rules` / `invalid-config` without throwing. A rule that sends a window to an unknown workspace still rejects the `window/create` itself with `unknown-workspace`.
 - `MATCH_FIELDS` / `SET_FIELDS` list the recognised keys; `validRules(rules)` checks a rule list is well-formed. The manager exposes `wm.setRules(rules)`.
+
+### Versioned state and migrations
+
+Every state carries a `version` (the constant `STATE_VERSION`), and `wm.serialize()` includes it, so a state saved by one build can be told apart from one saved by another.
+
+```js
+import { createState, migrate, STATE_VERSION } from "@johnhenry/window-algebra";
+
+createState().version; // === STATE_VERSION
+
+const result = migrate(savedState);
+// result.ok === true  → result.state is at STATE_VERSION (unchanged if it already was)
+// result.ok === false → result.reason is "invalid-state" | "future-version" | "no-migration-path"
+```
+
+- **Unversioned states are version 0.** A state with no `version` field predates this feature — the shape `createState()` produced before `STATE_VERSION` existed — and is treated as version 0.
+- **`migrate(state)` never throws.** It walks `MIGRATIONS`, a registry of step functions keyed by the version they upgrade *from*, chaining as many steps as it takes to reach `STATE_VERSION`. On success it returns `{ ok: true, state, version }`; a state already at `STATE_VERSION` passes through unchanged (same reference). On failure it returns `{ ok: false, state: null, reason, version? }`.
+- **A newer version is refused, not guessed at.** A state whose `version` is greater than `STATE_VERSION` — saved by a newer build than the one running — fails with `reason: "future-version"` rather than being loaded partially or incorrectly.
+- **`wm.load()` and `replay()` both migrate.** `wm.load(state)` runs `migrate` before installing the state; a rejection (a future version, invalid JSON, or a gap in the migration chain) fires a `state/load-rejected` event with a `reason` and leaves the manager's current state untouched, instead of throwing. `replay(state, commands)` migrates its starting state the same way, so `replay(wm.origin, wm.log)` still equals `wm.getState()` even when `wm.origin` predates versioning.
+
+**Adding a migration**, when a future change to the state shape needs one:
+
+1. Bump `STATE_VERSION` (in `src/state/create.mjs`) by one.
+2. Add a step to `MIGRATIONS` (in `src/state/migrate.mjs`), keyed by the version it upgrades *from*: `MIGRATIONS[oldVersion] = (state) => ({ ...state, version: oldVersion + 1, /* ...fixes */ })`. The step must set `version` to `oldVersion + 1` and return a complete, valid state.
+3. `migrate` chains steps automatically — a state several versions behind runs through each step in turn.
+4. Add a test: build a state at the old version (or omit `version` for 0) and assert `migrate` upgrades it to match what `createState()` produces at the new version for the same intent.
+
+The one migration shipped so far, `0 → 1`, backfills `config.drag` (added after some sessions were already saved without it) and drops a redundant explicit `draggable: true` (only the `draggable: false` exception is ever stored).
 
 ## Drag and drop in layouts
 

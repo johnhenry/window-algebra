@@ -67,6 +67,7 @@ These candidates were considered and rejected (or left as derived helpers):
 | Drag and drop | `window/drop` edits tiled structure (order or BSP tree) per layout through drop interpreters; `config.drag` modes, edge zone, preview, and a `tooSmall` check; pinned windows; keyboard equivalents; a ghost preview rendered by the same derive → compile pipeline. Tiled ↔ floating (`window/detach`, floating drops), drops onto workspace targets (with `follow`), tab-strip reordering, children that travel with their parent, pinned-window affordances, touch long-press, aria-live announcements, and opt-in keyboard moving. |
 | History | Undo/redo of window management, a command log, replay, and serialize/load. A gesture (commands sharing a `gesture` token) is one undo step and one log entry. |
 | Scratchpad and sticky | i3-style scratchpad (`window/to-scratchpad`, `scratchpad/toggle`): hide a window off every workspace, then show it floating and centered, focused, on the active workspace; toggle again to hide. EWMH-style sticky (`window/set-sticky`): visible on every workspace, keeping its stacking and never joining a tiled base. |
+| Versioning | Every state carries `STATE_VERSION`; `migrate(state)` upgrades older (or unversioned) states through a `MIGRATIONS` registry and refuses states from a newer version. `wm.load()` and `replay()` both migrate their input. |
 
 ## Open questions
 

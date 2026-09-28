@@ -52,7 +52,8 @@ export { createDrag, updateDrag, createResize, updateResize, updateRatio, EDGES 
 export { dropZoneAt, dropTargetAt, previewDrop, zoneRect } from "./interaction/drop.mjs";
 
 // Logical state: update / derive
-export { createState, createWorkspace, createWindowRecord, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG } from "./state/create.mjs";
+export { createState, createWorkspace, createWindowRecord, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, STATE_VERSION } from "./state/create.mjs";
+export { migrate, MIGRATIONS } from "./state/migrate.mjs";
 export { update, reduce, replay, COMMANDS } from "./state/update.mjs";
 export { derive, presentationContext, LAYOUTS } from "./state/derive.mjs";
 export {

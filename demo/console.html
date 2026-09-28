@@ -152,6 +152,8 @@
               <button class="btn small" id="load">wm.load(json)</button>
               <button class="btn small" id="save-slot" title="Keep a copy in this browser">Save slot</button>
               <button class="btn small" id="load-slot">Load slot</button>
+              <button class="btn small ghost" id="load-future" title="Try loading a state stamped with a newer STATE_VERSION">Load future version</button>
+              <button class="btn small ghost" id="load-v0" title="Try loading an unversioned (pre-migration) state">Load v0 (unversioned)</button>
             </div>
             <textarea id="serialized" spellcheck="false" aria-label="Serialized state"></textarea>
             <div class="note" id="pure-history"></div>
@@ -163,7 +165,7 @@
     <script type="module">
       import {
         createWindowManager, createState, createWorkspace, createWindowRecord, update, reduce, replay, derive, compile, toHTML, presentationContext, equals,
-        COMMANDS, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, LAYOUTS, DROP_ZONES,
+        COMMANDS, LAYERS, ROLES, STATUSES, DEFAULT_CONFIG, LAYOUTS, DROP_ZONES, STATE_VERSION, migrate,
         getWindow, activeWorkspace, focusedWindow, windowsIn, isVisible, visibleWindows, childrenOf, modalTarget, isBlocked, blockedWindows, stackingOrder, focusable, descendantsOf,
         createHistory, record, undo as undoHistory, redo as redoHistory, canUndo, canRedo,
       } from "../src/index.mjs";
@@ -550,6 +552,29 @@
         const saved = storage.get("wa-console-slot");
         if (saved) wm.load(saved);
         else $("#verdict").textContent = "No saved slot yet.";
+      };
+      // Versioning: a future STATE_VERSION is refused (state/load-rejected, state unchanged)...
+      $("#load-future").onclick = () => {
+        const future = { ...wm.getState(), version: STATE_VERSION + 1 };
+        $("#serialized").value = JSON.stringify(future, null, 2);
+        const before = wm.getState();
+        const result = wm.load(future);
+        $("#verdict").className = `note verdict ${result === null ? "ok" : "bad"}`;
+        $("#verdict").textContent =
+          result === null && wm.getState() === before
+            ? `✓ load() refused version ${STATE_VERSION + 1} (STATE_VERSION is ${STATE_VERSION}); state unchanged.`
+            : "✗ a future-version state was not refused.";
+      };
+      // ...while an unversioned (pre-migration) state is upgraded through MIGRATIONS.
+      $("#load-v0").onclick = () => {
+        const { version, ...unversioned } = wm.getState();
+        const migrated = migrate(unversioned);
+        $("#serialized").value = JSON.stringify(unversioned, null, 2);
+        wm.load(unversioned);
+        $("#verdict").className = `note verdict ${migrated.ok ? "ok" : "bad"}`;
+        $("#verdict").textContent = migrated.ok
+          ? `✓ unversioned state migrated to version ${wm.getState().version} (config.drag backfilled).`
+          : `✗ migrate() could not upgrade the state (${migrated.reason}).`;
       };
 
       // The standalone history API, fed by the same commands (independent of the manager).
