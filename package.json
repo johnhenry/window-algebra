@@ -13,13 +13,14 @@
     "./layouts": "./src/layouts/index.mjs",
     "./css": "./src/css/compile.mjs",
     "./react": "./src/bindings/react.mjs",
-    "./element": "./src/bindings/element.mjs"
+    "./element": "./src/bindings/element.mjs",
+    "./package.json": "./package.json"
   },
   "files": [
     "src"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=26.0.0"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
@@ -35,5 +36,16 @@
     "reducer"
   ],
   "author": "John Henry",
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://opensource.johnhenry.me/window-algebra/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnhenry/window-algebra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johnhenry/window-algebra/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
