@@ -1,48 +1,99 @@
 # window-algebra
 
-A functional window manager for browser applications. It is not a drop-in desktop replacement. It is a small set of pieces you can put together into a floating, tiling, tabbed, or hybrid window manager.
+[![npm version](https://img.shields.io/npm/v/%40johnhenry%2Fwindow-algebra.svg)](https://www.npmjs.com/package/@johnhenry/window-algebra)
+[![CI](https://github.com/johnhenry/window-algebra/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/window-algebra/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/%40johnhenry%2Fwindow-algebra.svg)](LICENSE)
+
+Full documentation: [opensource.johnhenry.me/window-algebra](https://opensource.johnhenry.me/window-algebra/)
+
+A functional window manager for browser applications. It is not a drop-in desktop replacement. It is a small set of parts you can put together into a floating, tiling, tabbed, docking or hybrid window manager.
 
 ```
-command → update (pure) → state → derive (pure) → layout tree → compile (pure) → CSS → DOM
+command → update (pure) → state → derive (pure) → layout tree → compile (pure) → render tree → DOM
 ```
 
-- **State is immutable data.** `update(state, command)` returns `{ state, events, effects }` and never touches the DOM, timers, or randomness.
-- **Layout is an algebra.** Eleven primitives build a JSON tree. Named layouts such as `masterStack` and `bsp` are ordinary functions that return those primitives.
-- **CSS is the layout engine.** Tiled windows get flex weights, grid tracks, and anchor relationships instead of pixel rectangles. The browser works out the actual geometry.
-- **The DOM is an effectful backend, not the source of truth.** The renderer reconciles a keyed render tree, so a window keeps its element and its mounted surface when the layout changes around it.
+- **State is immutable data.** `update(state, command)` returns `{ state, events, effects }` and never touches the DOM, timers, the clock or randomness. A bad command is rejected with an event, never thrown.
+- **Layout is an algebra.** Eleven primitives build a JSON tree. Named layouts such as `masterStack`, `bsp` and the docking `tree` are ordinary functions that return those primitives.
+- **CSS is the layout engine.** Tiled windows get flex weights, grid tracks and anchor relationships instead of pixel rectangles. The browser works out the geometry, and every window is a container-query container.
+- **The DOM is an effectful backend, not the source of truth.** The renderer reconciles a keyed render tree, so a window keeps its element, and its mounted surface, when the layout changes around it.
 
-Zero dependencies. ESM only. The core runs in Node, workers, and browsers.
+Zero dependencies. ESM only. The core runs in Node, workers and browsers.
+
+## Contents
+
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Examples](#examples)
+- [The layout algebra](#the-layout-algebra)
+- [State, commands and events](#state-commands-and-events)
+- [Layouts, modifiers and drag-and-drop](#layouts-modifiers-and-drag-and-drop)
+- [Policy at a glance](#policy-at-a-glance)
+- [compile and the browser](#compile-and-the-browser)
+- [Framework bindings](#framework-bindings)
+- [API reference](#api-reference)
+- [Adding a new layout](#adding-a-new-layout)
+- [Honest limitations](#honest-limitations)
+- [Family](#family)
+- [License](#license)
 
 ## Install
 
-The package is not published yet. Import it from source:
-
-```js
-import { createWindowManager } from "./src/index.mjs";
-import { createDomRenderer, attachInput } from "./src/browser/index.mjs";
+```sh
+npm install @johnhenry/window-algebra
 ```
+
+**Provenance:** a new package, never published under another name. `0.0.0` is its first version under any name, not a sign of immaturity. Under npm's caret rules `^0.0.0` matches only `0.0.0`, so pin the exact version until a deliberate `0.1.0`.
+
+Node ≥ 26 (`engines.node`) for the pure core in Node. In the browser, use it through a bundler, or with no build step through an import map. Import maps don't read `package.json` `exports`, so map each entry point you use to its file:
+
+```html
+<script type="importmap">
+  {
+    "imports": {
+      "@johnhenry/window-algebra": "/node_modules/@johnhenry/window-algebra/src/index.mjs",
+      "@johnhenry/window-algebra/browser": "/node_modules/@johnhenry/window-algebra/src/browser/index.mjs"
+    }
+  }
+</script>
+```
+
+Entry points: `@johnhenry/window-algebra` (everything pure, plus the manager), `/browser` (renderer, input, surfaces, schedulers, pop-outs), `/react`, `/element`, and the narrower `/algebra`, `/transforms`, `/layouts` and `/css`. See [the entry-point table](docs/api/README.md#entry-points).
 
 ## Quick start
 
+**The pure core**, anywhere (Node, a worker, a test):
+
 ```js
-import { createWindowManager, createState } from "@johnhenry/window-algebra";
+import { createState, update, derive, compile, presentationContext, toHTML } from "@johnhenry/window-algebra";
+
+let state = createState({ layout: { type: "master-stack", ratio: 0.6 }, config: { gap: 8 } });
+for (const id of ["editor", "terminal", "browser"]) state = update(state, { type: "window/create", id }).state;
+
+const out = update(state, { type: "window/focus", id: "nope" });
+// out.events → [{ type: "command/rejected", command: "window/focus", id: "nope", reason: "unknown-window" }]
+
+const tree = derive(state);                                 // a JSON layout-algebra tree
+const html = toHTML(compile(tree, presentationContext(state))); // flex: 0.6 1 0 …, no pixels
+```
+
+**In the browser**, the manager drives a DOM renderer and an input adapter:
+
+```js
+import { createWindowManager, createState, BASE_CSS } from "@johnhenry/window-algebra";
 import {
-  createDomRenderer,
-  attachInput,
-  htmlSurface,
-  createSurfaceRegistry,
-  createFrameScheduler,
+  createDomRenderer, attachInput, htmlSurface, createSurfaceRegistry, createFrameScheduler,
 } from "@johnhenry/window-algebra/browser";
 
-const root = document.querySelector("#desktop");
+document.head.append(Object.assign(document.createElement("style"), { textContent: BASE_CSS }));
+const root = document.querySelector("#desktop");          // give it a size
 const surfaces = createSurfaceRegistry();
 const wm = createWindowManager({
   state: createState({ layout: { type: "master-stack", ratio: 0.6 }, config: { gap: 6 } }),
   renderer: createDomRenderer({ root, surfaceFor: surfaces }),
   schedule: createFrameScheduler(), // many commands → one commit per frame
-  history: true, // undo/redo for window management
+  history: true,                    // undo/redo for window management
 });
-attachInput({ root, getState: wm.getState, dispatch: wm.dispatch });
+attachInput({ root, wm });          // pointer, keyboard focus sync, drag and drop
 
 surfaces.set("editor", htmlSurface(editorElement));
 wm.create({ id: "editor", title: "Editor" });
@@ -53,41 +104,32 @@ wm.setLayout({ type: "bsp" });
 wm.undo();
 ```
 
+A surface's markup opts into the pointer adapter: `data-wm-handle="move"` on a title bar, `data-wm-handle="resize-se"` on a grip, `data-wm-command="window/close"` on a button. See [Browser adapters › Markup contract](docs/api/browser.md#markup-contract).
+
 ## Examples
 
-Serve the repository root with any static server and open `/demo/`. ES modules don't load from `file://`. The hub page links every example and renders a capability checklist (`demo/shared/coverage.mjs`) showing which page exercises each primitive, transform, layout, command, rejection, policy, surface and event.
+- **[`examples/`](examples/)**: six self-verifying Node scripts over the pure core (`npm run examples`; CI runs them), from the pipeline to CSS through drop semantics, migration and the popup/snap geometry.
+- **[`demo/`](demo/)**: interactive browser pages. Serve the repository root with any static server and open `/demo/` (ES modules don't load from `file://`). The hub renders a capability checklist of which page exercises each primitive, transform, layout, command, rejection, policy, surface and event. Pages: playground, layouts, desktop, console, surfaces, geometry, IDE, outputs, custom element, React (needs network for esm.sh), and the minimal quick start.
 
-| Page | What it shows |
-| --- | --- |
-| `playground.html` | Edit a layout tree as JSON or with constructors, apply every transform, read the compiled CSS / `toHTML` / render tree beside a live preview. |
-| `layouts.html` | Every derived layout (plus two custom interpreters) switchable live, small multiples of all of them at once, divider drag via `updateRatio`. |
-| `desktop.html` | Workspaces, floating/tiled, dock panels, the 7 stacking layers, focus vs raise, nested modals with focus redirection, every role, keyboard shortcuts. |
-| `console.html` | Compose any command, a gallery of every rejection, events and effects per dispatch, undo/redo, replay scrubber, serialize/restore, versioning and migration. |
-| `surfaces.html` | html, lazy, iframe (`srcdoc`) and canvas surfaces keeping their state while windows move through layouts. |
-| `geometry.html` | Requested vs measured geometry, constraints on tiled windows, size hints (aspect ratio, width/height increments) with a live "80×24" cell readout, container queries, CSS anchors vs the forced JS fallback, positioner rules (`gravity`/`flip`/`slide`/`resize`) with a "pin near a corner" overflow trigger, geometry helpers. |
-| `ide.html` | A realistic IDE built from the pieces: custom grid-areas layout, tab stacks, command palette, context menus, toasts, three workspaces, session persistence. |
-| `basic.html` | The minimal quick start. |
-| `outputs.html` | Multiple outputs (sway-style displays): two stages side by side, each with its own workspaces, renderer and input adapter, driven by one manager. Move workspaces between outputs, focus either one by clicking into it, and watch `focus/next` cross both. |
-| `element.html` | The `<wa-stage>` custom element: no framework, no build step, works fully offline. |
-| `react.html` | The React bindings: `useWindowManager`, `useWindowState`, `WindowManagerStage` with window content as React portals. Loads React from esm.sh — needs network. |
+The [examples index](examples/README.md) says what each one demonstrates.
 
 ## The layout algebra
 
 Every container and modifier takes an **options object first**, then its child or children. `view(id)` is the only exception.
 
-| Kind      | Primitive                         | Meaning                                          | CSS realization                            |
-| --------- | --------------------------------- | ------------------------------------------------ | ------------------------------------------ |
-| Leaf      | `view(id)`                        | a presentation of a window/surface               | `<wm-view>` with `container-type: size`    |
-| Container | `row(options, ...children)`       | horizontal composition                           | flex row                                   |
-| Container | `column(options, ...children)`    | vertical composition                             | flex column                                |
-| Container | `grid(options, ...children)`      | two-dimensional constraint space                 | CSS Grid (tracks, areas, auto-fit)         |
-| Container | `stack(options, ...children)`     | children share one allocation (`active`, `chrome: "tabs"`) | single grid cell; inactive children `visibility: hidden` + `inert` |
-| Container | `overlay(options, ...children)`   | independent layers of the same region            | single grid cell, z-ordered                |
-| Modifier  | `place(options, child)`           | position within the parent's allocation          | `translate`, insets, grid lines/areas, self-alignment |
-| Modifier  | `size(options, child)`            | allocation constraint (`weight`, `width`, `min`, `aspectRatio`, …) | flex, width/height, min/max, aspect-ratio |
-| Modifier  | `gap(options, child)`             | separation between siblings                      | `gap`                                      |
-| Modifier  | `inset(options, child)`           | padding around an allocation                     | `padding`                                  |
-| Modifier  | `anchor(options, child)`          | position relative to another view, with `xdg_positioner`-style constraint adjustment (`flip`/`slide`/`resize`/`gravity`) | CSS anchor positioning, with a JS fallback |
+| Kind | Primitive | Meaning | CSS realization |
+| --- | --- | --- | --- |
+| Leaf | `view(id)` | a presentation of a window/surface | `<wm-view>` with `container-type: size` |
+| Container | `row(options, ...children)` | horizontal composition | flex row |
+| Container | `column(options, ...children)` | vertical composition | flex column |
+| Container | `grid(options, ...children)` | two-dimensional constraint space | CSS Grid (tracks, areas, auto-fit) |
+| Container | `stack(options, ...children)` | children share one allocation (`active`, `chrome: "tabs"`) | one grid cell; inactive children `visibility: hidden` + `inert` |
+| Container | `overlay(options, ...children)` | independent layers of the same region | one grid cell, z-ordered |
+| Modifier | `place(options, child)` | position within the parent's allocation | `translate`, insets, grid lines/areas, self-alignment |
+| Modifier | `size(options, child)` | allocation constraint (`weight`, `width`, `min`, `aspectRatio`, …) | flex, width/height, min/max, aspect-ratio |
+| Modifier | `gap(options, child)` | separation between siblings | `gap` |
+| Modifier | `inset(options, child)` | padding around an allocation | `padding` |
+| Modifier | `anchor(options, child)` | position relative to another view, with `xdg_positioner`-style `flip`/`slide`/`resize`/`gravity` | CSS anchor positioning, with a JS fallback |
 
 ```js
 import { overlay, inset, gap, row, column, size, anchor, view } from "@johnhenry/window-algebra";
@@ -100,365 +142,152 @@ const layout = overlay(
       size({ weight: 1 }, column({}, view("browser"), view("terminal"))),
     ),
   )),
-  anchor({ to: "editor", x: "center", y: "center" },
-    size({ width: 480, height: "content" }, view("dialog")),
-  ),
+  anchor({ to: "editor", x: "center", y: "center" }, size({ width: 480, height: "content" }, view("dialog"))),
 );
 ```
 
-The algebra has three layers, and keeping them apart stops convenience helpers from turning into primitives:
+There are three layers, and keeping them apart stops convenience helpers from turning into primitives:
 
 1. **Primitive constructors**: the eleven above.
-2. **Derived layouts** (`src/layouts/`): `masterStack`, `columns`, `rows`, `monocle`, `tabs`, `autoGrid`, `fixedGrid`, `spiral`, `bspToLayout`, `treeToLayout` (docking tree), and the sugar helpers `floating`, `centered`, `dock`, `hybrid`.
-3. **Tree transformations** (`src/algebra/transforms.mjs`): `mirror`, `flip`, `rotate`, `reverse`, `mapViews`, `replace`, `remove`, `swap`, `find`, `views`, `walk`, `fold`, `transform`.
+2. **Derived layouts** (`src/layouts/`): `masterStack`, `columns`, `rows`, `monocle`, `tabs`, `autoGrid`, `fixedGrid`, `spiral`, `bspToLayout`, `treeToLayout`, and the sugar helpers `floating`, `centered`, `dock` and `hybrid`.
+3. **Tree transforms**: `mirror`, `flip`, `rotate`, `reverse`, `mapViews`, `replace`, `remove`, `swap`, `find`, `views`, `walk`, `fold`, `transform`, `count`, `equals`.
 
-Every tree can be serialized. `fromJSON` and `validate` round-trip a tree and report invalid ones by path.
+Trees are deep-frozen and serializable; `validate` reports an invalid tree by path, and `fromJSON` round-trips one. Every option is in [Layout algebra](docs/api/algebra.md).
 
-## Logical state and commands
+## State, commands and events
+
+State is one plain object: windows, workspaces, outputs, focus with history, per-layer stacking, `config`. A **command** expresses intent. **Events** record what actually happened, which can differ: focus may be redirected to a modal, or a duplicate id rejected. **Effects** (`render`, `focus`) are values for the effectful shell.
 
 ```js
-import { createState, update, reduce, replay, derive } from "@johnhenry/window-algebra";
+import { createState, update, reduce, replay, derive, COMMANDS } from "@johnhenry/window-algebra";
 
 let state = createState({ workspaces: ["main", "dev"] });
 const out = update(state, { type: "window/create", id: "editor" });
-// out.events  → [{ type: "window/created", ... }, { type: "window/focused", ... }]
+// out.events  → [{ type: "window/created", id: "editor" }, { type: "window/focused", id: "editor", previous: null }]
 // out.effects → [{ type: "render" }, { type: "focus", id: "editor" }]
 ```
 
-Built-in commands (see `COMMANDS`):
+The 51 built-in commands (`COMMANDS`), each documented with payload, events, effects and rejections in [Commands](docs/api/commands.md):
 
 - **Windows:** `window/create`, `window/close` (cascades to child windows), `window/focus`, `window/blur`, `focus/next`, `focus/previous`, `window/raise`, `window/lower`, `window/set-layer`, `window/move`, `window/resize`, `window/set-mode`, `window/toggle-floating`, `window/minimize`, `window/maximize`, `window/fullscreen`, `window/restore`, `window/pop-out`, `window/pop-in`, `window/set-title`, `window/set-constraints`, `window/swap`, `window/promote`, `window/move-to-workspace`, `window/set-urgent`, `focus/urgent`
-- **Drag and drop:** `window/drop`, `window/detach`, `window/swap-next`, `window/swap-previous`, `window/move-before`, `window/move-after`, `window/set-draggable` (and `window/move-to-workspace` takes `follow: true`)
+- **Drag and drop:** `window/drop`, `window/detach`, `window/swap-next`, `window/swap-previous`, `window/move-before`, `window/move-after`, `window/set-draggable`
 - **Scratchpad and sticky:** `window/to-scratchpad`, `scratchpad/toggle`, `window/set-sticky`
 - **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`
 - **Outputs:** `output/create`, `output/remove`, `output/focus`, `workspace/move-to-output`
 - **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`, `layout/resize-split`, `layout/toggle`, `layout/to-tree`
-- **Config:** `config/set`
-- **Rules:** `rules/set`
+- **Config and rules:** `config/set`, `rules/set`
 
-The policy decisions baked into these commands:
+Add your own with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`. The 44 event types are catalogued in [Events](docs/api/events.md), and the read-only queries (`isVisible`, `focusable`, `paintOrder`, `modalTarget`, …) in [Queries](docs/api/queries.md).
 
-- **Commands versus events.** The manager can say no. A duplicate id, an unknown parent, or a malformed command produces a `command/rejected` event. It never throws. `createWindowManager` also rejects a `layout/set` or `workspace/create` whose layout type no interpreter knows (`unknown-layout`), since `update` cannot see the interpreter registry.
-- **Requested versus actual geometry.** `window/move` and `window/resize` store the requested placement. `derive` uses it only when a window is floating. Size constraints (`minWidth`, `maxHeight`, …) apply to tiled windows too, as CSS min/max sizes.
-- **Size hints beyond min/max (ICCCM `WM_NORMAL_HINTS`-style).** `constraints.aspectRatio` (a number, or `{ min, max }`, as `width / height`) and `constraints.widthIncrement`/`heightIncrement` with `constraints.baseWidth`/`baseHeight` (terminal-style character cells: only sizes `base + n × increment` are allowed) are honoured by the pure `constrainSize(size, constraints, { preserve })` for floating move/resize (including the resize gesture, which picks `preserve` from the dragged edge so the aspect ratio adjusts the *other* axis) and `window/resize`/`window/set-constraints`. Tiled windows get CSS `aspect-ratio` when `aspectRatio` is an exact number (a range has no single CSS value); increments are advisory for tiled windows since CSS decides their size. `geometry.sizeToCells(size, constraints)` reports `{ cols, rows }` (or `null` without increments) for a live "80×24" readout.
-- **Focus is not stacking.** Raising on focus is a policy (`config.focusRaises`). Stacking uses per-layer order: `background`, `normal`, `top`, `modal`, `popover`, `notification`, `system`. Raising a window raises its descendants above it, so a child is never painted beneath its parent (and an anchored child always follows its anchor, which CSS anchor positioning requires).
-- **The modal graph.** Focusing a window that has an open modal descendant sends focus to the deepest modal. A blocked window renders with `data-wm-blocked`: its contents are `inert` (no focus, no input, hidden from assistive tech), but the window itself stays hit-testable, so clicking it redirects focus to the modal instead of falling through to the window underneath. It cannot be dragged or resized.
-- **Keyboard focus follows WM focus, and vice versa.** Pass the manager's `subscribe` to `attachInput({ root, getState, dispatch, subscribe })`. When a window is focused by a command (a shortcut, a taskbar, the API), DOM focus moves into it: back to the element last focused there, otherwise the view itself (`tabindex="-1"`). Focus is never taken from a text field outside `root`. In the other direction, keyboard focus entering a window (Tab, `.focus()`) focuses and raises it, just as a click does.
-- **Paint order.** Tiled windows form the base of the normal layer: they are painted above the `background` layer and beneath every other non-tiled window, whatever their position in `state.stack`. `stackingOrder(state)` is the logical stack; `paintOrder(state)` is the visual order of the active workspace, bottom to top, exactly as `derive` paints it.
-- **Scratchpad (i3-style).** `window/to-scratchpad { id }` hides a window off every workspace: it is stored with `workspace: null`, dropped from any BSP tree, forced to floating mode, and marked `scratchpad: true` for as long as it remains one. `scratchpad/toggle { id? }` shows the given (or, with no `id`, the most recently touched) scratchpad window floating and centered (`placement: { x: "center", y: "center" }`, resolved purely in CSS) on the active workspace, focusing it; toggling the same window again hides it. Hiding the focused window refocuses from history, same as `window/close`. Moving a scratchpad window to a workspace directly (`window/move-to-workspace`) pulls it out of the scratchpad for good. `scratchpadWindows(state)` lists every scratchpad window (shown or hidden); `isScratchpadHidden(state, id)` tells which.
-- **Sticky (EWMH-style).** `window/set-sticky { id, sticky }` makes a window visible on every workspace: `isVisible`, `visibleWindows`, `focusable`, `derive` and `paintOrder` all agree, without needing the window to be duplicated into every workspace's own window list. A sticky window keeps its place in `state.stack` (its stacking is untouched by which workspace is active), is never counted into a layout's tiled base (it is always presented as a floating overlay, even if its `mode` is `"tiled"`), and focusing it never switches the active workspace. `window/move-to-workspace` still moves its "home" workspace (relevant if it is ever unstuck); it stays visible everywhere regardless. `stickyWindows(state)` lists every sticky window.
-- **Roles are semantic.** `dialog` anchors to its parent's center, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner. `derive` decides the presentation, not the application. A window's `anchor` option passes every anchor setting through (`side`, `align`, `offset`, `inside`, `x`, `y`, `gravity`, `flip`, `slide`, `resize`; see "Positioner rules for anchored popups" below).
-- **The log is replayable.** `wm.log` holds the commands applied since `wm.origin` (the initial state, or the last `load()`); undo and redo keep it in step, so `replay(wm.origin, wm.log)` always equals `wm.getState()`.
-- **Gestures are one step.** Commands that carry the same `gesture` token in a row (the input adapter tags every `window/move` / `window/resize` of one floating drag) form one history entry and one log entry: runs of absolute setters collapse to their last command, so a drag undoes in one step and still replays exactly.
-- **BSP is a stateful layout expressed functionally.** Its tree lives in workspace state and is kept in sync as windows are created, closed, floated, or moved.
-- **Docking tree (`{ type: "tree" }`), the n-ary counterpart to BSP.** `spec.tree` is a plain container tree — i3/Dockview/GoldenLayout-style — of `{ type: "row" | "column" | "tabs", children: [...], sizes? }`, where `children` mixes window ids and nested containers freely (`src/layouts/tree.mjs`). `treeReconcile` keeps it in sync the same way `bspReconcile` does: windows in the workspace but missing from the tree are appended (to the root container, or wrapped alongside a bare-leaf root in a new `tabs` pair); closed windows are removed, collapsing an emptied container away and promoting a container left with one child. The `DROPS.tree` interpreter edits the tree on `window/drop`: an edge zone splits the leaf directly under the target into a new row/column with the dragged window on that side (mirroring `bspDrops`); the center adds it as a tab alongside the target (or, with `spec.tabMode: "swap"`, exchanges the two leaves — degrading to the same tab-add for a window with no slot to trade); and when the target's direct parent is already a `tabs` container, the edges that would otherwise split instead reorder within it (`"before"`/`"after"`) — which is also what dragging a tab along its strip resolves to, so a tab can be inserted at any index. `layout/to-tree { workspace? }` converts whatever layout a workspace currently has into a docking tree: BSP maps over exactly (`treeFromBsp`, preserving every ratio), columns/rows become a single row/column (carrying over stored `sizes`), master-stack becomes a two-way row, tabs/monocle become a `tabs` container, and anything else falls back to a flat row of the current tiled order — so a user can start docking from any layout. Splits use the same `sizes`/`resize` convention as columns/rows (see "Persistent, resizable splits", below), addressed by `layout/resize-split`'s `path` as comma-joined child indices from the root (`"0,1"` = `children[0].children[1]`; `treeNodeAt`/`treeSetSizesAt`, parallel to `bspNodeAt`/`bspSetRatioAt`).
-- **Persistent, resizable splits.** `layout/resize-split { workspace?, path, index?, delta | weights }` resizes a split and stores it in the layout spec, wherever that layout keeps its sizes: `spec.sizes[""]` (an array of weights, one per child) for `columns`/`rows`; the existing `spec.ratio` for `master-stack`; the existing per-node `tree.ratio` for `bsp`, addressed by a `path` of `"0"`/`"1"` steps from the root (`bspNodeAt`/`bspSetRatioAt`); a new `spec.ratios` array indexed by split depth for `spiral`; each row/column container's own `sizes` for the docking `tree`, addressed by a comma-joined index path (`treeNodeAt`/`treeSetSizesAt`). `compile` renders a handle between every pair of children of a resizable row/column (`[data-wm-splitter]`, `role="separator"`, `aria-orientation`, `aria-valuenow`, `data-wm-path`/`data-wm-index`/`data-wm-count`); `attachInput` drags one (pointer capture, min/max constraints respected where a side is a single window, one undo step) and answers the arrow key along its axis when it has focus (`splitterStep`, a fraction of the pair's total, default `0.05`). See `docs/PRD.md`, "Split sizing", for the full scheme; grid tracks aren't resizable yet.
-- **Pop-out windows (GoldenLayout/Dockview-style).** `window/pop-out { id }` leaves the layout for a separate browser window — pure-state-wise, exactly like `window/minimize` (the window disappears from `derive`/`isVisible`, and refocuses like closing/minimizing does), except with its own status, `"popped-out"`, so the browser shell can tell the two apart. `isPoppedOut(state, id)` and `poppedOutWindows(state)` query it; a popped-out modal descendant stops blocking its parent (`isBlocked`), same as a minimized one. Rejected `blocked` (a modal covers it, same check as `window/detach`) or `unknown-window`; already popped out is a no-op. `window/pop-in { id }` reverses it — unlike the other status setters, a window that is *not* currently popped out is rejected (`not-popped-out`) rather than treated as a no-op, so the browser helper below can tell whether it is undoing a real pop-out. In the browser, `attachPopouts({ wm, renderer, surfaceFor?, open? })` (`src/browser/popouts.mjs`) does the rest: opens a real popup window (`window.open` by default, injectable for tests), copies the page's stylesheets into it, moves the window's live DOM node into it with `adoptNode` (via the renderer's `release`/`adopt`, so the surface is never unmounted — its content and state survive the move, except that most browsers reload an iframe whenever it changes document, popout or popin), keeps the popup's title and WM focus in sync, and pops the window back in — closing the popup, or reversing it if the popup closes itself (`beforeunload`/`pagehide`) or the window closes (`window/closed`). A blocked popup (`open()` returns a falsy or already-`closed` window) is rejected with a `command/rejected` event (`reason: "popup-blocked"`), same shape as a rejected command, without touching state or the DOM. See `demo/desktop.html`'s pop-out chrome button (with a "block next pop-out" toggle to try the popup-blocked path).
-- **Urgency hints (EWMH/X11-style).** `window/set-urgent { id, urgent }` marks or clears a window's urgency (`urgent` defaults to `true`); `presentationContext(state).urgent` lists the ids in the order they became urgent, and `compile` marks their views `data-wm-urgent` and their tab-strip buttons the same way. Urgency clears automatically when the window is focused (`config.urgency.clearOnFocus`, default `true`) and emits `window/urgent-changed`. `focus/urgent` focuses the oldest urgent window, switching workspace if needed (`focus/redirected` / `workspace/activated` apply as usual); it is rejected (`no-urgent-window`) when nothing is urgent.
-- **Multiple outputs (sway-style).** `state.outputs` (id → `{ workspaces, activeWorkspace }`) partitions workspaces across displays/stages; `state.outputOrder` and `state.focusedOutput` round it out, and `state.activeWorkspace` always mirrors `outputs[focusedOutput].activeWorkspace`, so every single-output API (`activeWorkspace`, `workspace/activate`, `derive(state)`, `focusable(state)`, …) keeps working unchanged — a fresh `createState()` still has exactly one output (`DEFAULT_OUTPUT`, `"primary"`) holding every workspace. `output/create { id, workspaces?, focus? }` adds one (`workspaces` like `createState`'s, default `["<id>-1"]`); `output/remove { id, fallback? }` moves its workspaces onto another output (rejected `last-output` when it's the only one); `workspace/move-to-output { id, output, activate? }` moves a single workspace (rejected `last-workspace-on-output` when it's the only workspace its current output has — an output always keeps at least one); `output/focus { id }` switches which output has input focus, moving keyboard focus to a focusable window there (most-recently-focused first) or clearing it. Focus crosses outputs on its own, too: focusing a window on another output (`window/focus`, or the modal graph redirecting there) switches `focusedOutput` first, and `focus/next`/`focus/previous` wrap from the last focusable window of one output straight into the first of the next, in `outputOrder`. Visibility, `focusable` and `paintOrder` are resolved per output — a window is visible when its workspace is the *active workspace of its own output*, regardless of which output currently has focus — so `derive(state, { output })` derives any output's own tree, and the manager can drive one renderer (and input adapter) per output via `wm.setRenderer(outputId, renderer)` / `wm.measureOutput(outputId)`; see `outputs.html`. `outputsList`, `outputActiveWorkspace`, `outputOf`, `workspacesOf` and `focusedOutput` are the read-only queries.
+`createWindowManager` wraps all of this imperatively: `wm.dispatch`, `wm.create`/`focus`/`close`/…, `subscribe`, undo/redo, a command log where `replay(wm.origin, wm.log)` always equals `wm.getState()`, `serialize`/`load` with [migration](docs/api/versioning.md), and one renderer per output. See [The manager](docs/api/manager.md).
 
-Add your own commands with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`.
+## Layouts, modifiers and drag-and-drop
 
-- **`layout/toggle { a, b, workspace? }`** — xmonad's `ToggleLayouts`: flips a workspace between two layout specs. The current layout is compared to `a` by `type` alone (a BSP tree, a ratio, or `modifiers` may have drifted since); whatever isn't `a` becomes `a`. `a`/`b` are optional after the first call — the pair is stored on the workspace (`toggleLayouts`), so `dispatch({ type: "layout/toggle" })` with no arguments keeps flipping the same two. Toggling into `bsp` or `tree` seeds its tree the same way `layout/set` does. Rejected as `invalid-layout` when neither a stored pair nor valid `a`/`b` are available, `unknown-workspace` otherwise. The manager exposes `wm.toggleLayout(a, b, workspace?)`.
+Layout specs are plain data: `{ type: "master-stack", ratio }`, `{ type: "columns" }`, `{ type: "rows" }`, `{ type: "grid", min: 300 }`, `{ type: "spiral" }`, `{ type: "monocle" }`, `{ type: "tabs" }`, `{ type: "floating" }`, and the two stateful ones, `{ type: "bsp", tree }` and the n-ary docking `{ type: "tree", tree }` (row/column/tabs containers, in the style of i3, Dockview and GoldenLayout; `layout/to-tree` converts any layout into one). Add your own interpreters with `derive(state, { layouts })` or the manager's `layouts` option.
 
-## Window rules
+- **Persistent, resizable splits.** `layout/resize-split` stores sizes in the spec (a ratio, a BSP node, per-depth spiral ratios, or `sizes` arrays). `compile` renders a `[data-wm-splitter]` handle between resizable children, which you drag or nudge with the arrow keys.
+- **Layout modifiers**, xmonad-style and serializable: `modifiers: [{ type: "smart-gaps" | "no-gaps" | "mirror" | "reflect-x" | "reflect-y" | "max-windows", ... }]`. Toggle between two whole layouts with `layout/toggle`.
+- **Drag and drop edits structure, not pixels.** `window/drop { id, target, zone }` means insert-before/after, swap, split or add-as-tab depending on the layout, through a `DROPS` registry of drop interpreters that you can extend. `config.drag` controls the modes, edge zone, preview, detaching to floating, dropping floating windows into the layout, cross-workspace drops and a too-small check. Pinned windows (`draggable: false`) stay put. Children travel with their parent.
 
-Declarative window placement, in the spirit of xmonad's `ManageHooks`, i3's `for_window`, or EWMH window types: `config.rules` is an ordered array of `{ match, set }` rules, matched against every window at `window/create`.
+Full detail: [Layouts and modifiers](docs/api/layouts.md) and [Drag and drop](docs/api/drops.md).
 
-```js
-update(state, {
-  type: "rules/set",
-  rules: [
-    { match: { role: "dialog" }, set: { layer: "modal" } },
-    { match: { idPrefix: "term-" }, set: { layer: "top", mode: "floating" } },
-    { match: { titleRegex: "^Log " }, set: { status: "minimized" } },
-  ],
-});
-```
+## Policy at a glance
 
-- `match` (all present fields must agree; an absent or empty `match` matches every window): `role`, `id`, `idPrefix`, `title`, `titleRegex` (a regex *source* string, compiled fresh each check — rules stay JSON-serializable), `app` (an optional identifier a create command may set, like a WM_CLASS), `parent`.
-- `set`: `mode`, `layer`, `workspace`, `placement`, `status`, `draggable`, `constraints`, `anchor` — the same fields a create command can set. `placement` and `constraints` merge one level deep.
-- Rules apply in array order; a later rule overrides an earlier one on the same field. Whatever fields the `window/create` command sets explicitly always win over every rule (a rule only fills in what the caller left unspecified).
-- `matchRules(state, window)` is the pure query behind it: the indices of `config.rules` a window (or a window-shaped object) matches, in order, without applying anything.
-- The `window/created` event lists which rules applied: `{ type: "window/created", id, rules: [0, 2] }` (omitted when none matched).
-- Set the whole list with `rules/set { rules }` or `config/set { rules }`; both validate the same way and reject malformed rules as `invalid-rules` / `invalid-config` without throwing. A rule that sends a window to an unknown workspace still rejects the `window/create` itself with `unknown-workspace`.
-- `MATCH_FIELDS` / `SET_FIELDS` list the recognised keys; `validRules(rules)` checks a rule list is well-formed. The manager exposes `wm.setRules(rules)`.
+The built-in commands encode window-manager policy borrowed from xmonad, i3/sway, EWMH, ICCCM and Wayland. The [commands reference](docs/api/commands.md#shared-behaviour) has the exact rules.
 
-### Versioned state and migrations
+- **Requested vs actual geometry.** `window/move`/`window/resize` store a request; `derive` uses it only for floating windows. Constraints (`minWidth`, …) apply to tiled windows as CSS min/max.
+- **Size hints (ICCCM).** `aspectRatio` (exact or `{ min, max }`) and terminal-style `widthIncrement`/`heightIncrement`, honoured by `constrainSize` for floating move/resize. `geometry.sizeToCells` gives a live "80×24".
+- **Focus is not stacking.** Raising on focus is a policy (`config.focusRaises`). Stacking is per layer (`background`, `normal`, `top`, `modal`, `popover`, `notification`, `system`), and raising a window raises its descendants above it. Tiled windows paint above the background layer and beneath everything else (`paintOrder`).
+- **The modal graph.** Focusing a window with an open modal descendant focuses the deepest modal instead. A blocked window's contents are `inert`, but the window itself stays hit-testable, so a click on it redirects focus instead of falling through.
+- **Roles are semantic.** `dialog` anchors to its parent's centre, `menu`/`popover`/`tooltip` anchor by side, and `notification` sits in a corner: `derive` decides, not the application.
+- **Rules** (`config.rules`, like `ManageHooks` or `for_window`) set `mode`, `layer`, `workspace`, … at `window/create`. The caller's explicit fields always win.
+- **Scratchpad (i3), sticky (EWMH), urgency (EWMH/X11), pop-out (GoldenLayout/Dockview), multiple outputs (sway).** All of these are pure state: `window/to-scratchpad` + `scratchpad/toggle`; `window/set-sticky`; `window/set-urgent` + `focus/urgent`; `window/pop-out`/`pop-in`; and `output/*` with a per-output `derive(state, { output })`.
+- **Gestures are one step.** Commands sharing a `gesture` token form one undo step and one log entry, so a whole drag undoes at once.
+- **Versioned state.** Every state carries `STATE_VERSION`, `migrate` upgrades older ones, and a newer one is refused (`state/load-rejected`), never half-loaded.
 
-Every state carries a `version` (the constant `STATE_VERSION`), and `wm.serialize()` includes it, so a state saved by one build can be told apart from one saved by another.
+## compile and the browser
 
-```js
-import { createState, migrate, STATE_VERSION } from "@johnhenry/window-algebra";
-
-createState().version; // === STATE_VERSION
-
-const result = migrate(savedState);
-// result.ok === true  → result.state is at STATE_VERSION (unchanged if it already was)
-// result.ok === false → result.reason is "invalid-state" | "future-version" | "no-migration-path"
-```
-
-- **Unversioned states are version 0.** A state with no `version` field predates this feature — the shape `createState()` produced before `STATE_VERSION` existed — and is treated as version 0.
-- **`migrate(state)` never throws.** It walks `MIGRATIONS`, a registry of step functions keyed by the version they upgrade *from*, chaining as many steps as it takes to reach `STATE_VERSION`. On success it returns `{ ok: true, state, version }`; a state already at `STATE_VERSION` passes through unchanged (same reference). On failure it returns `{ ok: false, state: null, reason, version? }`.
-- **A newer version is refused, not guessed at.** A state whose `version` is greater than `STATE_VERSION` — saved by a newer build than the one running — fails with `reason: "future-version"` rather than being loaded partially or incorrectly.
-- **`wm.load()` and `replay()` both migrate.** `wm.load(state)` runs `migrate` before installing the state; a rejection (a future version, invalid JSON, or a gap in the migration chain) fires a `state/load-rejected` event with a `reason` and leaves the manager's current state untouched, instead of throwing. `replay(state, commands)` migrates its starting state the same way, so `replay(wm.origin, wm.log)` still equals `wm.getState()` even when `wm.origin` predates versioning.
-
-**Adding a migration**, when a future change to the state shape needs one:
-
-1. Bump `STATE_VERSION` (in `src/state/create.mjs`) by one.
-2. Add a step to `MIGRATIONS` (in `src/state/migrate.mjs`), keyed by the version it upgrades *from*: `MIGRATIONS[oldVersion] = (state) => ({ ...state, version: oldVersion + 1, /* ...fixes */ })`. The step must set `version` to `oldVersion + 1` and return a complete, valid state.
-3. `migrate` chains steps automatically — a state several versions behind runs through each step in turn.
-4. Add a test: build a state at the old version (or omit `version` for 0) and assert `migrate` upgrades it to match what `createState()` produces at the new version for the same intent.
-
-Two migrations have shipped so far: `0 → 1` backfills `config.drag` (added after some sessions were already saved without it) and drops a redundant explicit `draggable: true` (only the `draggable: false` exception is ever stored); `1 → 2` backfills multiple outputs (see "Multiple outputs" above) — a pre-outputs state's implicit single output becomes `DEFAULT_OUTPUT`, holding every workspace, focused.
-
-## Drag and drop in layouts
-
-Tiled windows own no geometry: their slots come from the workspace order (or the BSP tree) plus the layout interpreter. Dragging a tiled window therefore edits *logical structure*, never pixels, through one pure command:
-
-```js
-update(state, { type: "window/drop", id: "b", target: "a", zone: "left" });
-// zone: "center" | "left" | "right" | "top" | "bottom"
-// → events [{ type: "window/dropped", id, target, zone, op, workspace }], effects [render]
-```
-
-What a zone means depends on the layout, through a registry of **drop interpreters** (`DROPS`) parallel to `LAYOUTS`:
-
-| Layout | center | edges |
-| --- | --- | --- |
-| columns, grid, tabs, monocle | swap | left = insert before, right = insert after; top/bottom swap |
-| rows | swap | top = before, bottom = after; left/right swap |
-| master-stack | swap | a lone master reads horizontally (mirrored for `side: "right"`); masters and the stack column read vertically |
-| spiral | swap | window *i* reads horizontally when *i* is even, vertically when odd (the last one shares its predecessor's split) |
-| bsp | swap leaves | remove the dragged leaf and split the target on that side (`left`/`right` horizontally, `top`/`bottom` vertically) |
-| tree (docking) | add as a tab (or `spec.tabMode: "swap"`: swap leaves) | split the target's leaf on that side — unless its direct parent is already a `tabs` container, where left/right instead reorder within it (`before`/`after`, addressing any index in the strip) and top/bottom still split |
-| custom types | swap | reading order: left/top before, right/bottom after |
-
-"Before/after" is position in `ws.windows`; every other window keeps its slot. Grids read along rows, so only left/right insert there. Override or extend the registry with `createWindowManager({ drops: { mine: orderDrops((spec, ids, target) => "y") } })`, or build a handler for the pure core with `createDropHandler({ ...DROPS, mine })`. An interpreter is `{ ops(spec, ids, target) → { zone: op }, apply?(spec, ids, drop) → { ids, layout? } }`.
-
-Rejections: `unknown-window`, `unknown-zone`, `same-window`, `different-workspaces`, `not-tiled` (floating, maximized, minimized, non-window roles, or the `floating` layout), `blocked` (by a modal), `drag-disabled`, `not-draggable`, `zone-disabled` (the mode forbids that op), `too-small`.
-
-**Settings** (`config.drag`, set with `config/set { drag: { … } }`, which merges):
-
-- `tiled`: `"swap-or-insert"` (default), `"swap"`, `"insert"`, or `"off"`. A layout spec's own `drag` (`{ type: "master-stack", drag: "swap" }`) overrides it for that workspace.
-- `edgeZone`: fraction of a window's width/height that counts as an edge (default `0.25`).
-- `preview`: draw the ghost preview while dragging (default `true`).
-- `toFloating`: `"modifier"` (default: drag with <kbd>Shift</kbd> held), `"threshold"` (drag outside the stage), or `"off"`: how a dragged tiled window detaches as floating, with `window/detach { id, x, y }`.
-- `toTiled`: `"modifier"` (default), `"always"`, or `"off"`: when a dragged floating window may be dropped into the layout. The pure `window/drop` accepts a floating dragged window unless this is `"off"`; its `center` inserts it in the target's place.
-- `crossWorkspace` (default `true`): dropping on any element marked `data-wm-workspace-target="<id>"` moves the window (and its children) there. `follow` (default `false`) switches to that workspace too (`window/move-to-workspace { follow: true }`).
-- `tooSmall`: `"allow"` (default) or `"reject"`, which refuses a drop whose resulting slot would violate the dragged or target window's min/max constraints. The pure core has no pixels, so the command takes an optional `geometry: { [id]: { width, height } }` estimate; the input adapter measures its preview and sends it. Without geometry the setting is advisory.
-- Per window: `draggable: false` (at create time, or `window/set-draggable`) pins a window: it cannot be dragged, nor swapped away (inserting beside it is fine). Pinned views render `data-wm-draggable="false"`.
-
-**Pure helpers** (`src/interaction/drop.mjs`): `dropZoneAt(rect, point, edgeZone)` → a zone; `dropTargetAt(state, geometry, point, draggedId)` → `{ target, zone, op } | null` from measured rects (a floating window covering the point blocks the drop; hidden stack children never count; a zone the mode forbids falls back to the nearest permitted one); `previewDrop(state, drop)` → the next state, or `null` if rejected. It is only `update` on the immutable state.
-
-**Keyboard equivalents:** `window/swap-next` / `window/swap-previous` (wrapping; BSP uses leaf order) and `window/move-before` / `window/move-after` (one slot, or relative to a `target`; in BSP they split the neighbour along its own split). The manager exposes `drop`, `swapNext`, `swapPrevious`, `moveBefore`, `moveAfter`, and `setDraggable`.
-
-**In the browser**, `attachInput` makes a tiled window's move handle (its title bar) draggable once the pointer travels `threshold` px (default 5), so clicks stay clicks. While dragging, an overlay inside `root` covers every surface, which keeps iframes from swallowing the pointer. It also holds the preview: the hypothetical next state goes through the same `derive → compile` pipeline into a second renderer, drawn as ghost outlines of where every window would land, plus a highlight of the drop zone. CSS solves the hypothetical layout exactly as it will solve the real one (weights, gaps, `auto-fit` grids, BSP ratios), so the ghost cannot drift from the result, and measuring the ghost gives the slot sizes `tooSmall` needs. Constraints are left out of the ghost so it shows each window's *slot*; slots that would violate a window's constraints are outlined in red. Pointerup dispatches exactly one `window/drop`; Escape or `pointercancel` aborts. Pass `wm` (or `present: wm.present, simulate: wm.simulate, drops: wm.drops`) so the preview uses your custom layouts and drop interpreters, and `dragPreview(ctx)` to draw your own preview. Theme the ghost with `--wm-ghost-line`, `--wm-ghost-fill`, `--wm-zone-fill` and friends.
-
-The adapter also handles:
-
-- **Tiled ↔ floating.** With the modifier held (or, with `toFloating: "threshold"`, outside the stage) a tiled drag previews the window floating at the pointer and, on release, dispatches one `window/detach` (kept inside the stage when it fits). A floating window dragged over a tiled one with the modifier (or always, per `toTiled`) previews the slot it would take; release dispatches `window/drop` with the drag's `gesture` token, so the floating moves and the drop are one undo step. Pressing or releasing the modifier mid-drag updates the preview without moving the pointer. Pick the key with `modifier: "shift" | "alt" | "ctrl" | "meta"`.
-- **Across workspaces.** Hovering a `data-wm-workspace-target` element (anywhere on the page) marks it `data-wm-drop-active`; releasing dispatches `window/move-to-workspace`. A floating window keeps its placement. The pointer may leave the stage before the drag threshold: the adapter listens on the document while a press is live.
-- **Tabs.** Drag a compiled tab button (`data-wm-tab`) along its strip; an insertion line shows where it lands, and release dispatches `window/drop` with zone `left`/`right` (past the last tab means last).
-- **Children.** Dialogs, sheets and popovers are anchored to their parent, so they travel with it through every kind of drop, a detach, or a workspace move (`window/move-to-workspace` moves descendants).
-- **Pinned windows** (`draggable: false`) get `cursor: not-allowed` on their move handle, and a press on it marks the view `data-wm-drag-denied` for its duration; nothing moves, floating or tiled.
-- **Touch.** Touch pointers start a drag with a still long press (`longPress`, default 400 ms); moving first hands the gesture back to the browser, and the context menu is suppressed during the press. `BASE_CSS` sets `touch-action: none` only on `[data-wm-handle]` (and `pan-x` on tab strips), so content inside windows keeps scrolling.
-- **Accessibility.** `announce: true` adds a visually hidden `aria-live` region inside `root` that narrates drag start, the current target ("Release to move before Terminal."), the drop ("Editor moved before Terminal.") and cancellation; pass an element to use your own region, or a function to receive the messages. With `subscribe`, moves made by command (keyboard shortcuts, the API) are announced too. `keyboard: true` moves the focused window with <kbd>Alt</kbd>+<kbd>Shift</kbd>+arrows (`window/move-before` / `window/move-after`) and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>PageUp</kbd>/<kbd>PageDown</kbd> (swap), or pass your own `{ combo: commandType }` map (`DEFAULT_MOVE_KEYS` is the default).
-
-## Snap zones and magnetism (floating windows)
-
-Windows-Snap / macOS-tiling / WM-magnetism, for floating windows only (tiled windows already have `window/drop`, above). Two independent behaviours, both settable with `config/set { snap: { … } }` (merges one level deep):
-
-- **Edge/corner zones.** While dragging a floating window's move handle, approaching a stage edge or corner shows a preview — reusing the drag overlay's drop-zone highlight — of the half, quarter or maximize placement it would take; releasing there applies it with one `window/resize { id, x, y, width, height }` (tagged with the drag's `gesture` token, so the whole gesture is one undo step). A corner takes priority over the plain edge it also touches.
-- **Magnetism.** Moving or resizing a floating window snaps its moving edge(s) onto any other visible window's edges, or the stage's, within `magnet` px — independently on each axis, so only the near edge snaps.
-
-**Settings** (`config.snap`):
-
-- `edges` (default `true`): master switch for the zone preview.
-- `threshold` (default `16`): how close (px) the pointer must be to a stage edge/corner to count as "near" (symmetric: a pointer captured mid-drag may overshoot a little and still count, but not arbitrarily far).
-- `zones`: `"halves-quarters"` (default, both), `"halves"` (edges only, never a corner quarter), `"quarters"` (corners only), or `"off"` (same as `edges: false`).
-- `magnet` (default `8`): how close (px) a moving/resizing edge must be to another edge to snap onto it; `0` disables magnetism.
-
-**Pure helpers** (`src/interaction/snap.mjs`), never touching the DOM or dispatching:
-
-```js
-snapZoneAt(stage, point, config)          // → "maximize" | "left" | "right" | "bottom"
-                                           //   | "top-left" | "top-right" | "bottom-left" | "bottom-right" | null
-snapZoneRect(stage, zone)                 // → { x, y, width, height } within `stage`, or null
-magnetize(rect, others, config)           // → rect translated to snap onto others' edges (move)
-magnetizeResize(rect, others, edge, config) // → rect with only `edge`'s side(s) snapped (resize)
-```
-
-`others` is a plain array of rects — pass the stage's own rect among them for it to attract too, and the measured rects of every other visible window for magnetism against them (a floating window's rect is its `placement`; a tiled window's is whatever the renderer measures). `SNAP_ZONES` lists every zone `snapZoneRect` understands. `constrainSize` (already used by `window/resize`) still clamps a snap zone's width/height to the window's own constraints, so a zone never violates them — it just may not fill the whole half/quarter/stage.
-
-Rejections: `config/set { snap: … }` is rejected (`invalid-config`) for a non-object, a non-boolean `edges`, a negative `threshold` or `magnet`, or a `zones` outside the four listed above.
-
-## derive: from state to presentation
-
-`derive(state, { layouts, modifiers, output })` returns an `overlay` for an output's active workspace (default: `state.focusedOutput`, so single-output callers keep deriving exactly what they always did). The tiled base comes first, and floating windows, dialogs, popovers, and notifications are layered above it in stacking order. Layout specs are plain data (`{ type: "master-stack", ratio }`, `{ type: "bsp", tree }`, `{ type: "grid", min: 300 }`, …), optionally carrying `modifiers` (see *Layout modifiers*, below). Deriving a specific output looks like:
-
-```js
-derive(state, { output: "hdmi-1" }); // that output's own active workspace, regardless of state.focusedOutput
-```
-
-You can add interpreters:
-
-```js
-derive(state, {
-  layouts: {
-    coding: (spec, ids) => row({}, size({ weight: 3 }, view(ids[0])), column({}, ...ids.slice(1).map(view))),
-  },
-});
-```
-
-## Layout modifiers
-
-xmonad-style decorators over a layout interpreter, kept serializable: a layout spec may carry `modifiers: [{ type, ... }]`, interpreted by a `MODIFIERS` registry parallel to `LAYOUTS` and applied by `derive` around the base layout (`derive(state, { modifiers })` extends/overrides it, exactly like `{ layouts }`).
-
-```js
-derive(state, {
-  // ws.layout: { type: "columns", modifiers: [{ type: "smart-gaps" }, { type: "mirror" }] }
-});
-```
-
-Built-in modifiers:
-
-- **`smart-gaps`** — no gap/inset around the tiled base when it holds a single window (there is nothing to separate it from).
-- **`no-gaps`** — never gap/inset the tiled base, regardless of window count.
-- **`mirror`** — xmonad's `Mirror`: transposes the layout (every row becomes a column and vice versa).
-- **`reflect-x`** — flips left-right (reverses the children of every row).
-- **`reflect-y`** — flips top-bottom (reverses the children of every column).
-- **`max-windows { n }`** — only the first `n` tiled windows get their own slot from the wrapped layout; the rest share the last slot as a hidden stack (one painted at a time, the others mounted but inert — the same presentation `monocle`/`tabs` already use). The overflow stack shows the focused window when focus lands on one of the hidden ones, otherwise the slot's own window. Every tiled window stays in the tree (just nested), so the tiled set, `paintOrder`, and drops over the flat workspace order all still agree with what's on screen.
-
-Modifiers apply in list order — `withModifiers(interpreter, mods, registry?)` is the underlying combinator, a plain functional decorator: `(spec, ids, context) → tree`, wrapped by each modifier in turn (registry defaults to `MODIFIERS`; use your own to add or override entries). Write your own the same way:
-
-```js
-const MODIFIERS = {
-  center: () => (interpreter) => (spec, ids, context) => centered({}, interpreter(spec, ids, context)),
-};
-derive(state, { modifiers: MODIFIERS });
-```
-
-`mirror`/`reflect-x`/`reflect-y` also remap the affected layout's drop-zone semantics (`applyModifiersToOps`, used by `dropInterpreterFor`), so dragging still matches what got painted — a reflected `columns` layout's `left` zone means what its unreflected `right` zone would have. `smart-gaps`/`no-gaps`/`max-windows` don't change a layout's screen axes, so its drop interpreter is untouched. `suppressesGaps(mods, { tiledIds })` is the pure query `derive` uses to decide whether to skip the configured gap/inset wrap.
-
-Toggle between two full layouts (rather than decorating one) with `layout/toggle` (see *Logical state and commands*) — xmonad's `ToggleLayouts`, distinct from a modifier.
-
-## compile: from layout tree to CSS
-
-`compile(tree, presentationContext(state))` returns a render tree of `{ tag, key, attrs, style, children }`. Views are `container-type: size`, except on an axis sized by its content (`height: "content"`), where they fall back to `inline-size` (or no containment) so the content can size them. `toHTML()` serializes it for server rendering or snapshots. View elements are keyed `view:<id>`, so a layout change moves elements instead of recreating them. When a view appears more than once, the extra copies become non-primary projections.
-
-`compile` also carries every window's role/ARIA attributes (see *Accessibility*, below): `role="group"` and `aria-label` for ordinary windows, `role="dialog"` (+ `aria-modal="true"` when the window is modal) for `dialog`/`sheet` roles, and `role="tabpanel"` + `aria-labelledby` for a tabs stack's children, cross-referenced with the tab strip's `role="tab"` buttons (`id`/`aria-controls`, via `tabId`/`panelId`).
-
-### Positioner rules for anchored popups
-
-`anchor()`'s side-attached form (`{ to, side, align, offset }` — used by menus, popovers, tooltips and side-anchored dialogs) accepts Wayland `xdg_positioner`-style constraint adjustment for when the popup would overflow the stage:
-
-- **`gravity`** (default: `side`) — which way the popup grows from its attach point on the anchor's `side` edge. A `gravity` opposite `side` (e.g. `side: "bottom", gravity: "top"`) grows the popup back over the space just past the anchor instead of away from it; any other value falls back to `side`.
-- **`flip: ["x","y"]`** — axes allowed to flip to the opposite side (primary axis) or alignment (cross axis) instead of overflowing. Default: both axes.
-- **`slide: ["x","y"]`** — axes allowed to translate, unresized, back into the stage. Default: neither.
-- **`resize: ["x","y"]`** — axes allowed to shrink so the popup fits the stage, keeping the edge nearest its anchor point fixed. Default: neither.
-
-Each axis tries flip, then slide, then resize, in that order, using only the adjustments it was opted into; an axis with none of the three left alone can overflow the stage. The placement math is `positionPopup(anchorRect, popupSize, stage, options)` in `src/geometry/positioner.mjs` — a pure function with no DOM dependency, safe to call from a demo, a test, or your own layout code.
-
-`compile` maps as much of this to CSS anchor positioning as it can: `flip` becomes `position-try-fallbacks: flip-block, flip-inline` (whichever axes are included — `y` is the block axis for a `top`/`bottom` `side`, `x` for `left`/`right`), and a `gravity` opposite `side` picks a different `position-area`. `slide` and `resize` have no CSS anchor-positioning equivalent — `position-try-fallbacks` only swaps between discrete alternatives, it can't continuously clamp a position or shrink a box — so they only take effect under the JS anchor fallback (`anchorFallback: true`, or automatically wherever `CSS.supports("anchor-name: ...")` is false). A popup that needs `slide`/`resize` to look right everywhere should force the JS fallback rather than rely on native CSS anchor positioning.
-## Accessibility
-
-Accessibility basics, in the spirit of VS Code/Dockview: `compile` and `attachInput` add the roles, ARIA attributes and keyboard behavior below with no extra configuration (besides opting into `attachInput`'s `announce` and `keyboard` options); applications still own their own content's accessibility.
-
-**Roles and ARIA** (`compile`):
-
-- Every window view is a labelled region: `role="group"` and `aria-label` set to its title.
-- A `dialog`/`sheet` window is `role="dialog"`; when it is also modal (`win.modal`), it additionally gets `aria-modal="true"`. A non-modal dialog (a popover-style panel) is `role="dialog"` without `aria-modal`.
-- A tabs stack's tab strip is `role="tablist"`; each tab button is `role="tab"` with `aria-selected` and `aria-controls` pointing at its panel's `id`; the corresponding window view becomes `role="tabpanel"` with `aria-labelledby` pointing back at the tab (`tabId(id)`/`panelId(id)` compute the pair).
-- A splitter is `role="separator"` with `aria-orientation`/`aria-valuenow`/`aria-valuemin`/`aria-valuemax` (see *Drag and drop in layouts*). A window blocked by an open modal descendant gets `aria-disabled="true"`; its contents are made `inert` by the DOM renderer (see *Browser adapters*) — hidden from assistive tech and unfocusable, while the window itself stays hit-testable so a click on it is redirected rather than falling through.
-
-**Keyboard** (`attachInput`):
-
-- `F6` / `Shift+F6` cycle WM focus forward/backward between focusable windows (`focus/next` / `focus/previous`), the desktop convention for moving between windows without a mouse. Enabled whenever the `keyboard` option is truthy (`true`, or a custom move-key map — see *Drag and drop in layouts*), alongside whatever move keys it configures.
-- **Focus trap**: while the WM-focused window is modal (`win.modal`), `Tab` is trapped inside its element — past the last focusable descendant it wraps to the first, and `Shift+Tab` past the first wraps to the last. This is always on (it needs no option): a modal window's blocked ancestor is already `inert`, so the trap only has to keep focus from drifting to unrelated windows or the page chrome around `root`.
-- **Escape** for transients (popovers, menus, tooltips, non-modal sheets) is left to the application: `attachInput` only defines Escape during an active pointer gesture (cancel a drag/resize/splitter-drag — see *Drag and drop in layouts*). Bind `Escape → wm.close(id)` (or `wm.restore(id)` for a fullscreen window) yourself for the focused window's transient roles, as `demo/desktop.html` does.
-- **Live announcements** of focus changes and window open/close piggyback on the existing `announce` option (`true` for a built-in `aria-live="polite"` region, an element, or a function) — pass `subscribe` (or use a manager's `wm.subscribe`) so `attachInput` narrates `window/focused`, `window/created` and `window/closed` events, in addition to the drag/drop events it already announces.
-- **Reduced motion**: the library's own layout CSS declares no animation; example chrome that does animate (`demo/shared/style.css`) wraps every transition in `@media (prefers-reduced-motion: no-preference)`, off by default for anyone who set the OS preference. The renderer's `animate` option (below) checks the same preference itself before it ever starts a transition.
-
-## Browser adapters
-
-- `createDomRenderer({ root, surfaceFor })` reconciles the keyed DOM, mounts and unmounts surfaces, measures realized geometry with `measure()`, and positions anchors with JS when CSS anchor positioning isn't supported (force it with `anchorFallback: true`; `reposition()` re-runs it). Reconciliation is top-down and moves views with `moveBefore()` where the browser has it, so an iframe, a playing animation or a focused input survives a layout change.
-- **Animation**: `createDomRenderer({ animate: true })` (or `{ animate: { duration, easing } }`) runs each commit's reconciliation inside `document.startViewTransition`, so a layout change (a window closing, a layout switch, a resize) crossfades/morphs instead of jumping. Every primary view gets its own `view-transition-name` — sanitized from the view id into a valid CSS custom-ident and kept unique per renderer instance — so the browser animates each window individually rather than the whole stage as one image; `duration`/`easing` become `--wm-transition-duration`/`--wm-transition-easing`, which `BASE_CSS` reads. It is a no-op (commits apply immediately, same as `animate` unset) when the browser has no `startViewTransition`, when `prefers-reduced-motion: reduce` is set, and for any commit passed `{ immediate: true }` — which the manager does automatically for commands carrying a `gesture` token (a drag or resize in progress) or an explicit `command.immediate: true`, so a dragged window is never mid-transition. A commit that lands while an earlier transition is still running also applies immediately instead of starting a second, overlapping one, so rapid commits coalesce. `setAnimate(value)` turns it on/off (or reconfigures duration/easing) after creation — the `animate` demo toggle on `desktop.html`/`layouts.html` uses it. `moveBefore` state preservation (iframes) is unaffected: the reconcile inside the transition callback is the same code path as an unanimated commit.
-- `attachInput({ root, getState, dispatch })` turns pointer events into commands. The markup contract is: `data-wm-handle="move"` (moves a floating window; drags a tiled one to a new slot), `data-wm-handle="resize-se"` (any edge or corner), `data-wm-command="window/close"`, tab buttons with `data-wm-tab`, and `[data-wm-splitter]` (compiled in automatically between a resizable row/column's children — drag it, or focus it and press the arrow key along its axis). Options: `subscribe`, `snap`, `threshold`, `present`, `simulate`, `dragPreview`, `splitterStep` (see *Drag and drop in layouts*).
-- Surfaces share one contract, `{ mount(target), unmount() }`. Provided implementations: `htmlSurface`, `lazySurface`, `iframeSurface`, and `canvasSurface` (an html-in-canvas style surface that repaints when its size changes).
-- `createFrameScheduler()` coalesces many commands into one commit per animation frame.
-- `attachPopouts({ wm, renderer, surfaceFor?, open? })` pops a window out into a real separate browser window and back (see `window/pop-out`/`window/pop-in` above). `renderer.release(id)`/`renderer.adopt(id, element, surface)` (`createDomRenderer`'s own methods) hand the view's DOM node across without unmounting its surface. Returns `{ popOut(id, { name?, features? }), popIn(id), isPoppedOut(id), detach() }`; `popOut`/`popIn` return the same `{ state, events, effects }` shape `wm.dispatch` does, so a rejection (`unknown-window`, `blocked`, `popup-blocked`) reads the same way.
-- **Multiple outputs**: give `createWindowManager` a `renderers: { [outputId]: renderer }` map, or call `wm.setRenderer(outputId, renderer)` (passing no renderer detaches it) to attach/replace one later — each renders that output's own `derive`d tree on every `render` effect, alongside (or instead of) the single-output `renderer` option, which always follows the focused output. `wm.measureOutput(outputId)` reads that output's own renderer's `measure()`. Pair each renderer with its own `attachInput({ root, present: (state) => wm.present(state, { output: outputId }), ... })` so drag/resize previews on that stage derive *its* workspace, not whichever output currently has focus; see `outputs.html`.
-
-Because every view is a size container, applications adapt with container queries. They don't need to know whether they were tiled, tabbed, or resized by hand.
+`compile(tree, presentationContext(state))` returns a render tree of `{ tag, key, attrs, style, children }`. It carries ARIA roles (`group`, `dialog` + `aria-modal`, `tablist`/`tab`/`tabpanel`, `separator`), state attributes (`data-focused`, `data-wm-blocked`, `data-wm-urgent`, …) and view elements keyed `view:<id>`. `toHTML` serializes it for server rendering or snapshots. Because every view is a size container, applications adapt with container queries without knowing how they were laid out:
 
 ```css
 @container wm-view (width < 400px) { .sidebar { display: none; } }
 ```
 
+In the browser (`@johnhenry/window-algebra/browser`):
+
+- **`createDomRenderer({ root, surfaceFor, anchorFallback?, animate? })`** reconciles top-down and moves views with `moveBefore()` where available, so iframes, focus and playing media survive layout changes. It measures geometry, positions anchors with JS where CSS anchor positioning is missing, and animates commits with View Transitions (`animate`), skipping gestures and `prefers-reduced-motion`.
+- **`attachInput({ root, wm })`** turns pointer and keyboard input into commands: floating move/resize with magnetism and snap zones; tiled drags with a ghost preview rendered by the same derive → compile pipeline; tab and splitter drags; touch long-press; keyboard focus kept in sync with WM focus; a modal focus trap; and opt-in F6 cycling, keyboard moving and `aria-live` narration.
+- **Surfaces** share one contract, `{ mount(target), unmount() }`: `htmlSurface`, `lazySurface`, `iframeSurface`, `canvasSurface`, plus `createSurfaceRegistry`.
+- **`createFrameScheduler()`** coalesces commits to one per frame.
+- **`attachPopouts({ wm, renderer })`** pops a window out into a real browser window, carrying its live DOM there and back.
+
+Every option, attribute and custom property is in [compile and CSS](docs/api/compile.md) and [Browser adapters](docs/api/browser.md).
+
 ## Framework bindings
 
-No dependency is added for either binding; each is a subpath export that pulls in only the library's own modules.
+Neither binding adds a dependency.
 
-### React — `@johnhenry/window-algebra/react`
+- **React** (`@johnhenry/window-algebra/react`): `createReactBindings(React)` returns `useWindowManager`, `useWindowState(wm, selector)` and `<WindowManagerStage wm renderSurface createPortal>`, which renders window content as React portals while the WM owns layout and chrome.
+- **Custom element** (`@johnhenry/window-algebra/element`): `defineWindowAlgebraElement()` registers `<wa-stage>`, a manager, renderer and input adapter for as long as the element is connected. `.configure({ wm, surfaceFor })`, `.wm`. `attachStage(host, options)` is the reusable core.
 
-`createReactBindings(React)` takes your own copy of React (any version with `useSyncExternalStore`) and returns three things:
+See [Framework bindings](docs/api/bindings.md).
 
-```js
-import { createReactBindings } from "@johnhenry/window-algebra/react";
-import { createPortal } from "react-dom";
+## API reference
 
-const { useWindowManager, useWindowState, WindowManagerStage } = createReactBindings(React);
+[`docs/api/`](docs/api/README.md) documents every public export, verified against the source and tests:
 
-function Desktop() {
-  const { wm } = useWindowManager({ history: true }); // created once, subscribed via useSyncExternalStore
-  const count = useWindowState(wm, (state) => Object.keys(state.windows).length); // a derived slice
+| Page | |
+| --- | --- |
+| [State](docs/api/state.md) | state shape, records, constants, every `config` key and default |
+| [Commands](docs/api/commands.md) | all 51 commands: payloads, events, effects, rejections |
+| [Events](docs/api/events.md) | all 44 event types and the two effects |
+| [Queries](docs/api/queries.md) | visibility, focus, stacking, rules, `presentationContext` |
+| [Layout algebra](docs/api/algebra.md) | primitives, options, validation, transforms |
+| [Layouts and modifiers](docs/api/layouts.md) | `derive`, every layout spec, BSP and docking-tree helpers, split sizing, modifiers |
+| [Drag and drop](docs/api/drops.md) | drop semantics per layout, interpreters, pointer helpers |
+| [compile and CSS](docs/api/compile.md) | render tree, CSS mapping, attributes, `BASE_CSS` custom properties |
+| [Geometry and interaction](docs/api/geometry.md) | rects, size hints, `positionPopup`, gesture math, snap and magnetism |
+| [The manager](docs/api/manager.md) | options, methods, gestures, log, load/serialize |
+| [Browser adapters](docs/api/browser.md) | renderer, input, surfaces, schedulers, pop-outs |
+| [Framework bindings](docs/api/bindings.md) | React and `<wa-stage>` |
+| [Versioning](docs/api/versioning.md) | `migrate`, `MIGRATIONS`, adding a migration |
+| [Errors](docs/api/errors.md) | what is rejected vs thrown; every reason |
 
-  return (
-    <WindowManagerStage
-      wm={wm}
-      className="stage"
-      renderSurface={(id) => <MyWindowContent wm={wm} id={id} />}
-      createPortal={createPortal}
-    />
-  );
-}
-```
+The design rationale, prior art (xmonad's StackSet, River's policy/compositor split, AwesomeWM's stateless and stateful layouts, Elm's update loop) and open questions are in [`docs/PRD.md`](docs/PRD.md).
 
-- `useWindowManager(options)` creates a manager once (`createWindowManager(options)`) and re-renders the component on every dispatch.
-- `useWindowState(wm, selector?)` re-renders only when the selected slice changes (`Object.is`); omit `selector` for the whole state.
-- `WindowManagerStage` mounts a `createDomRenderer` + `attachInput` pair into a ref'd host element for the component's lifetime. Pass `renderSurface(id)` together with `createPortal` (react-dom's) to make each window's content an ordinary React tree — state, effects, context all intact — mounted as a portal into that window's view, while the WM still owns layout and chrome. Omit both for plain-DOM surfaces (`surfaceFor`-style, wired up yourself). `input` is merged into `attachInput`'s own options; `anchorFallback` and `as` (host tag, default `"div"`) are forwarded too; everything else (`className`, `style`, ...) lands on the host element.
+## Adding a new layout
 
-See `demo/react.html` (loads React from esm.sh — needs network; everything else in this repo works offline).
+The docking tree (`{ type: "tree" }`, commit `7ef2291`, with a follow-up fix in `067191b`) is the best worked example in this package's own history. It is the most recent built-in layout, and it is the harder of the two kinds: it is **stateful**, like BSP, so its structure lives in the spec and has to stay in sync with the windows. Its tests are `test/tree.test.mjs`, and `demo/layouts.html` and `demo/desktop.html` show it running.
 
-### A framework-agnostic custom element — `@johnhenry/window-algebra/element`
+**Smallest: a custom interpreter, no core change.** If your layout is a pure function of the tiled ids, like "one big window and the rest in a column", register it under a new `type` with the manager's `layouts` option (or `derive(state, { layouts })`): `(spec, ids, context) → tree`, built from the primitives. `layout/set` accepts it, it serializes, drops fall back to reading order, and you can give it a drop interpreter with the `drops` option (`orderDrops(() => "y")`). The whole cost is the function. A built-in is warranted only when the layout needs **state that must survive between renders** (a tree, per-split sizes) or has to reach into commands the core owns (seeding, keyboard neighbour order, `layout/to-tree`, `layout/resize-split`).
 
-`defineWindowAlgebraElement(name = "wa-stage")` registers a `<wa-stage>` custom element (via the platform's own `customElements.define`) that owns a manager, a `createDomRenderer`, and an `attachInput` for as long as it is connected:
+**A genuinely new built-in layout: the docking `tree`.** Each existing layout follows the same small pattern:
 
-```js
-import { defineWindowAlgebraElement } from "@johnhenry/window-algebra/element";
+1. **`src/layouts/<name>.mjs`**: the pure helpers. `treeToLayout` interprets the stored structure as primitives. A stateless layout needs only this function (see `columns` in `src/layouts/index.mjs`). Re-export it from `src/layouts/index.mjs`.
+2. **`src/state/derive.mjs`**: a `LAYOUTS` entry, `(spec, ids, context) → tree`, a copy of `bsp`'s own.
+3. **`src/state/drops.mjs`**: a `DROPS` entry, `orderDrops(axis)` for an order-based layout, or `{ ops, apply }` for a stateful one (`treeDrops` beside `bspDrops`).
+4. **The one part that isn't boilerplate: keeping stored structure honest.** `treeReconcile(spec.tree, ids)` runs inside the interpreter and the drop interpreter, dropping leaves for windows that are gone and appending new ones. Because of it, `window/create`, `window/close`, `window/set-mode` and every other command need **zero** awareness that the tree exists: the stored tree is repaired lazily whenever it is read. BSP does the same thing eagerly (`bspAdd`/`bspDrop` in `src/state/update.mjs`), which is why it touches more commands. What remains in `src/state/update.mjs` is seeding (`layout/set` fills an absent `tree` from the current order), the `layout/to-tree` conversion, and a `layout/resize-split` branch if it is resizable (emit `resize: { path, weights }` on each row/column, and teach `readSplitWeights` in `src/browser/input.mjs` its path scheme).
 
-defineWindowAlgebraElement(); // registers <wa-stage>
-document.querySelector("wa-stage").configure({ wm, surfaceFor });
-document.querySelector("wa-stage").wm.create({ id: "editor" });
-```
+Why the keyboard commands need care: `067191b` fixed `window/swap-next` and `window/move-before` on tree workspaces. `swapWindows` and `neighbourOrder` special-cased only `bsp`, so swaps reordered `ws.windows` but not the tree, and nothing visibly moved. A new stateful layout must add its branch to `swapWindows`, `neighbourOrder` and `moveRelative` in `src/state/drops.mjs`, and a test that swaps a nested leaf.
 
-- `.configure(options)` sets (or replaces) the element's options — same shape as `attachStage` below — at any time; if the element is already connected it detaches and re-attaches immediately with the new ones.
-- `.wm` is the live window manager while connected, `null` otherwise.
-- `attachStage(host, options)` is the reusable, DOM-shaped core the element wraps (`{ wm?, manager?, anchorFallback?, surfaceFor?, input? }` in, `{ wm, renderer, detach() }` out) — anything with the usual Element methods can be a host, including in tests against the fake DOM.
+**Tests.** Everything above is pure, so `test/tree.test.mjs` runs in plain Node with no DOM: the helpers, `derive`, `layout/set` and `layout/to-tree`, `layout/resize-split`, `window/drop` per zone, the keyboard commands, and undo/replay/serialization. Add the layout to `demo/layouts.html` and to the checklist in `demo/shared/coverage.mjs`.
 
-See `demo/element.html` (works fully offline: no framework, no build step).
+A layout **modifier** (`smart-gaps`, `mirror`, …) is the other extension point, for decorating an existing layout rather than adding one. It is one `MODIFIERS` entry, plus an `applyModifiersToOps` case if it changes screen axes. See [Layouts › Layout modifiers](docs/api/layouts.md#layout-modifiers).
 
-## Scripts
+## Honest limitations
 
-```sh
-npm test   # node --test test/*.test.mjs
-```
+- **Several browser features are progressive, and the fallbacks differ.** CSS anchor positioning covers `flip` and an opposite-side `gravity`, but it has no equivalent for `slide`/`resize`, which work only under the JS fallback (`anchorFallback: true`, automatic where `CSS.supports("anchor-name: …")` is false). An omitted `flip` means "both axes" natively and "none" under the fallback, so pass it explicitly. Without `Element.prototype.moveBefore`, a view moving between containers is re-inserted, and an iframe inside it reloads. Without View Transitions, `animate` is a no-op (by design, as it is under `prefers-reduced-motion`).
+- **Pop-outs depend on the popup window.** `window.open` is subject to pop-up blockers: call `popOut` from a user gesture. A blocked popup is reported as a `popup-blocked` rejection, not an exception. Most browsers reload an iframe adopted into another document, so iframe state resets on the way out. A pop-in that doesn't go through `attachPopouts` (`window/restore`, undo) remounts the surface fresh instead of carrying the DOM back.
+- **The pure core has no pixels.** Tiled sizes are CSS's decision, so `config.drag.tooSmall: "reject"` is only enforced when a `geometry` estimate is supplied (the input adapter measures its ghost), size increments are advisory for tiled windows, and grid tracks are not resizable. `derive` and the renderer only see the layout; content that changes size without a commit needs `renderer.reposition()` for JS-positioned anchors, whose `ResizeObserver` watches only the stage root.
+- **Some surfaces and observers are lazy.** A `lazySurface` builds on first mount and is never re-asked while its view stays rendered, so swapping a registry entry does not replace a mounted surface. `canvasSurface` repaints on resize only where `ResizeObserver` exists (it paints once otherwise). `<wa-stage>` creates a fresh manager on each connect or `configure()` unless you pass your own `wm`.
 
-## Design notes
+## Family
 
-`docs/PRD.md` covers the rationale, the prior art (xmonad's StackSet, River's policy/compositor split, AwesomeWM's stateless and stateful layouts, Elm's update loop), and the open questions.
+window-algebra is one of three zero-build, browser-first ESM libraries in this family. None of them depends on another. They fit together at the page level:
+
+- **`@johnhenry/html-modules`**: declarative HTML modules. `<html-import src="./ui.html" as="ui">` turns each `<html-export>` in an ordinary HTML file into a native custom element (`<ui--card>`). Those elements are exactly what window-algebra's surfaces host: `htmlSurface(document.createElement("ui--card"))` (or a `lazySurface` that creates one on first mount) puts an HTML-module component in a window. window-algebra only ever calls `mount(target)`/`unmount()`, so it needs no knowledge of how the element was defined. Neither package depends on the other.
+- **[`@johnhenry/mport`](https://github.com/johnhenry/mport)**: routes JavaScript imports across CDNs and compiles the result to a standard import map. A no-build page using window-algebra needs an import-map entry for each entry point it imports (see [Install](#install)), and for anything it loads alongside, such as React for the `/react` binding, which `demo/react.html` currently fetches from esm.sh by a hard-coded URL. mport can produce that map with fallback across mirrors, instead of hand-written URLs. There is no dependency in either direction; the browser only sees the resulting import map.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

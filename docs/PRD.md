@@ -34,7 +34,7 @@ There are eleven primitives, and all of them except `view` take options first:
 
 - Leaf: `view(id)`
 - Containers: `row`, `column`, `grid`, `stack`, `overlay`
-- Modifiers: `place`, `size`, `gap`, `inset`, `anchor` (`anchor`'s side-attached form takes Wayland `xdg_positioner`-style constraint adjustment: `gravity`, `flip`, `slide`, `resize` — see README, "Positioner rules for anchored popups")
+- Modifiers: `place`, `size`, `gap`, `inset`, `anchor` (`anchor`'s side-attached form takes Wayland `xdg_positioner`-style constraint adjustment: `gravity`, `flip`, `slide`, `resize` — see `docs/api/algebra.md`, "anchor", and `docs/api/geometry.md`, "positionPopup")
 
 These candidates were considered and rejected (or left as derived helpers):
 
@@ -82,7 +82,7 @@ sway-style outputs: `state.outputs` (id → `{ workspaces, activeWorkspace }`) p
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 49 built-in commands. Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 51 built-in commands (`COMMANDS`; each is documented in `docs/api/commands.md`). Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history, EWMH/X11-style urgency hints (`window/set-urgent`, `focus/urgent`, `config.urgency.clearOnFocus`). |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), docking tree (stateful, n-ary row/column/tabs; `layout/to-tree` converts any other layout into one), and custom interpreters. |
 | Layout modifiers | xmonad-style, serializable (`spec.modifiers: [{ type, ... }]`): `smart-gaps`, `no-gaps`, `mirror`, `reflect-x`, `reflect-y`, `max-windows(n)` (overflow shares a hidden stack slot), applied via a `MODIFIERS` registry parallel to `LAYOUTS` and the `withModifiers(interpreter, mods)` combinator. `layout/toggle { a, b }` flips a workspace between two stored layouts (xmonad `ToggleLayouts`). Drop interpreters remap their zones to match `mirror`/`reflect-x`/`reflect-y` (`applyModifiersToOps`). |
