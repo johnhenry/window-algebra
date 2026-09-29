@@ -1,0 +1,61 @@
+# Family-standard single-package publish workflow (adopt-library Phase 3).
+#
+# PENDING -- not yet built: a shared reusable-workflows repo,
+# `johnhenry/workflows`, is planned to hold this body as a `workflow_call`
+# target. Once it exists and is tagged `v1`, replace the `publish` job below
+# with
+#     uses: johnhenry/workflows/.github/workflows/npm-publish.yml@v1
+#     secrets: inherit
+# keeping `permissions: { id-token: write, contents: read }` on the caller
+# job. Until that tag exists, inline this file as-is; do not reference @v1.
+#
+# Deviating from the `release: published` trigger is allowed only with a
+# comment block explaining what/why/how-to-retry (see adopt-library
+# templates/publish-trigger-deviation.yml).
+
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Must equal engines.node's major, .nvmrc and the ci.yml matrix
+          # (family floor: 26). A gate that runs on a version the package
+          # declares unsupported tests nothing.
+          node-version: "26"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+
+      # The FULL gate: the test suite plus the runnable examples. There is no
+      # build, typecheck or generated artifact in this repo.
+      - run: npm test
+      - run: npm run examples
+
+      - name: Publish
+        # Idempotent: `npm view` exits non-zero for a version that isn't on
+        # the registry yet, which is the signal to publish. This pre-flight
+        # check is the family standard -- do NOT publish first and grep
+        # stderr for "cannot publish over"; that depends on npm's wording.
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
+            echo "::notice title=Already published::$PKG_NAME@$PKG_VERSION is already on npm; nothing to do."
+            exit 0
+          fi
+          npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
