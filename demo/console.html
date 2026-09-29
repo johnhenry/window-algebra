@@ -477,6 +477,7 @@
         ["unknown-layout", { type: "layout/set", layout: { type: "nope" } }],
         ["invalid-ratio", { type: "layout/set-ratio", ratio: "wide" }],
         ["not-bsp", { type: "layout/rotate-split", workspace: "side" }],
+        ["not-on-workspace", () => pureRejection({ type: "window/promote", id: "a" }, [{ type: "window/to-scratchpad", id: "a" }])],
         // Drag-and-drop rejections, shown on a small pure state (columns a | b | c)
         // so they do not depend on what the live manager holds.
         ["same-window", () => pureRejection({ type: "window/drop", id: "a", target: "a", zone: "center" })],

@@ -57,6 +57,7 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | `empty-scratchpad` | `scratchpad/toggle` |
 | `not-scratchpad` | `scratchpad/toggle` |
 | `not-popped-out` | `window/pop-in` |
+| `not-on-workspace` | `window/promote` (a window hidden in the scratchpad) |
 | `popup-blocked` | `attachPopouts().popOut` |
 | `last-workspace` | `workspace/remove` |
 | `last-workspace-on-output` | `workspace/remove`, `workspace/move-to-output` |
@@ -88,5 +89,3 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | an extension handler | whatever it throws | `update` does not catch exceptions from your handlers; keep them pure and total |
 
 A built-in command handler that throws is a bug. The test suite asserts rejections for malformed input command by command, and explicitly asserts "never throws and never mutates state" (on deep-frozen state) for `layout/resize-split` and the docking-tree commands (`test/update.test.mjs`, `test/tree.test.mjs`).
-
-**Known bug (found while writing this reference):** `window/promote` on a window hidden in the scratchpad (`workspace: null`) throws a `TypeError` (it reads `state.workspaces[null].windows`) instead of returning a no-op or a rejection. Until it is fixed, don't promote scratchpad windows, or check `isScratchpadHidden` first.

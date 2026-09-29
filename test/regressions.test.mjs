@@ -136,14 +136,24 @@ describe("renderer: positioner constraint adjustment via JS fallback (regression
     assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "70px");
   });
 
-  test("without flip requested, the same overflow is left alone", () => {
+  test("with flip: [] the same overflow is left alone", () => {
+    const { renderer, root } = setup({ anchorFallback: true });
+    root.rect = { left: 0, top: 0, width: 300, height: 120 };
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", flip: [] })));
+    renderer.elementFor("host").rect = { left: 50, top: 90, width: 20, height: 15 };
+    renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 20 };
+    renderer.reposition();
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "105px");
+  });
+
+  test("without flip, the fallback flips like the CSS path does (default: both axes)", () => {
     const { renderer, root } = setup({ anchorFallback: true });
     root.rect = { left: 0, top: 0, width: 300, height: 120 };
     renderer.commit(compile(build({ to: "host", side: "bottom", align: "start" })));
     renderer.elementFor("host").rect = { left: 50, top: 90, width: 20, height: 15 };
     renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 20 };
     renderer.reposition();
-    assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "105px");
+    assert.equal(renderer.elementFor("menu").style.getPropertyValue("top"), "70px", "flipped above the anchor");
   });
 
   test("slide: an overflowing cross axis translates back into the stage", () => {
@@ -160,7 +170,7 @@ describe("renderer: positioner constraint adjustment via JS fallback (regression
   test("resize: an overflowing axis shrinks the popup and sets its size directly", () => {
     const { renderer, root } = setup({ anchorFallback: true });
     root.rect = { left: 0, top: 0, width: 300, height: 100 };
-    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", resize: ["y"] })));
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", resize: ["y"], flip: [] })));
     renderer.elementFor("host").rect = { left: 50, top: 70, width: 20, height: 15 };
     renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 200 };
     renderer.reposition();
@@ -172,7 +182,7 @@ describe("renderer: positioner constraint adjustment via JS fallback (regression
   test("resize is undone (size cleared) once the element stops being anchored", () => {
     const { renderer, root } = setup({ anchorFallback: true });
     root.rect = { left: 0, top: 0, width: 300, height: 100 };
-    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", resize: ["y"] })));
+    renderer.commit(compile(build({ to: "host", side: "bottom", align: "start", resize: ["y"], flip: [] })));
     renderer.elementFor("host").rect = { left: 50, top: 70, width: 20, height: 15 };
     renderer.elementFor("menu").rect = { left: 0, top: 0, width: 40, height: 200 };
     renderer.reposition();
@@ -521,4 +531,29 @@ describe("stacking: children stay above a raised parent (regression)", () => {
     t = update(t, { type: "window/detach", id: "p", x: 10, y: 10 }).state;
     assert.ok(paintOrder(t).indexOf("dlg") > paintOrder(t).indexOf("p"));
   });
+});
+
+describe("found while writing the API reference (regression)", () => {
+  const run = (state, ...cmds) => cmds.reduce((s, c) => update(s, c).state, state);
+
+  test("window/promote on a scratchpad window is rejected, not thrown", () => {
+    let state = run(createState(), { type: "window/create", id: "a" }, { type: "window/create", id: "b" }, { type: "window/to-scratchpad", id: "b" });
+    const out = update(state, { type: "window/promote", id: "b" });
+    assert.equal(out.state, state);
+    assert.equal(out.events[0].type, "command/rejected");
+    assert.equal(out.events[0].reason, "not-on-workspace");
+  });
+
+  test("workspace/remove moves children whose parent lives on another workspace", () => {
+    let state = run(createState(),
+      { type: "workspace/create", id: "b" },
+      { type: "window/create", id: "p" },                                   // on "main"
+      { type: "window/create", id: "c", role: "dialog", parent: "p", workspace: "b" });
+    assert.equal(state.windows.c.workspace, "b");
+    state = run(state, { type: "workspace/remove", id: "b", fallback: "main" });
+    assert.ok(!state.workspaces.b);
+    assert.equal(state.windows.c.workspace, "main", "the child is not left pointing at the removed workspace");
+    assert.ok(state.workspaces.main.windows.includes("c"));
+  });
+
 });

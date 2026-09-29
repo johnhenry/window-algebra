@@ -414,8 +414,7 @@ Swaps a tiled window with the first tiled window of its workspace (the master po
 
 - **Events:** `window/swapped { a: id, b: <previous master> }`.
 - **Effects:** `render`.
-- **Rejections:** `unknown-window`.
-- **Known bug:** it throws a `TypeError` for a window hidden in the scratchpad (`workspace: null`). See [Errors](./errors.md#what-throws).
+- **Rejections:** `unknown-window`, `not-on-workspace` (a window hidden in the scratchpad has no workspace, so no master slot).
 
 ### `window/drop`
 
@@ -552,7 +551,7 @@ Shows a workspace on its own output and focuses that output. `focus.window` is c
 { type: "workspace/remove", id, fallback? }
 ```
 
-Removes a workspace. Its top-level windows (and so their descendants) move to `fallback` (default: the first other workspace in `workspaceOrder`, which may be on another output). If the removed workspace was active on its output, the next remaining workspace **on the same output** becomes active there. Then [refocus](#shared-behaviour).
+Removes a workspace. Its top-level windows (and so their descendants) move to `fallback`, as do child windows whose parent lives on another workspace (their descendants follow too), so no window is left pointing at the removed workspace (default: the first other workspace in `workspaceOrder`, which may be on another output). If the removed workspace was active on its output, the next remaining workspace **on the same output** becomes active there. Then [refocus](#shared-behaviour).
 
 - **Events:** `workspace/removed { id, fallback }`, then the refocus events. The window moves are silent: no `window/workspace-changed`.
 - **Effects:** `render`, plus `focus`.

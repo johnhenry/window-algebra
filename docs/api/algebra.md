@@ -133,7 +133,7 @@ Position the child relative to another view with CSS anchor positioning (or the 
 | `offset` | The gap in px between the anchor edge and the popup. |
 | `inside`, `x`, `y` | The inside form: `inside: true`, or `x`/`y` without `side`. The child is placed inside the anchor and aligned by `x`/`y` (`"start"`/`"center"`/`"end"`). |
 | `gravity` | Which way the popup grows from its attach point (default: `side`). A value on the other axis falls back to `side`. |
-| `flip` | Axes (`["x","y"]` subset) allowed to flip to the opposite side or alignment instead of overflowing. **The default depends on the path.** Under native CSS anchor positioning an omitted `flip` means both axes. Under the JS anchor fallback (and when calling `positionPopup` directly) it means neither. Pass `flip` explicitly if you need the same behaviour everywhere. |
+| `flip` | Axes (`["x","y"]` subset) allowed to flip to the opposite side or alignment instead of overflowing. An omitted `flip` means both axes, under native CSS anchor positioning and under the JS anchor fallback alike. (`positionPopup`, called directly, keeps its own Wayland-style default of no adjustment unless you opt in; see [Geometry](./geometry.md).) Pass `flip: []` to disable flipping. |
 | `slide` | Axes allowed to translate back into the stage. Default: neither. **JS fallback only.** |
 | `resize` | Axes allowed to shrink to fit the stage. Default: neither. **JS fallback only.** |
 

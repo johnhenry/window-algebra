@@ -476,6 +476,8 @@ const handlers = {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
     const ws = state.workspaces[win.workspace];
+    // A window hidden in the scratchpad has no workspace (and so no master slot).
+    if (!ws) return rejected(state, command, "not-on-workspace");
     const tiled = ws.windows.filter((id) => isTiled(state.windows[id]));
     if (tiled[0] === win.id || !isTiled(win)) return result(state);
     return handlers["window/swap"](state, { type: "window/swap", a: win.id, b: tiled[0] });
@@ -642,7 +644,12 @@ const handlers = {
     const localFallback = state.outputs[ws.output].workspaces.find((wid) => wid !== id);
     let next = state;
     for (const winId of state.workspaces[id].windows) {
-      if (next.windows[winId]?.workspace === id && !next.windows[winId].parent) {
+      const win = next.windows[winId];
+      // Move top-level windows (their descendants follow), and also children whose
+      // parent lives on another workspace: nothing else would move them, and they
+      // would be left pointing at the removed workspace.
+      const parentHere = win?.parent && next.windows[win.parent]?.workspace === id;
+      if (win?.workspace === id && !parentHere) {
         next = handlers["window/move-to-workspace"](next, { id: winId, workspace: fallback }).state;
       }
     }

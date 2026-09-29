@@ -264,7 +264,8 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
           align: spec.align,
           offset: spec.offset,
           gravity: spec.gravity,
-          flip: spec.flip,
+          // Same default as the CSS path (compile.mjs): an anchor without `flip` flips on both axes.
+          flip: spec.flip ?? ["x", "y"],
           slide: spec.slide,
           resize: spec.resize,
         });
