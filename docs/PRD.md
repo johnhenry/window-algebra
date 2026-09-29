@@ -1,6 +1,6 @@
 # PRD: window-algebra
 
-This PRD was written from the design conversation "Design Window Manager APIs" (see `_chat-shares/6ab9f8e7/`). The conversation ended with a request to create the PRD, which was never answered there. This document is that PRD, and it reflects what version 0 implements.
+This PRD was written from the design conversation "Design Window Manager APIs". The conversation ended with a request to create the PRD, which was never answered there. This document is that PRD, and it reflects what version 0 implements.
 
 ## Problem
 
