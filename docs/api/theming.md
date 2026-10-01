@@ -19,7 +19,7 @@ Every visual value in the library's own CSS (`BASE_CSS`, the drag ghost and drop
 </style>
 ```
 
-`BASE_CSS` is `THEME_CSS` (the default theme: the tokens below for light, dark and high contrast) followed by `RULES_CSS` (the rules that read them). Use `RULES_CSS` alone to supply every token yourself. The command palette injects `THEME_CSS` and its own rules the first time it opens, so it is themed the same way.
+`BASE_CSS` is `THEME_CSS` (the default theme: the tokens below for light, dark and high contrast) followed by `RULES_CSS` (the rules that read them, including `CHROME_CSS` for the opt-in [window chrome](./browser.md#window-chrome)). Use `RULES_CSS` alone to supply every token yourself. The command palette injects `THEME_CSS` and its own rules the first time it opens, so it is themed the same way.
 
 The defaults are declared inside `:where()`, so they have **zero specificity**: a plain `:root { --wa-color-accent: hotpink }` wins wherever it appears in the stylesheet order.
 
@@ -82,6 +82,11 @@ The defaults are checked in `test/theme.test.mjs`: text, muted text, accent, tit
 | `--wa-titlebar-active-bg` | The selected tab, or a focused window's title bar | `#ffffff` | `#1a1d23` | `#ffffff` / `#000000` |
 | `--wa-titlebar-padding` | Padding inside a title bar | `4px 8px` | `4px 8px` | same |
 | `--wa-titlebar-font-weight` | Weight of the selected tab | `600` | `600` | `700` / `700` |
+| `--wa-chrome-bar-height` | Window chrome: title bar height | `32px` | `32px` | same |
+| `--wa-chrome-button-size` | Window chrome: title-bar button size (a square) | `26px` | `26px` | same |
+| `--wa-chrome-touch-target` | Window chrome: bar height and button size on touch and pen (coarse pointers) | `44px` | `44px` | same |
+| `--wa-chrome-grip-size` | Window chrome: resize grip thickness | `6px` | `6px` | same |
+| `--wa-chrome-grip-touch` | Window chrome: resize grip thickness on touch and pen | `14px` | `14px` | same |
 | `--wa-shadow-window` | A floating window | `0 1px 2px rgb(16 24 40 / 0.1), 0 6px 20px rgb(16 24 40 / 0.16)` | `0 1px 2px rgb(0 0 0 / 0.5), 0 6px 20px rgb(0 0 0 / 0.5)` | `none` / `none` |
 | `--wa-shadow-overlay` | A popover, menu or the command palette | `0 2px 4px rgb(16 24 40 / 0.1), 0 18px 48px rgb(16 24 40 / 0.28)` | `0 2px 4px rgb(0 0 0 / 0.5), 0 18px 48px rgb(0 0 0 / 0.65)` | `none` / `none` |
 | `--wa-ghost-fill` | A ghost slot while dragging | `rgb(29 78 216 / 0.1)` | `rgb(122 162 255 / 0.14)` | `rgb(0 51 160 / 0.18)` / `rgb(159 192 255 / 0.26)` |
@@ -99,7 +104,7 @@ The defaults are checked in `test/theme.test.mjs`: text, muted text, accent, tit
 | `--wa-transition-duration` | View Transition animations (set by the renderer's `animate` option) | `0.25s` | `0.25s` | same |
 | `--wa-transition-easing` | Easing for those animations | `ease` | `ease` | same |
 
-Groups: colours (`--wa-color-*`, `--wa-border-width`), radii (`--wa-radius-*`), spacing (`--wa-space-*`), the focus ring (`--wa-focus-ring-*`), splitters (`--wa-splitter-*`), the title bar (`--wa-titlebar-*`, used by the tab strip and available to your own chrome), shadows (`--wa-shadow-*`), the drag preview (`--wa-ghost-*`, `--wa-zone-*`), type (`--wa-font*`) and motion (`--wa-transition-*`).
+Groups: colours (`--wa-color-*`, `--wa-border-width`), radii (`--wa-radius-*`), spacing (`--wa-space-*`), the focus ring (`--wa-focus-ring-*`), splitters (`--wa-splitter-*`), the title bar (`--wa-titlebar-*`, used by the tab strip and the built-in [window chrome](./browser.md#window-chrome)), the window chrome's sizes (`--wa-chrome-*`), shadows (`--wa-shadow-*`), the drag preview (`--wa-ghost-*`, `--wa-zone-*`), type (`--wa-font*`) and motion (`--wa-transition-*`).
 
 `THEME_TOKENS` is the same table as data: `{ [name]: { description, light, dark, hc?: { light, dark } } }`, so a theme editor (see `demo/theming.html`) can list and simulate them.
 

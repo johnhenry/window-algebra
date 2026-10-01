@@ -10,6 +10,7 @@
  */
 import { styleText } from "../css/compile.mjs";
 import { positionPopup } from "../geometry/positioner.mjs";
+import { buildChrome, normalizeChrome } from "./chrome.mjs";
 
 const supportsAnchors = (win) => {
   try {
@@ -46,8 +47,18 @@ const identSafe = (id) => String(id).replace(/[^a-zA-Z0-9_-]/g, "-") || "x";
  *   `--wa-transition-duration`/`--wa-transition-easing`, which `BASE_CSS` reads. Pass `{ immediate: true }` to
  *   `commit()` to force a given commit to skip the transition (drag gestures; see `manager.mjs`); an animation
  *   already in flight makes later commits immediate too, so rapid commits coalesce instead of stacking transitions.
+ * @param {boolean|object} [options.chrome] wrap every window's surface in the built-in window chrome (see
+ *   `chrome.mjs`): a title bar with an icon slot, the title and minimize / maximize / float / pop-out / close
+ *   buttons, a drag handle that maximizes on double-click, the body, and eight resize grips for floating windows.
+ *   `true` uses the default buttons; an object picks `buttons` (an array of `CHROME_BUTTONS`, or `(id) => array`),
+ *   `icon(id)` (the icon slot: a node or text), `icons` (a glyph per action), `labels` (accessible names, for
+ *   translation) and `for(id)` (return `false` to leave a window bare: a tooltip, a toast). The title follows
+ *   the window's title on every commit. Off by default; needs `RULES_CSS`/`BASE_CSS` for its look. A window in a
+ *   tab strip gets no title bar (its tab is the title). The pop-out button needs `attachInput`'s `popouts`.
  */
-export const createDomRenderer = ({ root, surfaceFor = () => undefined, document: doc = root.ownerDocument, anchorFallback, animate } = {}) => {
+export const createDomRenderer = ({ root, surfaceFor = () => undefined, document: doc = root.ownerDocument, anchorFallback, animate, chrome } = {}) => {
+  const chromeConfig = normalizeChrome(chrome);
+  const chromes = new WeakMap(); // view element → chrome handle, or null for a window left bare
   const elements = new Map(); // key → Element
   const records = new Map(); // key → { attrs, style }
   const mounted = new Map(); // view id → surface
@@ -226,11 +237,41 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     return element;
   };
 
+  /**
+   * The element a view's content mounts into: its chrome body when chrome is on (built once, kept in step on
+   * every commit), else the view element itself.
+   */
+  const contentHost = (node, element) => {
+    if (!chromeConfig || !node.primary) return element;
+    let handle = chromes.get(element);
+    if (handle === undefined) {
+      handle = chromeConfig.enabled(node.view) === false
+        ? null
+        : buildChrome(doc, {
+            id: node.view,
+            title: node.attrs["aria-label"] ?? node.view,
+            buttons: chromeConfig.buttons(node.view),
+            icon: chromeConfig.icon,
+            icons: chromeConfig.icons,
+            labels: chromeConfig.labels,
+          });
+      chromes.set(element, handle);
+      if (handle) element.insertBefore(handle.frame, element.firstChild);
+    }
+    if (!handle) return element;
+    const tabPanel = node.attrs.role === "tabpanel";
+    handle.setBarVisible(!tabPanel);
+    if (!tabPanel) handle.setTitle(node.attrs["aria-label"] ?? node.view);
+    handle.syncScrollable();
+    return handle.body;
+  };
+
   const mountSurface = (node, element) => {
+    const host = contentHost(node, element);
     if (node.primary && !mounted.has(node.view)) {
       const surface = surfaceFor(node.view);
       if (surface) {
-        surface.mount(element);
+        surface.mount(host);
         mounted.set(node.view, surface);
       }
     }
@@ -338,6 +379,7 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     retired.clear();
     for (const key of [...elements.keys()]) {
       if (live.has(key)) continue;
+      chromes.get(elements.get(key))?.dispose();
       elements.get(key).remove();
       elements.delete(key);
       records.delete(key);
@@ -414,6 +456,15 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     },
 
     /**
+     * Where a view's content goes: its chrome body when the `chrome` option is on (and the window has chrome),
+     * else the view element, i.e. `elementFor(id)`.
+     */
+    bodyFor(id) {
+      const element = elements.get(`view:${id}`);
+      return element && (chromes.get(element)?.body ?? element);
+    },
+
+    /**
      * Detach a view's element from this renderer's bookkeeping without
      * touching the DOM or unmounting its surface, so a caller (see
      * `attachPopouts` in `popouts.mjs`) can move it elsewhere — another
@@ -453,7 +504,10 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       observer?.disconnect();
       for (const surface of mounted.values()) surface.unmount?.();
       mounted.clear();
-      for (const element of elements.values()) element.remove();
+      for (const element of elements.values()) {
+        chromes.get(element)?.dispose();
+        element.remove();
+      }
       elements.clear();
       records.clear();
       root.removeAttribute("data-wm-root");

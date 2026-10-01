@@ -57,6 +57,64 @@ export function createFrameScheduler(requestFrame?: (task: () => void) => unknow
 /** Run tasks immediately. */
 export function immediateScheduler(task: () => void): void;
 
+// ------------------------------------------------------------------ window chrome
+
+/** A button the chrome can show. `"popout"` needs `attachPopouts` (`attachInput`'s `popouts`; `attachStage` wires it). */
+export type ChromeButton = "minimize" | "maximize" | "float" | "popout" | "close";
+/** The chrome's actions, for `icons` and `labels`: a toggle has two (`maximize`/`restore`, `float`/`dock`, `popout`/`popin`). */
+export type ChromeAction = "minimize" | "maximize" | "restore" | "float" | "dock" | "popout" | "popin" | "close";
+
+export interface ChromeOptions {
+  /** Which buttons, in order; or a function of the window id. Default `DEFAULT_CHROME_BUTTONS`. */
+  buttons?: ChromeButton[] | ((id: string) => ChromeButton[]);
+  /** The icon slot at the start of the title bar: a node, or text. */
+  icon?: (id: string) => Node | string | null | undefined;
+  /** A glyph per action (text or a node), replacing the default characters. */
+  icons?: Partial<Record<ChromeAction, Node | string>>;
+  /** Accessible names per action, and `actions` for the button group (translation). */
+  labels?: Partial<Record<ChromeAction | "actions", string>>;
+  /** Return `false` to leave a window bare (a tooltip, a toast). */
+  for?: (id: string) => boolean;
+}
+
+/** Every chrome button, in default order. */
+export const CHROME_BUTTONS: readonly ChromeButton[];
+/** The buttons `chrome: true` shows: minimize, maximize, float, close. */
+export const DEFAULT_CHROME_BUTTONS: readonly ChromeButton[];
+/** The default accessible names. */
+export const DEFAULT_CHROME_LABELS: Readonly<Record<ChromeAction | "actions", string>>;
+
+export interface ChromeHandle {
+  /** The whole chrome; place it inside the window's view element. */
+  frame: Element;
+  /** The title bar (the `data-wm-handle="move"` drag handle). */
+  bar: Element;
+  /** Where the window's content goes. */
+  body: Element;
+  titleId: string;
+  setTitle(title: string): void;
+  setBarVisible(visible: boolean): void;
+  /** Make the body focusable when (and only when) it scrolls. */
+  syncScrollable(): void;
+  dispose(): void;
+}
+/** Build one window's chrome markup. Most callers want `createDomRenderer({ chrome })` or `chromeSurface` instead. */
+export function buildChrome(doc: Document, options?: ChromeOptions & { id?: string; title?: string }): ChromeHandle;
+/** Set a window chrome's title and its buttons' accessible names, wherever the element lives now (a pop-out). */
+export function setChromeTitle(element: Element, title: string): void;
+export interface ChromeSurfaceOptions extends Omit<ChromeOptions, "buttons" | "for"> {
+  id: string;
+  title?: string;
+  /** The content: fill the body element (optionally returning a cleanup), or a surface to mount into it. */
+  body?: ((element: Element) => void | (() => void)) | Surface;
+  /** When given, the title follows `state.windows[id].title`. */
+  wm?: Pick<WindowManager<any>, "getState" | "subscribe">;
+  buttons?: ChromeButton[];
+  document?: Document;
+}
+/** Wrap one window's content in the built-in chrome, as a surface (for a custom renderer). */
+export function chromeSurface(options: ChromeSurfaceOptions): Surface;
+
 // ------------------------------------------------------------------ the DOM renderer
 
 export interface DomRendererOptions {
@@ -68,6 +126,11 @@ export interface DomRendererOptions {
   anchorFallback?: boolean;
   /** Animate commits with the View Transitions API (a no-op where unsupported or under reduced motion). */
   animate?: boolean | { duration?: number | string; easing?: string };
+  /**
+   * Wrap every window's surface in the built-in window chrome (a title bar, buttons, resize grips): `true`, or
+   * options. Off by default; styled by `CHROME_CSS`, which `BASE_CSS` includes.
+   */
+  chrome?: boolean | ChromeOptions;
 }
 
 export interface DomRenderer extends Renderer {
@@ -77,6 +140,8 @@ export interface DomRenderer extends Renderer {
   /** Realized geometry of every primary view, relative to `root`. */
   measure(): Record<string, Rect>;
   elementFor(id: string): Element | undefined;
+  /** Where a view's content mounts: its chrome body when `chrome` is on, else `elementFor(id)`. */
+  bodyFor(id: string): Element | undefined;
   readonly anchorFallback: boolean;
   /** Re-run the JS anchor fallback. */
   reposition(): void;
@@ -169,6 +234,8 @@ export interface AttachInputOptions {
   splitterStep?: number;
   /** px a keyboard move/resize of a floating window changes it by (default 10). */
   floatStep?: number;
+  /** An `attachPopouts` handle: a `window/pop-out` or `window/pop-in` button then opens or closes the real window. */
+  popouts?: Pick<Popouts, "popOut" | "popIn">;
   /** Opt-in touch and pen gestures. `true` is pinch, tab swipes and the `wm-contextmenu` event. */
   touch?: boolean | TouchOptions;
 }

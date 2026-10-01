@@ -65,6 +65,11 @@ export const THEME_TOKENS = Object.freeze({
   "--wa-titlebar-padding": { description: "Padding inside a title bar", light: "4px 8px", dark: "4px 8px" },
   "--wa-titlebar-font-weight": { description: "Weight of the selected tab", light: "600", dark: "600", hc: { light: "700", dark: "700" } },
   // ---- shadows
+  "--wa-chrome-bar-height": { description: "Window chrome: title bar height", light: "32px", dark: "32px" },
+  "--wa-chrome-button-size": { description: "Window chrome: title-bar button size (a square)", light: "26px", dark: "26px" },
+  "--wa-chrome-touch-target": { description: "Window chrome: bar height and button size on touch and pen (coarse pointers)", light: "44px", dark: "44px" },
+  "--wa-chrome-grip-size": { description: "Window chrome: resize grip thickness", light: "6px", dark: "6px" },
+  "--wa-chrome-grip-touch": { description: "Window chrome: resize grip thickness on touch and pen", light: "14px", dark: "14px" },
   "--wa-shadow-window": { description: "A floating window", light: "0 1px 2px rgb(16 24 40 / 0.1), 0 6px 20px rgb(16 24 40 / 0.16)", dark: "0 1px 2px rgb(0 0 0 / 0.5), 0 6px 20px rgb(0 0 0 / 0.5)", hc: { light: "none", dark: "none" } },
   "--wa-shadow-overlay": { description: "A popover, menu or the command palette", light: "0 2px 4px rgb(16 24 40 / 0.1), 0 18px 48px rgb(16 24 40 / 0.28)", dark: "0 2px 4px rgb(0 0 0 / 0.5), 0 18px 48px rgb(0 0 0 / 0.65)", hc: { light: "none", dark: "none" } },
   // ---- drag preview

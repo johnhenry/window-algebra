@@ -24,7 +24,7 @@ compile(tree, presentationContext(state), { key: "root" }) → RenderNode
 ```
 
 - `tree`: a layout-algebra tree (usually from `derive`).
-- `context`: from [`presentationContext(state)`](./queries.md#presentationcontextstate) (`{ focused, blocked, titles, modes, roles, pinned, sticky, urgent, modal }`). Every field is optional. Without a context, `compile` still produces valid layout, just without state attributes.
+- `context`: from [`presentationContext(state)`](./queries.md#presentationcontextstate) (`{ focused, blocked, titles, modes, statuses, roles, pinned, sticky, urgent, modal }`). Every field is optional. Without a context, `compile` still produces valid layout, just without state attributes.
 - `options.key`: the key prefix of the root element (default `"root"`).
 
 ## Render-tree shape and keys
@@ -87,6 +87,7 @@ View attributes:
 | `data-wm-blocked`, `aria-disabled="true"` | blocked by an open modal descendant. The DOM renderer makes the view's **contents** `inert` but keeps the view hit-testable, so a click is redirected instead of falling through. |
 | `data-wm-urgent` | urgent |
 | `data-mode="tiled \| floating"`, `data-role="<role>"` | from context |
+| `data-status="<status>"` | the window's status when it is not `normal`: `maximized`, `minimized`, `fullscreen`, `popped-out` (from `context.statuses`). The built-in [window chrome](./browser.md#window-chrome) shows its restore button and hides its grips from it. |
 | `data-wm-draggable="false"` | pinned |
 | `data-wm-sticky` | sticky |
 | `anchor-name: --wm-<id>` (style) | the first occurrence of a view that some `anchor` targets |
@@ -161,4 +162,4 @@ Style: `flex: 0 0 <SPLITTER_SIZE>px; align-self: stretch; cursor: col-resize | r
 
 `BASE_CSS` is an optional stylesheet string: `THEME_CSS` (the default theme, see [Theming](./theming.md)) followed by `RULES_CSS` (the rules). Inject it once (`<style>` or `adoptedStyleSheets`). The rules set host sizing (`[data-wm-root]` and its root `wm-overlay` fill the host, with the stage background and font), floating windows' shadow and radius, the blocked/inert tint, the tab strip's title-bar look and the selected-tab weight, the urgent outline, drag cursors, the ghost label, pinned and denied affordances, workspace-target highlighting, `touch-action: none` on `[data-wm-handle]` (with `pan-x` on tab strips, so window content keeps scrolling; `data-wm-touch` tokens switch on the [touch](./browser.md#touch-and-pen) rules), splitter visuals, a visible focus ring (a `:focus-visible` outline on views, tabs, splitters and handles; focus is never hidden), and View Transition timing. Under `prefers-reduced-motion: reduce` the view transitions are off and so are CSS transitions and animations on the library's elements (the DOM renderer also skips `startViewTransition`). Logical properties (`inline-size`, `inset-inline-start`, `border-start-start-radius`, ...) are used throughout so the rules mirror in right-to-left.
 
-Every colour, radius, spacing, shadow and outline width in those rules is a `--wa-*` custom property; the full table, with light, dark and high-contrast defaults, is on the [Theming](./theming.md) page. Exports: `BASE_CSS`, `RULES_CSS`, `THEME_CSS`, `THEME_TOKENS`.
+Every colour, radius, spacing, shadow and outline width in those rules is a `--wa-*` custom property; the full table, with light, dark and high-contrast defaults, is on the [Theming](./theming.md) page. `RULES_CSS` includes `CHROME_CSS`, the rules for the opt-in [window chrome](./browser.md#window-chrome) (also exported on its own). Exports: `BASE_CSS`, `RULES_CSS`, `CHROME_CSS`, `THEME_CSS`, `THEME_TOKENS`.

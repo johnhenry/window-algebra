@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Built-in window chrome</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      wa-stage { display: block; margin: 8px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+      .note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); }
+      .note code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+      .pad { padding: 12px; }
+      .pad p { margin: 0 0 8px; }
+      .tint { margin: 0; --wa-chrome-bar-height: 36px; }
+      /* The chrome is themed by tokens: this stage reads its own accent. */
+      #stage[data-skin="green"] { --wa-color-accent: #1b7f3b; --wa-color-accent-soft: rgb(27 127 59 / 0.14); --wa-titlebar-bg: #e3f2e7; --wa-titlebar-active-bg: #c9e8d2; --wa-radius-md: 14px; --wa-chrome-bar-height: 40px; }
+      [data-theme="dark"] #stage[data-skin="green"] { --wa-color-accent: #6fd08c; --wa-titlebar-bg: #1d2b22; --wa-titlebar-active-bg: #27402f; }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar" aria-label="Chrome options">
+      <button class="btn small" id="new" type="button">New window</button>
+      <label>Layout
+        <select id="layout">
+          <option value="floating">floating</option>
+          <option value="columns">columns</option>
+          <option value="master-stack">master-stack</option>
+          <option value="tabs">tabs</option>
+        </select>
+      </label>
+      <label>Buttons
+        <select id="buttons">
+          <option value="default">minimize, maximize, float, close</option>
+          <option value="popout">+ pop out</option>
+          <option value="close">close only</option>
+          <option value="custom">custom icons and labels</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="rtl" /> Right to left</label>
+      <label><input type="checkbox" id="skin" /> Themed by tokens</label>
+    </nav>
+    <p class="note">
+      <code>&lt;wa-stage&gt;</code> with <code>chrome: true</code>: every window gets a title bar (drag it; double-click it to maximize),
+      buttons you can reach with Tab, an icon slot, and eight resize grips while it floats. Nothing here is demo-only CSS: it is
+      <code>CHROME_CSS</code> in <code>BASE_CSS</code>, driven by <code>--wa-*</code> tokens.
+    </p>
+    <wa-stage id="stage" class="stage" aria-label="Window chrome stage"></wa-stage>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createSurfaceRegistry } from "../src/browser/index.mjs";
+      import { defineWindowAlgebraElement } from "../src/bindings/element.mjs";
+      import { initPage, h } from "./shared/kit.mjs";
+
+      initPage({ current: "./chrome.html", title: "Built-in window chrome" });
+      defineWindowAlgebraElement("wa-stage");
+
+      const BODIES = {
+        notes: () => h("div", { class: "pad" }, h("p", {}, "A plain window. Drag the title bar; double-click it to maximize."), h("p", {}, "Tab reaches the buttons; Enter or Space presses one.")),
+        long: () => h("div", { class: "pad" }, Array.from({ length: 30 }, (_, i) => h("p", {}, `Line ${i + 1}: this body scrolls, so it becomes a focusable, labelled region.`))),
+        form: () => h("form", { class: "pad", onsubmit: (e) => e.preventDefault() }, h("label", {}, "Name ", h("input", { type: "text", name: "n" })), " ", h("button", { type: "submit", class: "btn small" }, "Save")),
+      };
+      const surfaces = createSurfaceRegistry();
+      const wm = createWindowManager({
+        state: createState({ layout: { type: "floating" }, config: { gap: 6, inset: 6 } }),
+        history: 200,
+      });
+      const defs = [
+        ["notes", "Notes", "notes", { mode: "floating", placement: { x: 20, y: 16, width: 340, height: 200 } }],
+        ["long", "Long document", "long", { mode: "floating", placement: { x: 380, y: 40, width: 340, height: 220 } }],
+        ["form", "Settings", "form", { mode: "floating", placement: { x: 120, y: 150, width: 320, height: 150 } }],
+      ];
+      let counter = 0;
+      const open = (id, title, body, options = {}) => {
+        surfaces.set(id, { mount: (el) => el.append(BODIES[body]()), unmount: () => {} });
+        wm.create({ id, title, ...options });
+      };
+      for (const [id, title, body, options] of defs) open(id, title, body, options);
+
+      const stage = document.getElementById("stage");
+      const CHOICES = {
+        default: true,
+        popout: { buttons: ["minimize", "maximize", "float", "popout", "close"] },
+        close: { buttons: ["close"] },
+        custom: {
+          buttons: ["minimize", "maximize", "close"],
+          icon: (id) => (id === "notes" ? "✎" : id === "long" ? "☰" : "⚙"),
+          icons: { close: "✕", minimize: "_" },
+          labels: { close: "Dismiss", minimize: "Collapse", maximize: "Fill the stage", restore: "Back to normal" },
+        },
+      };
+      const configure = () => stage.configure({ wm, surfaceFor: surfaces, chrome: CHOICES[document.getElementById("buttons").value] });
+      configure();
+
+      document.getElementById("new").onclick = () => {
+        const n = ++counter;
+        open(`extra${n}`, `Window ${n}`, "notes", { mode: "floating", placement: { x: 40 + n * 24, y: 30 + n * 24, width: 300, height: 180 } });
+      };
+      document.getElementById("layout").onchange = (event) => wm.setLayout({ type: event.target.value });
+      document.getElementById("buttons").onchange = configure;
+      document.getElementById("rtl").onchange = (event) => stage.setAttribute("dir", event.target.checked ? "rtl" : "ltr");
+      document.getElementById("skin").onchange = (event) => (event.target.checked ? stage.setAttribute("data-skin", "green") : stage.removeAttribute("data-skin"));
+
+      window.wm = wm;
+      window.stage = stage;
+    </script>
+  </body>
+</html>

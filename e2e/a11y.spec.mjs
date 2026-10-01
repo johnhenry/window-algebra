@@ -19,7 +19,7 @@ const describeViolations = (violations) =>
 
 test("every demo page is covered (a new page needs no list edit, but must pass)", () => {
   expect(PAGES.length).toBeGreaterThanOrEqual(17);
-  for (const expected of ["index.html", "basic.html", "palette.html", "rtl.html", "sync.html", "touch.html", "theming.html"]) expect(PAGES).toContain(expected);
+  for (const expected of ["index.html", "basic.html", "chrome.html", "palette.html", "rtl.html", "sync.html", "touch.html", "theming.html"]) expect(PAGES).toContain(expected);
 });
 
 for (const scheme of ["light", "dark"]) {

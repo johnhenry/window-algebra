@@ -38,13 +38,13 @@
     <script type="module">
       import { createWindowManager, createState } from "../src/index.mjs";
       import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
-      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+      import { initPage } from "./shared/kit.mjs";
 
       initPage({ current: "./touch.html", title: "Touch and pen gestures" });
 
       const root = document.getElementById("stage");
       const surfaces = createSurfaceRegistry();
-      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces, chrome: true });
       const wm = createWindowManager({
         state: createState({
           workspaces: [{ id: "floaty", layout: { type: "floating" } }, { id: "tabbed", layout: { type: "tabs" } }, { id: "tiles", layout: { type: "columns" } }],
@@ -108,13 +108,12 @@
           if (event.type === "workspace/activated") log(`workspace -> ${event.id}`);
         }
       });
-      syncChrome(wm, root);
 
       let counter = 0;
       const open = (workspace, options = {}) => {
         const id = `w${++counter}`;
         const title = options.title ?? `Window ${counter}`;
-        surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${id}: try pinching, swiping or holding me.`) }));
+        surfaces.set(id, { mount: (el) => (el.textContent = `${id}: try pinching, swiping or holding me.`), unmount: () => {} });
         wm.create({ id, title, workspace, focus: false, ...options });
       };
       open("floaty", { title: "Notes", mode: "floating", placement: { x: 30, y: 30, width: 280, height: 180 } });

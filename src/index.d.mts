@@ -48,7 +48,7 @@ export * from "./types/render.mjs";
 export * from "./algebra/nodes.mjs";
 export * from "./algebra/transforms.mjs";
 export * from "./layouts/index.mjs";
-export { compile, toHTML, styleText, tracks, px, anchorName, BASE_CSS, RULES_CSS, THEME_CSS, THEME_TOKENS, SPLITTER_SIZE, tabId, panelId } from "./css/compile.mjs";
+export { compile, toHTML, styleText, tracks, px, anchorName, BASE_CSS, RULES_CSS, CHROME_CSS, THEME_CSS, THEME_TOKENS, SPLITTER_SIZE, tabId, panelId } from "./css/compile.mjs";
 export type { ThemeToken } from "./css/compile.mjs";
 
 // ------------------------------------------------------------------ geometry and interaction (pure)

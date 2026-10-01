@@ -7,6 +7,8 @@
  *                                         drag a tiled window to a new slot
  *   data-wm-handle="resize-se" (n/s/e/w/ne/nw/se/sw)  drag to resize
  *   data-wm-command="window/close"        click to dispatch { type, id }
+ *   data-wm-dblclick="window/toggle-maximize"  double-click to dispatch { type, id } (the built-in
+ *                                         chrome puts it on the title bar); a control inside keeps its own click
  * Tab buttons rendered by the compiler carry data-wm-tab="<id>"; drag one
  * along its strip to reorder.
  * Anywhere on the page (usually a workspace switcher):
@@ -178,6 +180,9 @@ const comboOf = (event) =>
  *   Tab past the last focusable element wraps to the first, Shift+Tab past
  *   the first wraps to the last — background windows are already `inert`
  *   (see `dom.mjs`) and never receive focus.
+ * @param {{ popOut(id: string): unknown, popIn(id: string): unknown }} [options.popouts] an `attachPopouts`
+ *   handle: a `data-wm-command="window/pop-out"` (or `window/pop-in`) button then opens (or closes) the real
+ *   browser window instead of only dispatching the command, which is what the chrome's pop-out button needs.
  * @param {number} [options.splitterStep] fraction of a split's total weight
  *   an arrow key nudges a focused splitter by (default 0.05)
  * @param {number} [options.floatStep] px a keyboard move/resize of a floating window changes it by (default 10)
@@ -212,6 +217,7 @@ export const attachInput = (options) => {
     announce,
     keyboard,
     splitterStep = 0.05,
+    popouts,
     floatStep = 10,
     output,
     touch,
@@ -1198,7 +1204,24 @@ export const attachInput = (options) => {
     if (!button) return;
     const viewElement = viewOf(button);
     const id = button.getAttribute("data-wm-target") ?? viewElement?.getAttribute("data-view");
-    dispatch({ type: button.getAttribute("data-wm-command"), id });
+    const type = button.getAttribute("data-wm-command");
+    if (popouts && type === "window/pop-out") return void popouts.popOut(id);
+    if (popouts && type === "window/pop-in") return void popouts.popIn(id);
+    dispatch({ type, id });
+  };
+
+  // Double-click on a `data-wm-dblclick` element (the chrome's title bar) runs that command on its window.
+  // A control inside it (a title-bar button, an input) keeps its own click and does not count.
+  const onDblClick = (event) => {
+    const target = event.target?.closest?.("[data-wm-dblclick]");
+    if (!target) return;
+    const control = event.target.closest?.(INTERACTIVE);
+    if (control && control !== target && target.contains?.(control)) return;
+    const viewElement = viewOf(target);
+    const id = target.getAttribute("data-wm-target") ?? viewElement?.getAttribute("data-view");
+    if (!id || isBlocked(getState(), id)) return;
+    event.preventDefault?.();
+    dispatch({ type: target.getAttribute("data-wm-dblclick"), id });
   };
 
   // ------------------------------------------------------------ keyboard moving (opt-in)
@@ -1442,6 +1465,7 @@ export const attachInput = (options) => {
     pointerup: onPointerUp,
     pointercancel: onPointerCancel,
     click: onClick,
+    dblclick: onDblClick,
     focusin: onFocusIn,
     contextmenu: onContextMenu,
     keydown: onRootKeyDown,

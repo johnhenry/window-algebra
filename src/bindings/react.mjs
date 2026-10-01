@@ -20,8 +20,7 @@
  */
 import { createWindowManager } from "../manager.mjs";
 import { createFrameScheduler } from "../browser/scheduler.mjs";
-import { createDomRenderer } from "../browser/dom.mjs";
-import { attachInput } from "../browser/input.mjs";
+import { attachStage } from "./stage.mjs";
 
 export const createReactBindings = (React) => {
   const { useRef, useEffect, useState, useSyncExternalStore, createElement, Fragment } = React;
@@ -75,11 +74,12 @@ export const createReactBindings = (React) => {
    *   commits synchronously.
    * - `anchorFallback?`, `input?` (object merged into `attachInput`'s
    *   options), `as?` (host tag, default "div"): passed through.
+   * - `chrome?`, `popouts?`: as for `attachStage` (read when the stage attaches, i.e. when `wm` changes).
    * - Everything else (`className`, `style`, `id`, ...) lands on the host
    *   element as ordinary props.
    */
   const WindowManagerStage = (props) => {
-    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, as = "div", ...rest } = props;
+    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, chrome, popouts, as = "div", ...rest } = props;
     const hostRef = useRef(null);
     const [portals, setPortals] = useState(() => new Map());
 
@@ -114,18 +114,9 @@ export const createReactBindings = (React) => {
             }
           : undefined;
 
-      const renderer = createDomRenderer({ root, document: root.ownerDocument, anchorFallback, surfaceFor });
-      const detach = attachInput({ root, wm, ...input });
-      let live = true;
-      const frame = schedule ?? createFrameScheduler();
-      const commit = () => live && renderer.commit(wm.present().render);
-      commit();
-      const unsubscribe = wm.subscribe(() => frame(commit));
+      const stage = attachStage(root, { wm, surfaceFor, anchorFallback, input, schedule, chrome, popouts });
       return () => {
-        live = false; // a commit still queued for the next frame must not touch the torn-down renderer
-        unsubscribe();
-        detach();
-        renderer.destroy?.();
+        stage.detach();
         setPortals(new Map());
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps -- re-attach only when `wm` itself changes

@@ -44,6 +44,8 @@ export const SPLITTER_SIZE: number;
 export const THEME_CSS: string;
 /** The rules that read the tokens: sizing, chrome, focus ring, splitters, drag preview, touch. */
 export const RULES_CSS: string;
+/** The window chrome rules (title bar, buttons, grips); already inside `RULES_CSS`. */
+export const CHROME_CSS: string;
 /** `THEME_CSS` followed by `RULES_CSS`. */
 export const BASE_CSS: string;
 /** Every theme token with its description and light, dark and high-contrast values. */

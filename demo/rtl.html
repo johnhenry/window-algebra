@@ -48,13 +48,13 @@
     <script type="module">
       import { createWindowManager, createState } from "../src/index.mjs";
       import { createDomRenderer, attachInput, attachDirection, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
-      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+      import { initPage } from "./shared/kit.mjs";
 
       initPage({ current: "./rtl.html", title: "Right-to-left layouts" });
 
       const root = document.getElementById("stage");
       const surfaces = createSurfaceRegistry();
-      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces, chrome: true });
       const wm = createWindowManager({
         state: createState({ layout: { type: "master-stack", ratio: 0.55 }, config: { gap: 6, inset: 6 } }),
         renderer,
@@ -62,7 +62,6 @@
         history: 200,
       });
       attachInput({ root, wm, keyboard: true, touch: true });
-      syncChrome(wm, root);
       const direction = attachDirection({ wm, element: root });
 
       const TITLES = ["المحرر", "الطرفية", "المتصفح", "الملاحظات", "التقويم", "الرسائل"];
@@ -71,7 +70,7 @@
         const n = counter++;
         const id = options.id ?? `w${n}`;
         const title = options.title ?? TITLES[n % TITLES.length];
-        surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${n + 1}. ${title}`) }));
+        surfaces.set(id, { mount: (el) => (el.textContent = `${n + 1}. ${title}`), unmount: () => {} });
         wm.create({ id, title, ...options });
         return id;
       };

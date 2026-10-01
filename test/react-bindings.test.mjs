@@ -137,6 +137,22 @@ describe("createReactBindings: WindowManagerStage", () => {
     assert.equal(stageHost.querySelectorAll("wm-view").length, 1);
   });
 
+  test("chrome: true wraps every window in the built-in chrome, and a pop-out button switches popouts on", () => {
+    const { doc, react, bindings, root } = stageSetup();
+    const { useWindowManager, WindowManagerStage } = bindings;
+    let wm;
+    const App = () => {
+      ({ wm } = useWindowManager());
+      return react.createElement(WindowManagerStage, { wm, schedule: immediateScheduler, chrome: { buttons: ["popout", "close"] } });
+    };
+    react.render(App, {}, { container: root });
+    wm.create({ id: "a", title: "A" });
+    const host = doc.body.querySelectorAll("[data-wm-root]")[0];
+    assert.equal(host.querySelectorAll("[data-wa-chrome]").length, 1);
+    assert.equal(host.querySelector("[data-wa-chrome-title]").textContent, "A");
+    assert.equal(host.querySelectorAll("[data-action]").length, 3);
+  });
+
   test("detaches on unmount: later dispatches no longer touch that DOM", () => {
     const { doc, react, bindings, root } = stageSetup();
     const { useWindowManager, WindowManagerStage } = bindings;

@@ -40,7 +40,7 @@
       import { createWindowManager, createState } from "../src/index.mjs";
       import { createSurfaceRegistry } from "../src/browser/index.mjs";
       import { defineWindowAlgebraElement } from "../src/bindings/element.mjs";
-      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+      import { initPage } from "./shared/kit.mjs";
 
       initPage({ current: "./element.html", title: "<wa-stage> custom element" });
 
@@ -54,7 +54,7 @@
       const open = (wm, options = {}) => {
         const id = options.id ?? `w${++counter}`;
         const title = options.title ?? `Window ${counter}`;
-        surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${id}: rendered by <wa-stage>'s own DOM renderer.`) }));
+        surfaces.set(id, { mount: (el) => (el.textContent = `${id}: rendered by <wa-stage>'s own DOM renderer, inside its built-in window chrome.`), unmount: () => {} });
         wm.create({ id, title, ...options });
         return id;
       };
@@ -69,8 +69,7 @@
 
       const stage = document.getElementById("stage");
       let wm = startWm();
-      stage.configure({ wm, surfaceFor: surfaces });
-      syncChrome(wm, stage);
+      stage.configure({ wm, surfaceFor: surfaces, chrome: true });
 
       const focused = () => stage.wm.state.focus.window;
       document.getElementById("new").onclick = () => open(stage.wm);
@@ -82,8 +81,7 @@
       // windows) replaces the old one without recreating the element itself.
       document.getElementById("reconfigure").onclick = () => {
         wm = startWm();
-        stage.configure({ wm, surfaceFor: surfaces });
-        syncChrome(wm, stage);
+        stage.configure({ wm, surfaceFor: surfaces, chrome: true });
       };
 
       window.stage = stage;

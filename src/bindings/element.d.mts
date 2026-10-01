@@ -1,5 +1,5 @@
 import type { WindowManager, WindowManagerOptions } from "../index.mjs";
-import type { AttachInputOptions, AttachSyncOptions, DomRenderer, PaletteOptions, Palette, Sync, SurfaceFor } from "../browser/index.mjs";
+import type { AttachInputOptions, AttachPopoutsOptions, AttachSyncOptions, ChromeOptions, DomRenderer, PaletteOptions, Palette, Popouts, Sync, SurfaceFor } from "../browser/index.mjs";
 import type { Scheduler } from "../index.mjs";
 
 export interface StageOptions {
@@ -9,6 +9,13 @@ export interface StageOptions {
   manager?: WindowManagerOptions<any>;
   anchorFallback?: boolean;
   surfaceFor?: SurfaceFor;
+  /** The built-in window chrome (title bar, buttons, resize grips) around every window: `true`, or options. Off by default. */
+  chrome?: boolean | ChromeOptions;
+  /**
+   * Pop-outs: `true`, or `attachPopouts` options. Switched on by itself when `chrome.buttons` is a list that
+   * includes `"popout"`. Off otherwise.
+   */
+  popouts?: boolean | Omit<AttachPopoutsOptions, "wm" | "renderer">;
   /** Merged into `attachInput`'s options. */
   input?: Partial<Omit<AttachInputOptions, "root">>;
   /** When commits run after a state change (default one commit per frame). */
@@ -26,6 +33,8 @@ export interface Stage {
   renderer: DomRenderer;
   sync: Sync | null;
   palette: Palette | null;
+  /** The pop-out handle, when `popouts` (or a `"popout"` chrome button) switched it on. */
+  popouts: Popouts | null;
   detach(): void;
 }
 

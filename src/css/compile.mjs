@@ -12,6 +12,7 @@
 import { views } from "../algebra/transforms.mjs";
 import { CONTAINER_KINDS } from "../algebra/nodes.mjs";
 import { THEME_CSS } from "./theme.mjs";
+import { CHROME_CSS } from "./chrome.mjs";
 
 export { THEME_CSS, THEME_TOKENS } from "./theme.mjs";
 
@@ -370,7 +371,7 @@ const splitterAfter = (target, index, elementKey, context = {}) => {
  * Compile a layout tree into a render tree.
  *
  * @param {object} tree layout-algebra tree
- * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, roles, urgent, modal }
+ * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, statuses, roles, urgent, modal }
  * @param {object} [options]
  * @param {string} [options.key] key of the root element
  */
@@ -472,6 +473,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       if (blocked.has(id)) Object.assign(attrs, { "data-wm-blocked": "", "aria-disabled": "true" });
       if (urgent.has(id)) attrs["data-wm-urgent"] = "";
       if (context.modes?.[id]) attrs["data-mode"] = context.modes[id];
+      if (context.statuses?.[id]) attrs["data-status"] = context.statuses[id];
       const role = context.roles?.[id];
       if (role) attrs["data-role"] = role;
       // ARIA: a tab's panel is a "tabpanel" labelled by its tab, not a labelled
@@ -622,6 +624,7 @@ wm-tabs { touch-action: pan-x; }
 [data-wm-splitter]:hover, [data-wm-splitter]:focus-visible, [data-wm-splitter][data-wm-active] { background: var(--wa-splitter-fill-active); }
 wm-view:focus-visible, wm-tabs > button:focus-visible, [data-wm-splitter]:focus-visible, [data-wm-handle]:focus-visible { outline: var(--wa-focus-ring-width) solid var(--wa-focus-ring-color); outline-offset: var(--wa-focus-ring-offset); box-shadow: 0 0 0 calc(var(--wa-focus-ring-width) / 3) var(--wa-focus-ring-halo); }
 wm-view:focus-visible { outline-offset: calc(-1 * var(--wa-focus-ring-width)); }
+${CHROME_CSS}
 ::view-transition-group(*) { animation-duration: var(--wa-transition-duration); }
 ::view-transition-old(*), ::view-transition-new(*) { animation-duration: var(--wa-transition-duration); animation-timing-function: var(--wa-transition-easing); }
 @media (prefers-reduced-motion: reduce) {
@@ -635,4 +638,5 @@ wm-view:focus-visible { outline-offset: calc(-1 * var(--wa-focus-ring-width)); }
 `.trim();
 
 /** Base stylesheet: the default theme (`THEME_CSS`, the `--wa-*` tokens) plus `RULES_CSS`. Optional. */
+export { CHROME_CSS };
 export const BASE_CSS = `${THEME_CSS}\n${RULES_CSS}`;

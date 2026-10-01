@@ -1,5 +1,6 @@
 import type { Scheduler, State, WindowManager, WindowManagerOptions } from "../index.mjs";
 import type { AttachInputOptions } from "../browser/index.mjs";
+import type { StageOptions } from "./element.mjs";
 
 /**
  * The slice of React the bindings use. Pass React itself (or a compatible
@@ -26,6 +27,10 @@ export interface WindowManagerStageProps {
   input?: Partial<Omit<AttachInputOptions, "root" | "wm">>;
   /** When commits run after a state change (default: one per frame). */
   schedule?: Scheduler;
+  /** Built-in window chrome around every window, as for `attachStage`. Read when the stage attaches. */
+  chrome?: StageOptions["chrome"];
+  /** Pop-outs, as for `attachStage`. */
+  popouts?: StageOptions["popouts"];
   /** The host tag (default `"div"`). Give the host a height: the stage fills it. */
   as?: string;
   /** Everything else (`className`, `style`, `id`, ...) lands on the host element. */

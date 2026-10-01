@@ -190,6 +190,8 @@ export const presentationContext = (state) => ({
   titles: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.title])),
   modes: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.mode])),
   roles: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.role])),
+  /** Non-"normal" statuses only (maximized, minimized, fullscreen, popped-out): `compile` marks them `data-status`. */
+  statuses: Object.fromEntries(Object.values(state.windows).filter((win) => win.status && win.status !== "normal").map((win) => [win.id, win.status])),
   pinned: Object.values(state.windows).filter((win) => win.draggable === false).map((win) => win.id),
   sticky: Object.values(state.windows).filter((win) => win.sticky).map((win) => win.id),
   scratchpad: Object.values(state.windows).filter((win) => win.scratchpad).map((win) => win.id),

@@ -136,6 +136,7 @@ The non-layout facts `compile` needs, as a plain object:
 | `blocked` | ids blocked by a modal | `data-wm-blocked`, `aria-disabled` |
 | `titles` | `{ id: title }` | `aria-label`, tab text |
 | `modes` | `{ id: mode }` | `data-mode` |
+| `statuses` | `{ id: status }`, only windows whose status is not `normal` | `data-status` |
 | `roles` | `{ id: role }` | `data-role`, ARIA role |
 | `pinned` | ids with `draggable: false` | `data-wm-draggable="false"` |
 | `sticky` | sticky ids | `data-wm-sticky` |

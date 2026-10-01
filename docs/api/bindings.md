@@ -55,6 +55,8 @@ Mounts a `createDomRenderer` plus `attachInput` pair into a host element for the
 | `createPortal` | react-dom's `createPortal`. It is required for `renderSurface`. |
 | `schedule(task)` | When commits run. Default `createFrameScheduler()`; `immediateScheduler` commits synchronously (tests, server-style rendering). |
 | `anchorFallback` | Forwarded to `createDomRenderer`. |
+| `chrome` | Built-in window chrome around every window, as for `attachStage` (`true` or `{ buttons, icon, icons, labels, for }`). Read when the stage attaches. |
+| `popouts` | Pop-outs, as for `attachStage`. |
 | `input` | An object merged into `attachInput`'s options (`{ wm, root }` are supplied; add `announce`, `keyboard`, `modifier`, …). |
 | `as` | The host tag, default `"div"`. |
 | anything else | Passed to the host element (`className`, `style`, `id`, …). |
@@ -122,12 +124,14 @@ attachStage(host, {
   manager,         // …or options for createWindowManager
   anchorFallback,  // forwarded to createDomRenderer
   surfaceFor,      // forwarded to createDomRenderer
+  chrome,          // true | { buttons, icon, icons, labels, for }: built-in window chrome (see Browser adapters); off by default
+  popouts,         // true | attachPopouts options. On by itself when chrome.buttons lists "popout"
   input,           // merged into attachInput's options
   schedule,        // (task) => void; default createFrameScheduler(). immediateScheduler commits synchronously
   direction,       // "auto" (default: follow an explicit dir) | "ltr" | "rtl" | false
   sync,            // true | attachSync options: keep this stage in step with other tabs (off by default)
   palette,         // true | createPalette options: a command palette for this stage's manager (off by default)
-}) → { wm, renderer, sync, palette, detach() }   // sync/palette are the handles, or null
+}) → { wm, renderer, sync, palette, popouts, detach() }   // sync/palette/popouts are the handles, or null
 ```
 
 It commits once, then re-commits after dispatches, coalesced to one commit per frame (a bare `requestAnimationFrame`; outside a browser it falls back to a 16 ms timer, so pass `schedule: immediateScheduler` in tests). `detach()` unsubscribes, detaches input and destroys the renderer.

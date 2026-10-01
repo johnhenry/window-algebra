@@ -204,6 +204,17 @@ export const CHECKLIST = [
     ["palette-catalog", "COMMAND_CATALOG / paletteEntries / fuzzyMatch / fieldChoices / parseField / buildCommand: the pure palette data, one entry per command"],
     ["wa-palette", "<wa-palette> element (defineCommandPaletteElement) and attachStage({ palette })"],
   ]),
+  ...items("Window chrome", [
+    ["chrome-option", "createDomRenderer({ chrome }) / attachStage({ chrome }) / <wa-stage>.configure({ chrome }): opt-in title bar, buttons, body and resize grips around every window"],
+    ["chromeSurface", "chromeSurface({ id, title, body, wm }): the same chrome as one surface, for a custom renderer; buildChrome / setChromeTitle are the pieces"],
+    ["chrome-buttons", "buttons: minimize, maximize/restore, float/tile, pop out/in, close; picked and ordered (CHROME_BUTTONS), per window, with icons, labels and an icon slot; the right half of a toggle shows by data-mode / data-status"],
+    ["chrome-dblclick", "data-wm-dblclick: double-click the title bar to maximize (a control inside keeps its click)"],
+    ["chrome-grips", "eight resize grips for floating windows, hidden when tiled, maximized or popped out; coarse pointers get thicker grips"],
+    ["chrome-a11y", "named buttons (\"Close window: Title\"), keyboard operation, focus follows a toggle, a scrolling body is a labelled focusable region, no second bar inside a tab strip"],
+    ["chrome-popout", "attachInput({ popouts }): the pop-out button opens a real window; the chrome keeps working in it (pop-in, title, no grips)"],
+    ["CHROME_CSS", "CHROME_CSS (inside RULES_CSS and BASE_CSS): logical properties, --wa-chrome-* and --wa-titlebar-* tokens, 44px touch targets, forced-colors"],
+    ["data-status", "compile writes data-status on a maximized, minimized, fullscreen or popped-out view (presentationContext.statuses)"],
+  ]),
   ...items("Theming", [
     ["theme-tokens", "THEME_TOKENS / THEME_CSS: the --wa-* custom properties (colours, radii, spacing, focus ring, splitter, title bar, shadows), light and dark defaults, prefers-contrast: more"],
     ["theme-override", "override any token on :root (or an ancestor of one stage); defaults have zero specificity"],
@@ -388,12 +399,24 @@ export const PAGES = [
     ],
   },
   {
+    href: "./chrome.html",
+    short: "Chrome",
+    title: "Built-in window chrome",
+    blurb: "chrome: true on <wa-stage>: a title bar with icon slot, drag handle and double-click to maximize, minimize / maximize / float / pop-out / close buttons, eight resize grips, RTL, touch targets, themed by tokens.",
+    covers: [
+      "chrome-option", "chromeSurface", "chrome-buttons", "chrome-dblclick", "chrome-grips", "chrome-a11y", "chrome-popout", "CHROME_CSS", "data-status", "theme-override",
+      "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "attachPopouts", "window/pop-out", "window/pop-in", "popped-out",
+      "window/minimize", "window/maximize", "window/restore", "window/toggle-floating", "window/toggle-maximize", "window/close", "command-buttons", "resize-edges", "drag-move",
+      "config-direction", "createWindowManager", "createSurfaceRegistry", "layout/set", "undo-redo",
+    ],
+  },
+  {
     href: "./element.html",
     short: "wa-stage",
     title: "<wa-stage> custom element",
     blurb: "A framework-agnostic custom element that owns its own manager, DOM renderer and input adapter, exposing the live manager as `.wm`. Works fully offline.",
     covers: [
-      "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
+      "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports", "chrome-option",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
     ],
@@ -404,7 +427,7 @@ export const PAGES = [
     title: "Right-to-left layouts",
     blurb: "Switch the stage between LTR and RTL: every layout mirrors, floating windows are placed from the right, drop zones, arrows, splitters and snap zones follow.",
     covers: [
-      "config-direction", "rtl-logical", "rtl-dir-follow", "config/set", "masterStack", "columns", "rows", "monocle", "tabs", "autoGrid", "fixedGrid", "spiral", "bsp", "tree",
+      "config-direction", "rtl-logical", "rtl-dir-follow", "chrome-option", "config/set", "masterStack", "columns", "rows", "monocle", "tabs", "autoGrid", "fixedGrid", "spiral", "bsp", "tree",
       "layout/set", "window/create", "window/toggle-floating", "tiled-drag", "drag-preview", "snap-zones", "splitter-drag", "splitter-keyboard", "keyboard-moves", "tab-reorder",
       "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "undo-redo",
     ],
@@ -435,7 +458,7 @@ export const PAGES = [
     title: "Touch and pen gestures",
     blurb: "Pinch a floating window, swipe the tab strip, two-finger swipe between workspaces, long-press for a menu. Opt-in through attachInput({ touch }).",
     covers: [
-      "touch-option", "touch-pinch", "touch-swipe-tabs", "touch-swipe-workspaces", "touch-context", "touch-longpress", "drag-move", "tiled-drag", "keyboard",
+      "touch-option", "chrome-option", "chrome-grips", "touch-pinch", "touch-swipe-tabs", "touch-swipe-workspaces", "touch-context", "touch-longpress", "drag-move", "tiled-drag", "keyboard",
       "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "workspace/activate", "window/resize", "window/focus",
       "window/toggle-floating", "window/maximize", "window/minimize", "window/close", "undo-redo", "subscribe",
     ],

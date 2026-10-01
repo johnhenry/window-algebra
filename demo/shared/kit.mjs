@@ -160,7 +160,10 @@ let swatchIndex = 0;
 export const nextSwatch = () => SWATCHES[swatchIndex++ % SWATCHES.length];
 
 /**
- * A window surface with standard chrome. The header is a `data-wm-handle="move"`
+ * The demos' own window surface, with a richer, demo-only look (colour dot, live size readout, per-page action
+ * subsets). It is NOT the library's chrome: for a real app use `createDomRenderer({ chrome: true })` /
+ * `<wa-stage>`'s `chrome` option or `chromeSurface()` (src/browser/chrome.mjs, demo/chrome.html), which ship
+ * the same parts (title bar, buttons, grips) accessible and themed. The header is a `data-wm-handle="move"`
  * drag handle; buttons use `data-wm-command`; eight `resize-*` grips cover every
  * edge in EDGES. `body(el, ctx)` fills the content area and may return a cleanup.
  *

@@ -11,63 +11,10 @@
  * class is a thin lifecycle wrapper around it, kept separate so the wiring
  * can be unit-tested without a real `customElements` registry.
  */
-import { createWindowManager } from "../manager.mjs";
-import { createDomRenderer } from "../browser/dom.mjs";
-import { attachInput } from "../browser/input.mjs";
-import { createFrameScheduler } from "../browser/scheduler.mjs";
-import { attachSync } from "../browser/sync.mjs";
+import { attachStage } from "./stage.mjs";
 import { createPalette } from "../browser/palette.mjs";
-import { attachDirection } from "../browser/direction.mjs";
 
-/**
- * @param {Element} host mount point (usually the custom element itself)
- * @param {object} [options]
- * @param {object} [options.wm] a window manager to use as-is, instead of creating one
- * @param {object} [options.manager] options forwarded to `createWindowManager` when `wm` is not given
- * @param {boolean} [options.anchorFallback] forwarded to `createDomRenderer`
- * @param {(id: string) => object} [options.surfaceFor] forwarded to `createDomRenderer`
- * @param {object} [options.input] extra options merged into `attachInput`
- * @param {boolean|object} [options.sync] keep this stage's window manager in step with other tabs: `true`, or
- *   options for `attachSync` (`channel`, `id`, ...). Off by default.
- * @param {"auto"|"ltr"|"rtl"|false} [options.direction] right-to-left layout: `"auto"` (default) follows an explicit
- *   `dir` on the stage or any ancestor (an element with no `dir` anywhere leaves `config.direction` as it is);
- *   `"ltr"`/`"rtl"` set it once; `false` never touches it.
- * @param {boolean|object} [options.palette] a command palette (Ctrl/Cmd+Shift+P) for this stage's window
- *   manager: `true`, or options for `createPalette` (`shortcut`, `exclude`, ...). Off by default.
- * @param {(task: () => void) => void} [options.schedule] when commits run after a state change; default
- *   `createFrameScheduler()` (many commands, one commit per frame). Pass `immediateScheduler` to commit synchronously.
- * @returns {{ wm: object, renderer: object, sync: object|null, palette: object|null, detach(): void }}
- */
-export const attachStage = (host, options = {}) => {
-  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, palette, direction = "auto", schedule = createFrameScheduler() } = options;
-  if (direction === "ltr" || direction === "rtl") {
-    if (wm.getState().config?.direction !== direction) wm.dispatch({ type: "config/set", direction });
-  }
-  const directionHandle = direction === "auto" ? attachDirection({ wm, element: host }) : null;
-  const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor });
-  let live = true;
-  const commit = () => live && renderer.commit(wm.present().render);
-  commit();
-  const unsubscribe = wm.subscribe(() => schedule(commit));
-  const detachInput = attachInput({ root: host, wm, ...input });
-  const syncHandle = sync ? attachSync({ wm, ...(sync === true ? {} : sync) }) : null;
-  const paletteHandle = palette ? createPalette({ wm, document: host.ownerDocument, ...(palette === true ? {} : palette) }) : null;
-  return {
-    wm,
-    renderer,
-    sync: syncHandle,
-    palette: paletteHandle,
-    detach() {
-      syncHandle?.detach();
-      paletteHandle?.detach();
-      directionHandle?.detach();
-      live = false; // a commit still queued for the next frame must not touch the torn-down renderer
-      unsubscribe();
-      detachInput();
-      renderer.destroy?.();
-    },
-  };
-};
+export { attachStage };
 
 /**
  * Defines (and returns) a `<name>` custom element class. Call `.configure(options)`

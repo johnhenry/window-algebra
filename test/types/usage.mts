@@ -43,13 +43,16 @@ import {
   createFrameScheduler,
   createPalette,
   createSurfaceRegistry,
+  chromeSurface,
   lazySurface,
+  CHROME_BUTTONS,
+  type ChromeButton,
   type Surface,
 } from "@johnhenry/window-algebra/browser";
 import { column, grid, overlay, isView, validate, type ViewNode, type RowNode } from "@johnhenry/window-algebra/algebra";
 import { mirror, views, mapViews, find } from "@johnhenry/window-algebra/transforms";
 import { masterStack, bspFrom, bspIds, treeFrom, treeIds, columns, type LayoutItem } from "@johnhenry/window-algebra/layouts";
-import { BASE_CSS, THEME_TOKENS, toHTML, px, tabId, type PresentationContext } from "@johnhenry/window-algebra/css";
+import { BASE_CSS, CHROME_CSS, THEME_TOKENS, toHTML, px, tabId, type PresentationContext } from "@johnhenry/window-algebra/css";
 import { createReactBindings } from "@johnhenry/window-algebra/react";
 import { attachStage, defineWindowAlgebraElement, defineCommandPaletteElement } from "@johnhenry/window-algebra/element";
 
@@ -220,7 +223,16 @@ detach();
 attachInput({ root: stage, wm, touch: { contextMenu: "window/toggle-floating" } });
 // @ts-expect-error a context command must be a real command type
 attachInput({ root: stage, wm, touch: { contextMenu: "window/explode" } });
+const chromed = createDomRenderer({ root: stage, chrome: { buttons: ["close", "popout"], icon: (id) => id, icons: { close: "x" }, labels: { close: "Schliessen" }, for: (id) => id !== "tip" } });
+chromed.bodyFor("a")?.classList;
+createDomRenderer({ root: stage, chrome: true });
+// @ts-expect-error a chrome button is one of five
+createDomRenderer({ root: stage, chrome: { buttons: ["explode"] } });
+chromeSurface({ id: "a", title: "A", wm, body: (el) => void el.classList, buttons: ["maximize"] }) satisfies Surface;
+CHROME_BUTTONS satisfies readonly ChromeButton[];
+CHROME_CSS satisfies string;
 const popouts = attachPopouts({ wm, renderer });
+attachInput({ root: stage, wm, popouts });
 popouts.popOut("a", { features: "popup" });
 const sync = attachSync({ wm, channel: "demo", schedule: createFrameScheduler(), onSync: (info) => void info.applied });
 sync.peers().length;
@@ -238,7 +250,7 @@ bindings.useWindowState(wm, (s) => s.focus.window) satisfies string | null;
 const { WindowManagerStage } = bindings;
 WindowManagerStage({ wm, className: "stage", as: "section" });
 
-const handle = attachStage(stage, { wm, sync: true, palette: { shortcut: false }, direction: "auto", input: { keyboard: true } });
+const handle = attachStage(stage, { wm, chrome: { buttons: ["close"] }, popouts: true, sync: true, palette: { shortcut: false }, direction: "auto", input: { keyboard: true } });
 handle.detach();
 const Stage = defineWindowAlgebraElement("wa-stage");
 const element = new Stage().configure({ wm });

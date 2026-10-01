@@ -89,7 +89,7 @@ export * from "./state/queries.mjs";
 export { createHistory, record, undo, redo, canUndo, canRedo } from "./state/history.mjs";
 
 // CSS compilation (pure)
-export { compile, toHTML, styleText, tracks, px, anchorName, BASE_CSS, RULES_CSS, THEME_CSS, THEME_TOKENS, SPLITTER_SIZE, tabId, panelId } from "./css/compile.mjs";
+export { compile, toHTML, styleText, tracks, px, anchorName, BASE_CSS, RULES_CSS, CHROME_CSS, THEME_CSS, THEME_TOKENS, SPLITTER_SIZE, tabId, panelId } from "./css/compile.mjs";
 
 // Command palette data (pure): the catalog of commands, fuzzy matching, field prompting
 export { COMMAND_CATALOG, REQUIREMENTS, paletteEntries, fuzzyMatch, fieldChoices, defaultValue, parseField, buildCommand, isTextField, isAvailable } from "./palette/catalog.mjs";

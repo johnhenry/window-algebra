@@ -1,4 +1,5 @@
 import { poppedOutWindows } from "../state/queries.mjs";
+import { setChromeTitle } from "./chrome.mjs";
 
 /**
  * GoldenLayout/Dockview-style pop-out: move a window's rendered DOM into a
@@ -123,6 +124,7 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
     // next commit sweep it away as not live, unmounting the surface anyway.
     if (popIn && entry.element) {
       entry.element.remove?.();
+      entry.element.removeAttribute?.("data-status");
       const mainDoc = renderer?.root?.ownerDocument;
       if (mainDoc?.adoptNode) mainDoc.adoptNode(entry.element);
       renderer?.adopt?.(id, entry.element, entry.surface);
@@ -158,6 +160,10 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
     if (element && popupDoc) {
       if (popupDoc.adoptNode) popupDoc.adoptNode(element);
       fillPopup(element);
+      // The renderer no longer patches this element, so the built-in chrome (CHROME_CSS) is told the window left
+      // the layout directly: its pop-in button shows, and minimize/maximize/float and the resize grips hide.
+      element.setAttribute?.("data-status", "popped-out");
+      setChromeTitle(element, titleOf(id));
       (popupDoc.body ?? popupDoc).appendChild(element);
     }
 
@@ -190,6 +196,7 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
       if (!popupDoc || !s.windows[id]) return;
       const next = s.windows[id].title || id;
       if (popupDoc.title !== next) popupDoc.title = next;
+      if (element) setChromeTitle(element, next);
     });
 
     popups.set(id, {

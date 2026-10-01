@@ -2,7 +2,7 @@
 
 [API reference](./README.md) › Browser adapters
 
-The effectful edge. Everything here is exported from `@johnhenry/window-algebra/browser`. Importing it touches no DOM; calling the functions does. Sources: `src/browser/dom.mjs`, `input.mjs`, `surface.mjs`, `scheduler.mjs`, `popouts.mjs`.
+The effectful edge. Everything here is exported from `@johnhenry/window-algebra/browser`. Importing it touches no DOM; calling the functions does. Sources: `src/browser/dom.mjs`, `input.mjs`, `chrome.mjs`, `surface.mjs`, `scheduler.mjs`, `popouts.mjs`.
 
 ## Contents
 
@@ -16,6 +16,7 @@ The effectful edge. Everything here is exported from `@johnhenry/window-algebra/
   - [Focus sync](#focus-sync)
   - [Announcements](#announcements)
   - [Attributes it sets](#attributes-it-sets)
+- [Window chrome](#window-chrome) (`chrome`, `chromeSurface`)
 - [Surfaces](#surfaces)
 - [Schedulers](#schedulers)
 - [attachPopouts](#attachpopouts)
@@ -31,6 +32,7 @@ createDomRenderer({
   document,             // default root.ownerDocument
   anchorFallback,       // boolean; default: true where CSS.supports("anchor-name: --x") is false
   animate,              // false | true | { duration?: number(ms) | string, easing?: string }
+  chrome,               // false | true | { buttons, icon, icons, labels, for }: built-in window chrome, see below
 }) → renderer
 ```
 
@@ -39,7 +41,7 @@ It reconciles a render tree into real DOM:
 - **Keyed.** Elements are keyed by render-tree key. View elements are keyed by window id, so a window keeps its element **and its mounted surface** when the layout changes around it. A key whose tag changes gets a fresh element.
 - **Diffed.** Styles are diffed per property and attributes per name. Tab text is updated in place.
 - **Top-down and state-preserving.** Each element is placed in its already-connected parent before its children are reconciled, so a view moving into a brand-new container never leaves the document. Moves use `parent.moveBefore()` where the browser supports it, so an iframe does not reload and focus and playing media survive. Otherwise they fall back to `insertBefore`. Stale elements are swept only after every view has had the chance to move.
-- **Surfaces.** `surfaceFor(id).mount(viewElement)` is called once, the first time a primary view appears; `unmount()` is called when it disappears. Projections never get a surface.
+- **Surfaces.** `surfaceFor(id).mount(viewElement)` (with [`chrome`](#window-chrome), the chrome body instead) is called once, the first time a primary view appears; `unmount()` is called when it disappears. Projections never get a surface.
 - **Blocked views.** For a view with `data-wm-blocked`, every child element of the view gets `inert`. The view itself stays hit-testable, so a click on a window behind a modal is redirected (by `attachInput`) instead of falling through to the window underneath.
 
 | Member | Description |
@@ -48,6 +50,7 @@ It reconciles a render tree into real DOM:
 | `commit(renderTree, { immediate = false }?)` | Applies a render tree. With `animate`, it runs inside `document.startViewTransition` unless `immediate` is set, a transition is already in flight (rapid commits coalesce), the browser lacks View Transitions, or `prefers-reduced-motion: reduce` matches. |
 | `measure()` | `{ [id]: rect }` for every primary view, relative to `root`. |
 | `elementFor(id)` | The view element for a window id, if rendered. |
+| `bodyFor(id)` | Where a view's content mounts: its chrome body when `chrome` is on (and the window has chrome), else the view element. |
 | `anchorFallback` | Whether anchored elements are positioned by JS. |
 | `reposition()` | Re-runs the JS anchor fallback (for example after content changed size without a commit). With the fallback on, a `ResizeObserver` on `root` also triggers it. |
 | `animate` (getter), `setAnimate(value)` | Whether animation is configured, and a way to turn it on or off or reconfigure `duration`/`easing` later. |
@@ -86,6 +89,7 @@ attachInput({
   floatStep: 10,         // px a keyboard move/resize of a floating window changes it by
   afterRender,           // (task) => void: when to move DOM focus after a focus change (default: next frame)
   touch,                 // true | { pinch, swipe, contextMenu, ... }: touch and pen gestures (opt-in), see below
+  popouts,               // an attachPopouts handle: window/pop-out and window/pop-in buttons open and close the real window
 }) → detach
 ```
 
@@ -101,7 +105,8 @@ Inside a window's surface (the adapter walks up from the event target):
 | --- | --- |
 | `data-wm-handle="move"` | Drag to move a floating window, or to drag a tiled window to a new slot (the title bar). |
 | `data-wm-handle="resize-<edge>"` | `<edge>` is one of `EDGES` (`n`, `s`, `e`, `w`, `ne`, `nw`, `se`, `sw`). Drag to resize a floating window. |
-| `data-wm-command="<type>"` | Click dispatches `{ type, id }`, where `id` is `data-wm-target` if present, else the enclosing view's id. |
+| `data-wm-command="<type>"` | Click dispatches `{ type, id }`, where `id` is `data-wm-target` if present, else the enclosing view's id. With a `popouts` handle, `window/pop-out` and `window/pop-in` call `popOut(id)` / `popIn(id)` instead. |
+| `data-wm-dblclick="<type>"` | Double-click dispatches `{ type, id }` the same way (the chrome's title bar uses `window/toggle-maximize`). A control inside it keeps its own click; a window a modal blocks ignores it. |
 
 Controls inside a handle (`button`, `a`, `input`, `select`, `textarea`, `label`, `[contenteditable]`, `[data-wm-command]`) keep their own click: pressing one never starts a gesture.
 
@@ -224,6 +229,61 @@ With `announce` (`true` creates a visually hidden `role="status"` `aria-live="po
 | `data-wm-announcer` | the region it created | |
 
 If `root` is `position: static`, it is set to `position: relative` when the first drag overlay is created.
+
+## Window chrome
+
+Opt-in. Every app that draws windows needs the same parts: a title bar with a title and buttons, a drag handle, resize grips. `chrome` ships them, built on the markup contract below, so there is nothing to re-implement.
+
+```js
+createDomRenderer({ root, surfaceFor, chrome: true });
+createDomRenderer({ root, surfaceFor, chrome: { buttons: ["minimize", "maximize", "float", "popout", "close"] } });
+// <wa-stage>.configure({ wm, surfaceFor, chrome }) and attachStage(host, { chrome }) take the same option
+```
+
+`chrome` is `true` or an object:
+
+| Option | Description |
+| --- | --- |
+| `buttons` | Which buttons, in order: an array of `CHROME_BUTTONS` (`"minimize"`, `"maximize"`, `"float"`, `"popout"`, `"close"`), or `(id) => array` for per-window sets. Default `DEFAULT_CHROME_BUTTONS`: `minimize`, `maximize`, `float`, `close`. An unknown name throws. |
+| `icon` | `(id) => Node \| string \| null`: the icon slot at the start of the bar (text is set as text, never as HTML). |
+| `icons` | A glyph per action (`close`, `maximize`, `restore`, `float`, `dock`, `popout`, `popin`, `minimize`), text or a node, replacing the default characters. |
+| `labels` | Accessible names per action, plus `actions` for the button group. Defaults are `DEFAULT_CHROME_LABELS` ("Close window", ...). Use it to translate. |
+| `for` | `(id) => boolean`: return `false` to leave a window bare (a tooltip, a toast, a menu). Its surface then mounts straight into the view. |
+
+**What a window gets.** Inside its view element (`wm-view`), `[data-wa-chrome]` holds:
+
+- the **title bar**, `[data-wm-handle="move"]` with `data-wm-dblclick="window/toggle-maximize"`: the icon slot (`[data-wa-chrome-icon]`), the title (`[data-wa-chrome-title]`, kept in step with the window's title on every commit; an untitled window shows its id) and a `role="group"` of buttons;
+- the **body**, `[data-wa-chrome-body]`, where the window's surface mounts (`renderer.bodyFor(id)` returns it, or the view element when there is no chrome);
+- **eight resize grips**, `[data-wm-handle="resize-n"]` and so on.
+
+**Buttons.** Each is a real `<button type="button">` with a `data-wm-command` (so `attachInput` dispatches it) and `data-action`. A toggle is two buttons and CSS shows one, from the `data-mode` and `data-status` attributes `compile` writes on the view: `maximize` / `restore` (`window/maximize`, `window/restore`), `float` / `dock` (`window/toggle-floating`), `popout` / `popin` (`window/pop-out`, `window/pop-in`). Nothing is relabelled in JavaScript, which is also why the chrome keeps working in a pop-out window, where no renderer updates it. Accessible names include the title ("Close window: Editor"). When a toggle hides the button that was pressed, focus moves to its counterpart once the change has rendered, so a keyboard user is not left on nothing. The **pop-out** button needs a pop-out handle: `attachStage` creates one by itself when `buttons` lists `"popout"` (and exposes it as `stage.popouts`); with your own wiring pass `attachInput({ popouts })`. Without one it only dispatches `window/pop-out`.
+
+**Behaviour.**
+
+- **Drag and resize** are the pointer adapter's: the bar moves a floating window (or drags a tiled one after the threshold or a long press), a grip resizes it. The grips show only while the window floats and is not maximized, minimized or popped out.
+- **Double-click** the bar maximizes, and again restores. A control inside the bar keeps its own click; a window a modal blocks ignores it.
+- **Tab strips.** A window that is a tab panel (`stack` with `chrome: "tabs"`) gets no title bar, since its tab is its title; the bar returns when the layout changes.
+- **Scrolling.** A body that scrolls becomes a focusable, labelled region (`tabindex="0"`, `role="region"`, `aria-labelledby` the title), as axe's `scrollable-region-focusable` requires; one that fits is not a tab stop. This is re-evaluated on every commit and when the body resizes, not when its content grows inside a fixed size.
+- **Pop-outs.** In the popup the bar shows pop-in and close, hides the layout buttons and the grips, and follows the window's title.
+- **Blocked windows.** A window blocked by a modal has its chrome inert, like the rest of its contents.
+
+**Styling.** `CHROME_CSS` (part of `RULES_CSS` and `BASE_CSS`) reads only `--wa-*` tokens: the title bar uses `--wa-titlebar-*` (`--wa-titlebar-active-bg` for the focused window), the buttons `--wa-color-accent-soft` and `--wa-color-danger`, the focus ring `--wa-focus-ring-*`, and size comes from `--wa-chrome-bar-height`, `--wa-chrome-button-size` and `--wa-chrome-grip-size` (see [Theming](./theming.md)). It uses logical properties, so under `dir="rtl"` the icon and title come first on the right and the buttons sit at the left; only the grips use physical offsets, because `resize-e` names the right edge in both directions. On coarse pointers (touch, pen) the bar and buttons grow to `--wa-chrome-touch-target` (44 px) and the grips to `--wa-chrome-grip-touch`; the bar and grips set `touch-action: none` so a finger drags them instead of scrolling the page. Under `forced-colors` the buttons get a border.
+
+### `chromeSurface(options)`
+
+The same chrome for **one** window, as a surface, for a custom renderer or a hand-built `surfaceFor`. Do not combine it with `createDomRenderer({ chrome })`: that wraps every window itself.
+
+```js
+surfaces.set("editor", chromeSurface({
+  id: "editor",
+  title: "Editor",
+  wm,                                      // optional: the title follows state.windows.editor.title
+  body: (el) => { el.append(editorElement); return () => {}; },   // or a surface to mount into the body
+  buttons: ["maximize", "close"],          // icon, icons, labels as above
+}));
+```
+
+`buildChrome(doc, { id, title, buttons, icon, icons, labels })` returns the pieces (`{ frame, bar, body, titleId, setTitle, setBarVisible, syncScrollable, dispose }`) and `setChromeTitle(element, title)` retitles chrome (and its buttons' names) in any element, in whichever document it lives. `CHROME_BUTTONS`, `DEFAULT_CHROME_BUTTONS` and `DEFAULT_CHROME_LABELS` are exported too. Source: `src/browser/chrome.mjs`, `src/css/chrome.mjs`. Demo: `demo/chrome.html`.
 
 ## Surfaces
 

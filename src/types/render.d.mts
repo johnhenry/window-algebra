@@ -24,6 +24,8 @@ export interface PresentationContext {
   blocked?: string[];
   titles?: Record<string, string>;
   modes?: Record<string, string>;
+  /** Non-`"normal"` statuses only (maximized, minimized, fullscreen, popped-out): written as `data-status`. */
+  statuses?: Record<string, string>;
   roles?: Record<string, string>;
   pinned?: string[];
   sticky?: string[];
