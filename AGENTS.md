@@ -6,7 +6,7 @@
 
 ## The verification loop (before every push)
 
-1. `npm test`: currently 715 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
+1. `npm test`: currently 785 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
 2. `npm run examples`: six self-verifying scripts (`examples/NN-*.mjs`), each exiting non-zero on failure.
 3. `npm pack --dry-run`: read the file list. Only `src/`, `README.md`, `LICENSE` and `package.json` should ship; no `demo/`, `test/`, `docs/` or `examples/`.
 4. A genuinely fresh clone: `git clone . /tmp/window-algebra-verifyN && cd $_ && npm ci && npm test && npm run examples`.
