@@ -151,6 +151,71 @@ test.describe("built-in window chrome (chrome.html)", () => {
     await body.evaluate((el) => el.querySelector("#late").remove());
   });
 
+  // Content that arrives in steps after mount, in every engine (workbench found a WebKit axe
+  // `scrollable-region-focusable` failure on a window whose content arrived late). Each shape grows the body's
+  // scrollable overflow WITHOUT changing the box of any direct child of the body, which is the case a ResizeObserver
+  // on the body and its children alone cannot see.
+  const GROWTH = {
+    "a direct child that grows with its rows": {
+      setup: (body) => { const root = document.createElement("div"); root.id = "g-root"; body.append(root); },
+      add: (body, i) => { const row = document.createElement("div"); row.style.height = "20px"; row.textContent = `row ${i}`; body.querySelector("#g-root").append(row); },
+    },
+    "rows appended straight to the body": {
+      setup: () => {},
+      add: (body, i) => { const row = document.createElement("div"); row.style.height = "20px"; row.textContent = `row ${i}`; body.append(row); },
+    },
+    "a child of fixed height whose rows overflow it": {
+      setup: (body) => { const root = document.createElement("div"); root.id = "g-root"; root.style.height = "100%"; body.append(root); },
+      add: (body, i) => { const row = document.createElement("div"); row.style.height = "20px"; row.textContent = `row ${i}`; body.querySelector("#g-root").append(row); },
+    },
+    "a nested element of fixed height whose rows overflow it": {
+      setup: (body) => {
+        const root = document.createElement("div"); root.id = "g-root"; root.style.height = "100%";
+        const inner = document.createElement("div"); inner.id = "g-inner"; inner.style.height = "50px";
+        root.append(inner); body.append(root);
+      },
+      add: (body, i) => { const row = document.createElement("div"); row.style.height = "20px"; row.textContent = `row ${i}`; body.querySelector("#g-inner").append(row); },
+    },
+    "a custom element host of fixed height whose shadow rows overflow it": {
+      setup: (body) => {
+        const host = document.createElement("div"); host.id = "g-root"; host.style.height = "100%";
+        host.attachShadow({ mode: "open" }); body.append(host);
+      },
+      add: (body, i) => { const row = document.createElement("div"); row.style.height = "20px"; row.textContent = `row ${i}`; body.querySelector("#g-root").shadowRoot.append(row); },
+    },
+  };
+  for (const [name, shape] of Object.entries(GROWTH)) {
+    test(`content added in steps after mount: ${name}`, async ({ demo, page }) => {
+      await demo("chrome.html");
+      await settle(page);
+      const body = win(page, "notes").locator("[data-wa-chrome-body]");
+      await expect(body).not.toHaveAttribute("tabindex", /.*/);
+      const step = (from, to) =>
+        body.evaluate(
+          (el, args) => new Promise((resolve) => {
+            const { from: a, to: b, add, setup } = args;
+            if (a === 0) { el.replaceChildren(); new Function("return " + setup)()(el); }
+            const addRow = new Function("return " + add)();
+            let i = a;
+            // rows arrive one per timer tick, like a list that fills as data loads
+            const tick = () => { if (i < b) { addRow(el, i++); setTimeout(tick, 15); } else resolve(); };
+            tick();
+          }),
+          { from, to, add: shape.add.toString(), setup: shape.setup.toString() },
+        );
+      const scrolls = () => body.evaluate((el) => el.scrollHeight > el.clientHeight);
+      await step(0, 2);
+      expect(await scrolls()).toBe(false);
+      await expect(body).not.toHaveAttribute("tabindex", /.*/);
+      await step(2, 6);
+      await step(6, 11); // eleven rows in total
+      expect(await scrolls()).toBe(true);
+      await expect(body).toHaveAttribute("tabindex", "0");
+      await expect(body).toHaveAttribute("role", "region");
+      await expect(body).toHaveAccessibleName("Notes");
+    });
+  }
+
   test("right to left: the bar and the buttons mirror, and the grips stay on their physical edges", async ({ demo, page }) => {
     await demo("chrome.html");
     await settle(page);

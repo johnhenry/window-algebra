@@ -166,24 +166,51 @@ export const buildChrome = (doc, { id, title = id, buttons = DEFAULT_CHROME_BUTT
   setTitle(title);
 
   // The body resizes with the window; its content grows on its own (a component that renders after the surface mounted,
-  // a list that fills). The body's box does not change then, so each child of the body is observed too, and a
-  // MutationObserver keeps that set in step with what the surface mounts and unmounts.
+  // a list that fills). The body's box does not change then, and neither does the box of a child that has a fixed
+  // height (`height: 100%`) while its rows overflow it, so a ResizeObserver on the body and its children is not enough.
+  // A MutationObserver on the whole subtree (children, text, and the attributes that move layout) also re-checks, and
+  // keeps the set of observed children in step with what the surface mounts and unmounts. Open shadow roots of the
+  // body's direct children (a custom element host) are observed too. Re-checks from mutations are coalesced to a frame.
   let observer;
   let mutations;
-  const Observer = doc.defaultView?.ResizeObserver;
-  if (Observer) {
-    observer = new Observer(syncScrollable);
-    observer.observe(body);
-    const watched = new Set();
-    const watch = () => {
-      for (const child of watched) if (child.parentNode !== body) { observer?.unobserve(child); watched.delete(child); }
-      for (const child of body.children) if (!watched.has(child)) { watched.add(child); observer?.observe(child); }
-      syncScrollable();
-    };
-    const Mutation = doc.defaultView?.MutationObserver;
+  let pending;
+  let cancelPending;
+  const view = doc.defaultView;
+  const Observer = view?.ResizeObserver;
+  const Mutation = view?.MutationObserver;
+  const MUTATION_OPTIONS = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "class", "hidden", "width", "height"] };
+  const watched = new Set();
+  const roots = new Set();
+  const watch = () => {
+    for (const child of watched) if (child.parentNode !== body) { observer?.unobserve(child); watched.delete(child); }
+    for (const child of body.children) {
+      if (!watched.has(child)) { watched.add(child); observer?.observe(child); }
+      const root = child.shadowRoot;
+      if (root && !roots.has(root) && mutations) { roots.add(root); mutations.observe(root, MUTATION_OPTIONS); }
+    }
+    syncScrollable();
+  };
+  const schedule = () => {
+    if (pending !== undefined) return;
+    const run = () => { pending = undefined; cancelPending = undefined; watch(); };
+    if (view?.requestAnimationFrame) {
+      const id = view.requestAnimationFrame(run);
+      pending = id;
+      cancelPending = () => view.cancelAnimationFrame?.(id);
+    } else {
+      const id = setTimeout(run, 0);
+      pending = id;
+      cancelPending = () => clearTimeout(id);
+    }
+  };
+  if (Observer || Mutation) {
+    if (Observer) {
+      observer = new Observer(syncScrollable);
+      observer.observe(body);
+    }
     if (Mutation) {
-      mutations = new Mutation(watch);
-      mutations.observe(body, { childList: true });
+      mutations = new Mutation(schedule);
+      mutations.observe(body, MUTATION_OPTIONS);
     }
     watch();
   }
@@ -203,8 +230,13 @@ export const buildChrome = (doc, { id, title = id, buttons = DEFAULT_CHROME_BUTT
     dispose() {
       observer?.disconnect();
       mutations?.disconnect();
+      cancelPending?.();
       observer = undefined;
       mutations = undefined;
+      pending = undefined;
+      cancelPending = undefined;
+      watched.clear();
+      roots.clear();
     },
   };
 };
