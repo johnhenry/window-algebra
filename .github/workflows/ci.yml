@@ -38,6 +38,10 @@ jobs:
       - run: npm test
       - name: Examples smoke test
         run: npm run examples
+      - name: Type declarations
+        # tsc --noEmit over a typed usage file that imports every entry point; its @ts-expect-error
+        # lines must fail to compile, so a type that goes loose breaks the build.
+        run: npm run test:types
       - name: Package contents
         # Read the list, not just the exit code: only src/ plus README,
         # LICENSE and package.json should ship (no demo/, test/, docs/).

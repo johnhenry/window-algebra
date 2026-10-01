@@ -7,8 +7,8 @@
 ## The verification loop (before every push)
 
 1. `npm test`: currently 785 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
-2. `npm run examples`: six self-verifying scripts (`examples/NN-*.mjs`), each exiting non-zero on failure.
-3. `npm pack --dry-run`: read the file list. Only `src/`, `README.md`, `LICENSE` and `package.json` should ship; no `demo/`, `test/`, `docs/` or `examples/`.
+2. `npm run examples`: six self-verifying scripts (`examples/NN-*.mjs`), each exiting non-zero on failure. `npm run test:types`: `tsc --noEmit` over `test/types/usage.mts` (its `@ts-expect-error` lines must fail to compile).
+3. `npm pack --dry-run`: read the file list. Only `src/` (which holds the hand-written `.d.mts` declarations), `README.md`, `LICENSE` and `package.json` should ship; no `demo/`, `test/`, `docs/` or `examples/`.
 4. A genuinely fresh clone: `git clone . /tmp/window-algebra-verifyN && cd $_ && npm ci && npm test && npm run examples`.
 5. For anything in `src/browser/`, `src/css/` or `demo/`: serve the repo root (`python3 -m http.server`), open `/demo/`, and exercise the page that covers the change (the hub's checklist says which).
 6. Commit and push, then close the issue with a comment naming the commit SHA.
@@ -32,7 +32,7 @@ CI (`.github/workflows/ci.yml`) runs `npm ci`, `npm test`, `npm run examples` an
 A change is done when all of the following hold, not just when tests pass:
 
 - A regression test exists for any bug fixed (`test/regressions.test.mjs` or the feature's own file).
-- New commands, events, config keys, options or exports are in `docs/api/` (commands must match `COMMANDS`; each has payload, events, effects and rejections), and the README overview still links to them.
+- New commands, events, config keys, options or exports are in `docs/api/` **and in the `.d.mts` declarations** (`src/types/commands.d.mts`, `events.d.mts`, `state.d.mts`, the entry point's own file; `test/types.test.mjs` fails when they drift), (commands must match `COMMANDS`; each has payload, events, effects and rejections), and the README overview still links to them.
 - Anything the feature does **not** do is stated in the README's `## Honest limitations` or the reference page.
 - `CHANGELOG.md` has an entry citing the commit.
 - Browser-facing features appear on a demo page and in the capability checklist (`demo/shared/coverage.mjs`). State-shape changes bump `STATE_VERSION` with a migration and a test (see `docs/api/versioning.md`).

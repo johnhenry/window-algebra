@@ -6,14 +6,38 @@
   "main": "./src/index.mjs",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.mjs",
-    "./browser": "./src/browser/index.mjs",
-    "./algebra": "./src/algebra/nodes.mjs",
-    "./transforms": "./src/algebra/transforms.mjs",
-    "./layouts": "./src/layouts/index.mjs",
-    "./css": "./src/css/compile.mjs",
-    "./react": "./src/bindings/react.mjs",
-    "./element": "./src/bindings/element.mjs",
+    ".": {
+      "types": "./src/index.d.mts",
+      "default": "./src/index.mjs"
+    },
+    "./browser": {
+      "types": "./src/browser/index.d.mts",
+      "default": "./src/browser/index.mjs"
+    },
+    "./algebra": {
+      "types": "./src/algebra/nodes.d.mts",
+      "default": "./src/algebra/nodes.mjs"
+    },
+    "./transforms": {
+      "types": "./src/algebra/transforms.d.mts",
+      "default": "./src/algebra/transforms.mjs"
+    },
+    "./layouts": {
+      "types": "./src/layouts/index.d.mts",
+      "default": "./src/layouts/index.mjs"
+    },
+    "./css": {
+      "types": "./src/css/compile.d.mts",
+      "default": "./src/css/compile.mjs"
+    },
+    "./react": {
+      "types": "./src/bindings/react.d.mts",
+      "default": "./src/bindings/react.mjs"
+    },
+    "./element": {
+      "types": "./src/bindings/element.d.mts",
+      "default": "./src/bindings/element.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -24,6 +48,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "test:types": "tsc -p test/types/tsconfig.json",
     "examples": "for f in examples/[0-9]*.mjs; do node \"$f\" || exit 1; done",
     "example:01": "node examples/01-state-derives-a-tree-that-compiles-to-css.mjs",
     "example:02": "node examples/02-bad-commands-are-rejected-and-history-replays.mjs",
@@ -54,5 +79,36 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
+    "typescript": "^7.0.2"
+  },
+  "types": "./src/index.d.mts",
+  "typesVersions": {
+    "*": {
+      "browser": [
+        "src/browser/index.d.mts"
+      ],
+      "algebra": [
+        "src/algebra/nodes.d.mts"
+      ],
+      "transforms": [
+        "src/algebra/transforms.d.mts"
+      ],
+      "layouts": [
+        "src/layouts/index.d.mts"
+      ],
+      "css": [
+        "src/css/compile.d.mts"
+      ],
+      "react": [
+        "src/bindings/react.d.mts"
+      ],
+      "element": [
+        "src/bindings/element.d.mts"
+      ]
+    }
   }
 }

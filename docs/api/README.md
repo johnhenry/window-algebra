@@ -24,6 +24,7 @@ For the rationale, prior art and open questions, see the design document, [`docs
 | [Cross-tab sync](./sync.md) | `attachSync`: BroadcastChannel state snapshots, the Lamport-clock last-writer-wins policy, undo/redo and pop-out behaviour, `toSnapshot`/`fromSnapshot`. |
 | [Framework bindings](./bindings.md) | `createReactBindings` (`useWindowManager`, `useWindowState`, `WindowManagerStage`) and the `<wa-stage>` custom element (`defineWindowAlgebraElement`, `attachStage`). |
 | [Versioning and migration](./versioning.md) | `STATE_VERSION`, `migrate`, `MIGRATIONS`, what each migration step does, how to add one, and the known `config.snap` gap. |
+| [TypeScript types](./types.md) | The shipped `.d.mts` declarations: the `Command` and `Event` unions, `State`, `WindowManager<C>`, how custom commands type-check, and how the types are tested. |
 | [Errors](./errors.md) | What is rejected as an event and what throws, with every rejection reason in one table. |
 
 ## Entry points

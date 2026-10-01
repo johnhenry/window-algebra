@@ -59,6 +59,8 @@ Node ≥ 26 (`engines.node`) for the pure core in Node. In the browser, use it t
 
 Entry points: `@johnhenry/window-algebra` (everything pure, plus the manager), `/browser` (renderer, input, surfaces, schedulers, pop-outs), `/react`, `/element`, and the narrower `/algebra`, `/transforms`, `/layouts` and `/css`. See [the entry-point table](docs/api/README.md#entry-points).
 
+**TypeScript:** every entry point ships declarations (a `types` condition on each export), with `Command` and `Event` as discriminated unions keyed by `type` and exact payloads for all 58 commands. No build step and no `@types` package. See [TypeScript types](docs/api/types.md).
+
 ## Quick start
 
 **The pure core**, anywhere (Node, a worker, a test):
@@ -260,6 +262,7 @@ See [Framework bindings](docs/api/bindings.md).
 | [Cross-tab sync](docs/api/sync.md) | `attachSync`, the snapshot and Lamport-clock design, undo/redo and pop-outs |
 | [Framework bindings](docs/api/bindings.md) | React and `<wa-stage>` |
 | [Versioning](docs/api/versioning.md) | `migrate`, `MIGRATIONS`, adding a migration |
+| [TypeScript types](docs/api/types.md) | the `Command`/`Event` unions, `State`, `WindowManager<C>`, how they are tested |
 | [Errors](docs/api/errors.md) | what is rejected vs thrown; every reason |
 
 The design rationale, prior art (xmonad's StackSet, River's policy/compositor split, AwesomeWM's stateless and stateful layouts, Elm's update loop) and open questions are in [`docs/PRD.md`](docs/PRD.md).
