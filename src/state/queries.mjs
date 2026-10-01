@@ -105,9 +105,36 @@ export const urgentWindows = (state) => state.urgent.filter((id) => state.window
 /** Every window id, bottom to top, across all layers. */
 export const stackingOrder = (state) => LAYERS.flatMap((layer) => state.stack[layer] ?? []);
 
+/** Is `id` a descendant (child, grandchild, ...) of `ancestor`? */
+export const isDescendantOf = (state, id, ancestor) => {
+  for (let win = state.windows[id]; win?.parent; win = state.windows[win.parent]) {
+    if (win.parent === ancestor) return true;
+  }
+  return false;
+};
+
+/**
+ * The visible window that is fullscreen on an output, if any. While one is,
+ * only it and its descendants are presented (see `presentedWindows`).
+ */
+export const fullscreenWindow = (state, outputId = state.focusedOutput) =>
+  visibleWindows(state, outputId).find((win) => win.status === "fullscreen");
+
+/**
+ * The visible windows of an output that are actually presented: all of them,
+ * or, while a window is fullscreen, just that window and its descendants (a
+ * fullscreen app's own dialogs and popovers still show; nothing else does).
+ */
+export const presentedWindows = (state, outputId = state.focusedOutput) => {
+  const visible = visibleWindows(state, outputId);
+  const fullscreen = visible.find((win) => win.status === "fullscreen");
+  if (!fullscreen) return visible;
+  return visible.filter((win) => win.id === fullscreen.id || isDescendantOf(state, win.id, fullscreen.id));
+};
+
 /** Windows that may receive focus on an output's active workspace, in workspace order. */
 export const focusable = (state, outputId = state.focusedOutput) =>
-  visibleWindows(state, outputId)
+  presentedWindows(state, outputId)
     .map((win) => win.id)
     .filter((id) => !isBlocked(state, id));
 
@@ -122,6 +149,8 @@ export const descendantsOf = (state, id) =>
  */
 export const inTiledBase = (state, win) =>
   Boolean(win) &&
+  // A window hidden in the scratchpad belongs to no workspace, so to no tiled base.
+  win.workspace !== null &&
   // Sticky windows are always presented as floating overlays, regardless of
   // mode: the tiled base is inherently workspace-local, sticky is not.
   !win.sticky &&
@@ -135,13 +164,16 @@ export const inTiledBase = (state, win) =>
  * painted, bottom to top — what `derive` produces, as opposed to
  * `stackingOrder`, the logical stack across all workspaces:
  *   background-layer windows → the tiled base → every other layer by stack.
- * A fullscreen window is painted alone.
+ * A fullscreen window is painted first, with its descendants (dialogs, popovers) above it, and nothing else.
  */
 export const paintOrder = (state, outputId = state.focusedOutput) => {
-  const visible = visibleWindows(state, outputId);
+  const visible = presentedWindows(state, outputId);
   const fullscreen = visible.find((win) => win.status === "fullscreen");
-  if (fullscreen) return [fullscreen.id];
   const rank = new Map(stackingOrder(state).map((id, i) => [id, i]));
+  if (fullscreen) {
+    const rest = visible.filter((win) => win.id !== fullscreen.id).sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    return [fullscreen.id, ...rest.map((win) => win.id)];
+  }
   const tiled = visible.filter((win) => inTiledBase(state, win)).map((win) => win.id);
   const upper = visible
     .filter((win) => !inTiledBase(state, win))

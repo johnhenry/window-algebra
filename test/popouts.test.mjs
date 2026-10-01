@@ -144,7 +144,7 @@ describe("attachPopouts", () => {
     assert.equal(renderer.elementFor("b").ownerDocument, renderer.root.ownerDocument);
   });
 
-  test("focusing the popup focuses the WM window; blurring/focusing elsewhere does not loop", () => {
+  test("focusing the popup blurs the WM focus (a popped-out window is never WM-focused); it does not loop", () => {
     const { renderer, wm } = setup();
     const popup = createFakeWindow();
     const popouts = attachPopouts({ wm, renderer, open: () => popup });
@@ -152,7 +152,10 @@ describe("attachPopouts", () => {
     wm.focus("a");
     assert.equal(wm.state.focus.window, "a");
     popup.dispatch("focus", {});
-    assert.equal(wm.state.focus.window, "b");
+    assert.equal(wm.state.focus.window, null);
+    popup.dispatch("focus", {});
+    assert.equal(wm.state.focus.window, null);
+    assert.equal(wm.focus("b").events[0].reason, "popped-out");
   });
 
   test("the popup's title tracks window/set-title while popped out", () => {

@@ -40,7 +40,7 @@ Read-only, pure functions over a state. They never mutate their input. Every que
 | --- | --- |
 | `isVisible(state, id)` | `true` when the window exists; its status is not `"minimized"` or `"popped-out"`; it is not a hidden scratchpad window (`workspace: null`); its workspace is the active workspace **of that workspace's own output** (or the window is sticky); and its parent, if any, is visible (recursively). Which output has focus does not matter. |
 | `visibleWindows(state, outputId = state.focusedOutput)` | Visible window records on that output: its active workspace's windows in workspace order, then sticky windows living on other workspaces of the same output. |
-| `focusable(state, outputId = state.focusedOutput)` | Ids of `visibleWindows` that are not blocked by a modal, in the same order. `focus/next` cycles these. |
+| `focusable(state, outputId = state.focusedOutput)` | Ids of `presentedWindows` that are not blocked by a modal, in the same order. `focus/next` cycles these. |
 | `isPoppedOut(state, id)` | `status === "popped-out"`. |
 | `isScratchpadHidden(state, id)` | A scratchpad window that is currently hidden (`scratchpad: true` and `workspace: null`). |
 
@@ -59,8 +59,11 @@ Read-only, pure functions over a state. They never mutate their input. Every que
 | Query | Returns |
 | --- | --- |
 | `stackingOrder(state)` | Every window id, bottom to top, across all layers and workspaces: the **logical** stack (`LAYERS` order, then `state.stack[layer]` order). |
-| `paintOrder(state, outputId = state.focusedOutput)` | The **visual** order of the output's visible windows, bottom to top, exactly as `derive` paints them: background-layer windows, then the tiled base (in workspace order), then every other visible window by stacking order. If a visible window is fullscreen, just `[thatId]`. |
-| `inTiledBase(state, win)` | Takes a window **record**. It is `true` when the window is laid out by the workspace layout: `role: "window"`, `mode: "tiled"`, not sticky, not maximized, and the workspace layout is not `floating`. Tiled windows paint above the background layer and beneath everything else, whatever their position in `state.stack`. |
+| `paintOrder(state, outputId = state.focusedOutput)` | The **visual** order of the output's visible windows, bottom to top, exactly as `derive` paints them: background-layer windows, then the tiled base (in workspace order), then every other visible window by stacking order. If a visible window is fullscreen, just that window followed by its descendants. |
+| `presentedWindows(state, outputId = state.focusedOutput)` | The visible windows `derive` actually presents: all of `visibleWindows`, or, while a window is fullscreen, just that window and its descendants. |
+| `fullscreenWindow(state, outputId = state.focusedOutput)` | The visible fullscreen window record on an output, or `undefined`. |
+| `isDescendantOf(state, id, ancestor)` | Is `id` a child, grandchild, ... of `ancestor`? |
+| `inTiledBase(state, win)` | Takes a window **record**. It is `true` when the window is laid out by the workspace layout: `role: "window"`, `mode: "tiled"`, not sticky, not maximized, not hidden in the scratchpad (`workspace: null`), and the workspace layout is not `floating`. Tiled windows paint above the background layer and beneath everything else, whatever their position in `state.stack`. |
 
 ## Status sets
 

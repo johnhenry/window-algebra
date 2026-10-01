@@ -55,6 +55,11 @@ COMMANDS                                              // frozen array of the 51 
 7. `focus.window` is set and the id moves to the end of `focus.history`.
 8. `focus/redirected { requested, id }` is emitted if modal redirection changed the target. `window/focused { id, previous }` is emitted if the focused window changed.
 
+9. **Focus is only given to what is shown.** A target that is hidden in the scratchpad, popped out, or has such an ancestor can never be focused, and one that would still be invisible after steps 2 to 4 is skipped too. Commands that name their target (`window/focus`, `focus/urgent`) reject with `not-on-workspace`, `popped-out` or `not-visible`; the others (a create, a `follow`) simply do not focus. The invariant is that `focus.window` is `null` or a visible window.
+10. **Fullscreen.** While a window is fullscreen, only it and its descendants are presented. Cycling (`focus/next`, `focus/previous`) stays inside that set; creating a window does not focus one outside it. An explicit `window/focus` (or `focus/urgent`, a `follow`, showing a scratchpad window) of a window beneath the fullscreen one ends that fullscreen first (`window/status-changed { status: "normal", previous: "fullscreen" }`).
+
+Minimized ancestors of the target are restored along with it (step 4 applies to the whole chain).
+
 Effects: `render`, `{ type: "focus", id: target }`.
 
 **Refocus.** It runs after commands that can hide the focused window: close, minimize, pop-out, move to another workspace, scratchpad, unstick, workspace and output changes. If the focused window is still visible, nothing happens. Otherwise focus goes to the most recent window in `focus.history` that is still focusable, through `applyFocus`. If none is left, focus becomes `null`, `window/blurred { id }` is emitted (when something was focused), and the effect is `{ type: "focus", id: null }`.
@@ -82,7 +87,7 @@ It is then focused through the focus policy, **unless** `focus: false` is given 
 
 - **Events:** `window/created { id, rules? }` (`rules` is the array of matched rule indices, present only when at least one matched), followed by the focus events.
 - **Effects:** `render`, plus `focus` when focused.
-- **Rejections:** `missing-id` (not a non-empty string), `duplicate-id`, `unknown-parent`, `unknown-role` (not in `ROLES`), `unknown-layer` (not in `LAYERS`), `unknown-mode` (not `tiled` or `floating`), `unknown-workspace` (after rules: a rule may send the window to a workspace that does not exist).
+- **Rejections:** `missing-id` (not a non-empty string), `duplicate-id`, `unknown-parent`, `hidden-parent` (the parent is hidden in the scratchpad), `parent-on-other-workspace` (a modal dialog on another workspace than its parent), `unknown-role` (not in `ROLES`), `unknown-layer` (not in `LAYERS`), `unknown-mode` (not `tiled` or `floating`), `unknown-workspace` (after rules: a rule may send the window to a workspace that does not exist).
 
 ### `window/close`
 
@@ -106,7 +111,7 @@ Focuses a window through the full [focus policy](#shared-behaviour): modal redir
 
 - **Events:** as the focus policy.
 - **Effects:** `render`, `{ type: "focus", id: <final target> }`.
-- **Rejections:** `unknown-window`.
+- **Rejections:** `unknown-window`, `not-on-workspace` (hidden in the scratchpad, or a child of such a window), `popped-out` (a popped-out window, or a child of one), `not-visible` (the target would still not be shown, for example a child whose parent is on another workspace).
 
 ### `window/blur`
 
@@ -146,7 +151,7 @@ Like `focus/next`, backwards.
 { type: "focus/urgent" }
 ```
 
-Focuses the **oldest** urgent window (first in `state.urgent`), switching output and workspace as needed. With `config.urgency.clearOnFocus` its urgency is cleared.
+Focuses the **oldest** urgent window that can be focused (first in `state.urgent`; urgent windows hidden in the scratchpad or popped out are skipped), switching output and workspace as needed. With `config.urgency.clearOnFocus` its urgency is cleared.
 
 - **Events:** the focus-policy events, including `window/urgent-changed { urgent: false }`.
 - **Effects:** `render`, `focus`.
@@ -298,10 +303,10 @@ Sets `status: "minimized"`. The window leaves the presentation and stops blockin
 { type: "window/maximize", id }
 ```
 
-Sets `status: "maximized"`. The window leaves the tiled base (if it was in it) and fills the stage in its layer.
+Sets `status: "maximized"`. The window leaves the tiled base (if it was in it) and fills the stage in its layer. If the window is currently shown, it is also focused (through the focus policy, so a modal child takes the focus instead); a window on another workspace is not, so maximizing never switches workspace.
 
-- **Events:** `window/status-changed { id, status: "maximized", previous }`.
-- **Effects:** `render`.
+- **Events:** `window/status-changed { id, status: "maximized", previous }`, then the focus events.
+- **Effects:** `render`, plus `focus`.
 - **Rejections:** `unknown-window`.
 
 ### `window/fullscreen`
@@ -310,10 +315,10 @@ Sets `status: "maximized"`. The window leaves the tiled base (if it was in it) a
 { type: "window/fullscreen", id }
 ```
 
-Sets `status: "fullscreen"`. While a visible window is fullscreen, `derive` presents it alone and `paintOrder` is `[id]`.
+Sets `status: "fullscreen"`. While a visible window is fullscreen, `derive` presents it and its **descendants** (its own dialogs, sheets and popovers, which stay above it) and nothing else, and `paintOrder` is the window followed by those descendants. So fullscreening a parent with an open modal dialog does not strand the dialog: it stays painted and focused. As with `window/maximize`, a window that is currently shown also takes focus; one on another workspace does not.
 
-- **Events:** `window/status-changed { id, status: "fullscreen", previous }`.
-- **Effects:** `render`.
+- **Events:** `window/status-changed { id, status: "fullscreen", previous }`, then the focus events.
+- **Effects:** `render`, plus `focus`.
 - **Rejections:** `unknown-window`.
 
 ### `window/restore`
@@ -398,11 +403,11 @@ EWMH-style sticky: the window is visible on every workspace of its own output. I
 { type: "window/swap", a, b }
 ```
 
-Exchanges two windows' positions in their workspace's `windows` order, and in the stored tree for `bsp` and docking `tree` workspaces. Any two windows on the same workspace can be swapped; no droppability checks apply.
+Exchanges two windows' positions in their workspace's `windows` order, and in the stored tree for `bsp` and docking `tree` workspaces. Any two windows on the same workspace can be swapped; no droppability checks apply. Swapping a window with itself is a no-op.
 
 - **Events:** `window/swapped { a, b }`.
 - **Effects:** `render`.
-- **Rejections:** `unknown-window` (either missing), `different-workspaces`.
+- **Rejections:** `unknown-window` (either missing), `not-on-workspace` (either is hidden in the scratchpad), `different-workspaces`.
 
 ### `window/promote`
 
@@ -486,11 +491,11 @@ The mirror of `window/move-before` (bottom/right, after, the next neighbour). Th
 { type: "window/move-to-workspace", id, workspace, follow? }
 ```
 
-Moves a window **and its descendants** to another workspace (appended to its `windows`, re-inserted into a `bsp` tree there). A floating window keeps its placement. Moving a scratchpad window (shown or hidden) onto a workspace directly takes it out of the scratchpad permanently. With `follow: true`, the window is then focused (activating its new workspace, and output if different). Otherwise [refocus](#shared-behaviour) runs. It is a no-op when the window is already on that workspace.
+Moves a window **and its descendants** to another workspace (appended to its `windows`, re-inserted into a `bsp` tree there). A floating window keeps its placement. Moving a scratchpad window (shown or hidden) onto a workspace directly takes it out of the scratchpad permanently. With `follow: true`, the window is then focused (activating its new workspace, and output if different). Otherwise [refocus](#shared-behaviour) runs. It is a no-op when the window is already on that workspace. A window with a parent cannot be moved on its own (that would strand a dialog away from the window it blocks): move its root ancestor instead and the descendants follow.
 
 - **Events:** `window/workspace-changed { id, workspace }` (the requested window only), then the focus or refocus events.
 - **Effects:** `render`, plus `focus`.
-- **Rejections:** `unknown-window`, `unknown-workspace`.
+- **Rejections:** `unknown-window`, `unknown-workspace`, `has-parent`.
 
 ### `window/to-scratchpad`
 
@@ -498,11 +503,11 @@ Moves a window **and its descendants** to another workspace (appended to its `wi
 { type: "window/to-scratchpad", id }
 ```
 
-i3-style scratchpad. It hides the window off every workspace: `workspace: null`, removed from its workspace and BSP tree, forced to `mode: "floating"`, marked `scratchpad: true`, and recorded as `lastScratchpad`. Then [refocus](#shared-behaviour). It is a no-op when the window is already hidden. Children are not moved; they stay on their workspace but become invisible, because visibility requires a visible parent.
+i3-style scratchpad. It hides the window off every workspace: `workspace: null`, removed from its workspace and BSP tree, forced to `mode: "floating"`, marked `scratchpad: true`, and recorded as `lastScratchpad`. Then [refocus](#shared-behaviour). It is a no-op when the window is already hidden. Children stay on their workspace but become invisible, because visibility requires a visible parent; `scratchpad/toggle` brings them along when it shows the window again. A window that has a parent cannot be sent to the scratchpad on its own.
 
 - **Events:** `window/scratchpad { id }`, then the refocus events.
 - **Effects:** `render`, plus `focus` from refocus.
-- **Rejections:** `unknown-window`.
+- **Rejections:** `unknown-window`, `has-parent`.
 
 ### `scratchpad/toggle`
 
@@ -512,7 +517,7 @@ i3-style scratchpad. It hides the window off every workspace: `workspace: null`,
 
 Shows or hides a scratchpad window (default: `lastScratchpad`).
 
-- **Hidden → shown:** placed on the active workspace, floating and centred (`placement.x`/`y` become `"center"`, resolved purely in CSS), then focused.
+- **Hidden → shown:** placed on the active workspace (with its descendants), floating and centred (`placement.x`/`y` become `"center"`, resolved purely in CSS), then focused (ending a fullscreen window beneath it, if any).
 - **Shown → hidden:** back to `workspace: null`, then refocus.
 
 Either way it becomes `lastScratchpad`.

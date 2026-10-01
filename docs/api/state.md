@@ -122,7 +122,7 @@ How each role is presented (by `derive`, for windows not in the tiled base):
 | `popover`, `menu`, `tooltip` | Anchored by side (default `side: "bottom"`, `align: "start"`, `offset: 4`) to `anchor.to` or the visible parent. Every other anchor option passes through. With no anchor, floating at `placement`. |
 | `notification` | Stacked in the bottom-right corner (`right: 16`, each successive one `height + 8` px higher). |
 
-Any window with `status: "maximized"` fills the stage (`place({ top: 0, right: 0, bottom: 0, left: 0 })`). A `"fullscreen"` window is presented alone. `"minimized"` and `"popped-out"` windows are not presented.
+Any window with `status: "maximized"` fills the stage (`place({ top: 0, right: 0, bottom: 0, left: 0 })`). A `"fullscreen"` window is presented with its descendants only. `"minimized"` and `"popped-out"` windows are not presented.
 
 ## Configuration (`config`)
 

@@ -159,8 +159,11 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
       (popupDoc.body ?? popupDoc).appendChild(element);
     }
 
+    // A popped-out window is not on the stage, so it can never be the WM's
+    // focused window (focus is only given to visible windows). Focusing the
+    // popup instead clears the WM focus: keyboard focus has left the stage.
     const onFocus = () => {
-      if (wm.getState().focus.window !== id) wm.dispatch({ type: "window/focus", id });
+      if (wm.getState().focus.window !== null) wm.dispatch({ type: "window/blur" });
     };
     let closedByPopup = false;
     const onUnload = () => {

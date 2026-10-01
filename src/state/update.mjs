@@ -15,7 +15,7 @@ import { LAYERS, ROLES, STATUSES, createWindowRecord, createWorkspace, createOut
 import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile } from "../layouts/bsp.mjs";
 import { treeFrom, treeFromBsp, treeNodeAt, treeSetSizesAt } from "../layouts/tree.mjs";
-import { modalTarget, descendantsOf, focusable, isVisible, isBlocked } from "./queries.mjs";
+import { modalTarget, descendantsOf, focusable, isVisible, isBlocked, isDescendantOf, fullscreenWindow } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
 import { migrate } from "./migrate.mjs";
@@ -107,9 +107,29 @@ const bspDrop = (state, workspaceId, id) =>
     ? setLayout(state, workspaceId, (layout) => ({ ...layout, tree: bspRemove(layout.tree ?? null, id) }))
     : state;
 
-/** Apply focus, following policy: modal redirection, output/workspace switch, raise. */
-const applyFocus = (state, requested) => {
+/**
+ * Why a window can never take focus: it (or an ancestor) is hidden in the
+ * scratchpad or popped out into another browser window, so there is nothing
+ * to focus. `null` when focusing may succeed.
+ */
+const unfocusableReason = (state, id) => {
+  for (let win = state.windows[modalTarget(state, id)]; win; win = win.parent ? state.windows[win.parent] : undefined) {
+    if (win.workspace === null) return "not-on-workspace";
+    if (win.status === "popped-out") return "popped-out";
+  }
+  return null;
+};
+
+/**
+ * Apply focus, following policy: modal redirection, output/workspace switch,
+ * restore, raise. Returns `null` (nothing changes) when the target would not
+ * be visible afterwards: focus is only ever given to a window that is shown.
+ * `exitFullscreen` lets an explicit request for a window hidden beneath a
+ * fullscreen one end that fullscreen; without it such a window is not focused.
+ */
+const focusOrNull = (state, requested, { exitFullscreen = false } = {}) => {
   const target = modalTarget(state, requested);
+  if (unfocusableReason(state, requested)) return null;
   const previous = state.focus.window;
   let next = state;
   const events = [];
@@ -134,10 +154,20 @@ const applyFocus = (state, requested) => {
         : {}),
     };
   }
-  if (win.status === "minimized") {
-    next = setWindow(next, target, { status: "normal" });
-    events.push({ type: "window/restored", id: target });
+  // Restore the target, and any minimized ancestor it hangs off.
+  for (let w = next.windows[target]; w; w = w.parent ? next.windows[w.parent] : undefined) {
+    if (w.status !== "minimized") continue;
+    next = setWindow(next, w.id, { status: "normal" });
+    events.push({ type: "window/restored", id: w.id });
   }
+  // A fullscreen window covers everything but its own descendants.
+  const covering = fullscreenWindow(next, outputId ?? next.focusedOutput);
+  if (covering && covering.id !== target && !isDescendantOf(next, target, covering.id)) {
+    if (!exitFullscreen) return null;
+    next = setWindow(next, covering.id, { status: "normal" });
+    events.push({ type: "window/status-changed", id: covering.id, status: "normal", previous: "fullscreen" });
+  }
+  if (!isVisible(next, target)) return null;
   if (next.config.focusRaises) next = raiseInStack(next, target);
   if (next.config.urgency?.clearOnFocus !== false && next.urgent.includes(target)) {
     next = { ...next, urgent: without(next.urgent, target) };
@@ -150,6 +180,43 @@ const applyFocus = (state, requested) => {
   if (target !== requested) events.push({ type: "focus/redirected", requested, id: target });
   if (target !== previous) events.push({ type: "window/focused", id: target, previous });
   return result(next, events, [RENDER, { type: "focus", id: target }]);
+};
+
+/** `focusOrNull`, but an unfocusable target is simply left alone. */
+const applyFocus = (state, requested, options) => focusOrNull(state, requested, options) ?? result(state);
+
+/** Focus on behalf of a command that names its target: unfocusable means rejected. */
+const focusCommand = (state, command, id) =>
+  focusOrNull(state, id, { exitFullscreen: true }) ??
+  rejected(state, command, unfocusableReason(state, id) ?? "not-visible");
+
+/**
+ * Put a window and all its descendants on a workspace, whatever workspace (or
+ * the scratchpad) they were on. Moving a scratchpad window onto a workspace
+ * directly pulls it out of the scratchpad for good.
+ */
+const moveFamilyTo = (state, win, target) => {
+  let next = state;
+  for (const id of [win.id, ...descendantsOf(state, win.id)]) {
+    const from = next.windows[id].workspace;
+    // A hidden scratchpad window (workspace: null) belongs to no workspace yet.
+    if (from !== null) {
+      next = setWorkspace(next, from, { windows: without(next.workspaces[from].windows, id) });
+      next = bspDrop(next, from, id);
+    }
+    next = setWindow(next, id, { workspace: target });
+    next = setWorkspace(next, target, { windows: [...next.workspaces[target].windows, id] });
+    next = bspAdd(next, next.windows[id]);
+  }
+  if (win.scratchpad) {
+    const { scratchpad: _scratchpad, ...rest } = next.windows[win.id];
+    next = {
+      ...next,
+      windows: { ...next.windows, [win.id]: rest },
+      lastScratchpad: next.lastScratchpad === win.id ? null : next.lastScratchpad,
+    };
+  }
+  return next;
 };
 
 /** After the focused window disappears, focus the most recent remaining focusable window. */
@@ -212,6 +279,7 @@ const handlers = {
     if (typeof id !== "string" || !id) return rejected(state, command, "missing-id");
     if (state.windows[id]) return rejected(state, command, "duplicate-id");
     if (command.parent && !state.windows[command.parent]) return rejected(state, command, "unknown-parent");
+    if (command.parent && state.windows[command.parent].workspace === null) return rejected(state, command, "hidden-parent");
     if (command.role !== undefined && !ROLES.includes(command.role)) return rejected(state, command, "unknown-role");
     if (command.layer !== undefined && !LAYERS.includes(command.layer)) return rejected(state, command, "unknown-layer");
     if (command.mode !== undefined && !MODES.includes(command.mode)) return rejected(state, command, "unknown-mode");
@@ -219,6 +287,10 @@ const handlers = {
     const appliedRules = matchRules(state, win);
     if (appliedRules.length) win = applyRulePatch(win, foldRuleSets(state, appliedRules), command);
     if (!state.workspaces[win.workspace]) return rejected(state, command, "unknown-workspace");
+    // A modal dialog on another workspace than its parent would block a window the user can see with a dialog they cannot.
+    if (win.modal && win.parent && state.windows[win.parent].workspace !== win.workspace) {
+      return rejected(state, command, "parent-on-other-workspace");
+    }
     let next = { ...state, windows: { ...state.windows, [id]: win } };
     next = setWorkspace(next, win.workspace, { windows: [...next.workspaces[win.workspace].windows, id] });
     next = bspAdd(next, win, state.focus.window);
@@ -265,7 +337,7 @@ const handlers = {
 
   "window/focus"(state, command) {
     if (!state.windows[command.id]) return rejected(state, command, "unknown-window");
-    return applyFocus(state, command.id);
+    return focusCommand(state, command, command.id);
   },
 
   "window/blur"(state) {
@@ -291,9 +363,9 @@ const handlers = {
    * (see `config.urgency.clearOnFocus`).
    */
   "focus/urgent"(state, command) {
-    const id = state.urgent.find((wid) => state.windows[wid]);
+    const id = state.urgent.find((wid) => state.windows[wid] && !unfocusableReason(state, wid));
     if (!id) return rejected(state, command, "no-urgent-window");
-    return applyFocus(state, id);
+    return focusCommand(state, command, id);
   },
 
   /**
@@ -471,7 +543,9 @@ const handlers = {
     const wa = state.windows[a];
     const wb = state.windows[b];
     if (!wa || !wb) return rejected(state, command, "unknown-window");
+    if (wa.workspace === null || wb.workspace === null) return rejected(state, command, "not-on-workspace");
     if (wa.workspace !== wb.workspace) return rejected(state, command, "different-workspaces");
+    if (a === b) return result(state);
     const next = swapWindows(state, a, b);
     return result(next, [{ type: "window/swapped", a, b }], [RENDER]);
   },
@@ -493,32 +567,13 @@ const handlers = {
     if (!win) return rejected(state, command, "unknown-window");
     const target = command.workspace;
     if (!state.workspaces[target]) return rejected(state, command, "unknown-workspace");
+    // A child follows its parent; moving it alone would strand a dialog away from the window it blocks.
+    if (win.parent) return rejected(state, command, "has-parent");
     if (win.workspace === target) return result(state);
-    const moving = [win.id, ...descendantsOf(state, win.id)];
-    let next = state;
-    for (const id of moving) {
-      const from = next.windows[id].workspace;
-      // A hidden scratchpad window (workspace: null) belongs to no workspace yet.
-      if (from !== null) {
-        next = setWorkspace(next, from, { windows: without(next.workspaces[from].windows, id) });
-        next = bspDrop(next, from, id);
-      }
-      next = setWindow(next, id, { workspace: target });
-      next = setWorkspace(next, target, { windows: [...next.workspaces[target].windows, id] });
-      next = bspAdd(next, next.windows[id]);
-    }
-    // Moving a scratchpad window onto a workspace directly pulls it out of the scratchpad for good.
-    if (win.scratchpad) {
-      const { scratchpad: _scratchpad, ...rest } = next.windows[win.id];
-      next = {
-        ...next,
-        windows: { ...next.windows, [win.id]: rest },
-        lastScratchpad: next.lastScratchpad === win.id ? null : next.lastScratchpad,
-      };
-    }
+    const next = moveFamilyTo(state, win, target);
     const moved = result(next, [{ type: "window/workspace-changed", id: win.id, workspace: target }], [RENDER]);
     // follow: go with the window (activate its new workspace and focus it).
-    if (command.follow) return merge(moved, applyFocus(next, win.id));
+    if (command.follow) return merge(moved, applyFocus(next, win.id, { exitFullscreen: true }));
     return merge(moved, refocus(next));
   },
 
@@ -533,6 +588,7 @@ const handlers = {
     const { id } = command;
     const win = state.windows[id];
     if (!win) return rejected(state, command, "unknown-window");
+    if (win.parent) return rejected(state, command, "has-parent");
     if (win.workspace === null) return result(state);
     const from = win.workspace;
     let next = setWorkspace(state, from, { windows: without(state.workspaces[from].windows, id) });
@@ -560,10 +616,10 @@ const handlers = {
     if (win.workspace === null) {
       // Show: float it, centered, on the active workspace.
       const ws = next.activeWorkspace;
-      next = setWindow(next, id, { workspace: ws, placement: { ...win.placement, x: "center", y: "center" } });
-      next = setWorkspace(next, ws, { windows: [...next.workspaces[ws].windows, id] });
+      next = moveFamilyTo(next, { ...win, scratchpad: false }, ws);
+      next = setWindow(next, id, { placement: { ...win.placement, x: "center", y: "center" } });
       const shown = result(next, [{ type: "scratchpad/shown", id }], [RENDER]);
-      return merge(shown, applyFocus(next, id));
+      return merge(shown, applyFocus(next, id, { exitFullscreen: true }));
     }
     // Hide: wherever it currently is.
     const ws = win.workspace;
@@ -655,7 +711,7 @@ const handlers = {
       // would be left pointing at the removed workspace.
       const parentHere = win?.parent && next.windows[win.parent]?.workspace === id;
       if (win?.workspace === id && !parentHere) {
-        next = handlers["window/move-to-workspace"](next, { id: winId, workspace: fallback }).state;
+        next = moveFamilyTo(next, win, fallback);
       }
     }
     const { [id]: _gone, ...workspaces } = next.workspaces;
@@ -1087,6 +1143,8 @@ function setStatus(state, command, status) {
   const next = setWindow(state, win.id, { status });
   const changed = result(next, [{ type: `window/status-changed`, id: win.id, status, previous: win.status }], [RENDER]);
   if (status === "minimized") return merge(changed, refocus(next));
+  // Taking over the screen takes focus with it (only when the window is on screen to begin with).
+  if ((status === "fullscreen" || status === "maximized") && isVisible(next, win.id)) return merge(changed, applyFocus(next, win.id));
   return changed;
 }
 

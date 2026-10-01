@@ -59,7 +59,12 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | `empty-scratchpad` | `scratchpad/toggle` |
 | `not-scratchpad` | `scratchpad/toggle` |
 | `not-popped-out` | `window/pop-in` |
-| `not-on-workspace` | `window/promote` (a window hidden in the scratchpad) |
+| `not-on-workspace` | `window/promote`, `window/swap`, `window/focus`, `focus/urgent` (a window hidden in the scratchpad, or a child of one) |
+| `popped-out` | `window/focus` (a window that is popped out, or a child of one) |
+| `not-visible` | `window/focus` (the target would still not be shown after the focus policy ran) |
+| `hidden-parent` | `window/create` (the parent is hidden in the scratchpad) |
+| `parent-on-other-workspace` | `window/create` (a modal dialog on another workspace than its parent) |
+| `has-parent` | `window/move-to-workspace`, `window/to-scratchpad` (move the root ancestor instead) |
 | `popup-blocked` | `attachPopouts().popOut` |
 | `last-workspace` | `workspace/remove` |
 | `last-workspace-on-output` | `workspace/remove`, `workspace/move-to-output` |

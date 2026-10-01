@@ -23,7 +23,7 @@ derive(state, { layouts = {}, modifiers = {}, output } = {}) → overlay node
 
 This is pure policy. It turns logical state into a layout-algebra tree for one output's active workspace (default `state.focusedOutput`).
 
-1. If a visible window is `fullscreen`, the result is `overlay({}, view(thatId))` and nothing else.
+1. If a visible window is `fullscreen`, the result is `overlay({}, view(thatId), ...descendants)`: the fullscreen window and its own descendants (dialogs, sheets, popovers, presented by role and anchored to their parent as usual, in stacking order), and nothing else.
 2. The **tiled base**: the visible windows that are [`inTiledBase`](./queries.md#stacking-and-painting), in workspace order, are passed as `ids` to the workspace's layout interpreter, wrapped by its [modifiers](#layout-modifiers). The interpreter comes from `{ ...LAYOUTS, ...layouts }[spec.type]`, or it *is* the spec when the spec is a function.
 3. Tiled windows with `minWidth`/`minHeight`/`maxWidth`/`maxHeight` or an exact numeric `aspectRatio` get wrapped in `size(...)` so CSS honours them. Ranges and increments are advisory for tiled windows.
 4. `config.gap` wraps **every container** of the base in `gap({ all })`, and `config.inset` wraps the base in `inset({ all })`, unless a `smart-gaps`/`no-gaps` modifier suppresses them.

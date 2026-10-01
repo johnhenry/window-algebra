@@ -7,7 +7,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { createState, update, derive, compile, presentationContext, COMMANDS, columns, isVisible, isBlocked, LAYERS } from "../src/index.mjs";
+import { createState, update, derive, compile, presentationContext, COMMANDS, columns, presentedWindows, isVisible, isBlocked, LAYERS } from "../src/index.mjs";
 
 const SEED = 20260930;
 const PAYLOADS_PER_FIXTURE = 50;
@@ -19,9 +19,6 @@ const WALK_STEPS = 300;
  * longer matches any failure fails the test too (so the list cannot rot).
  */
 const KNOWN = [
-  { finding: "1, 5, 6: focus on invisible windows", matches: (_t, i) => ["focus-visible", "active-workspace-valid", "active-workspace-matches-output"].includes(i) },
-  { finding: "4, 6: blocked parent whose dialog is not presented", matches: (_t, i) => i === "blocker-is-presentable" },
-  { finding: "3: hidden tiled window in keyboard moves", matches: (t, i) => i === "throws" && /^window\/(move-before|move-after|swap-next|swap-previous)$/.test(t) },
   { finding: "8, 11: layouts derive cannot present", matches: (_t, i) => i === "derive-throws" },
 ];
 const hits = new Map();
@@ -153,13 +150,20 @@ const violationsOf = (state) => {
   const f = state.focus.window;
   check("focus-exists", f === null || Boolean(state.windows[f]));
   check("focus-visible", f === null || !state.windows[f] || isVisible(state, f));
+  if (f !== null && state.windows[f] && isVisible(state, f)) {
+    const output = state.workspaces[state.windows[f].workspace]?.output;
+    check("focus-presented", presentedWindows(state, output).some((w) => w.id === f));
+  }
   check("focus-history-valid", state.focus.history.every((id) => state.windows[id]));
   check("urgent-valid", state.urgent.every((id) => state.windows[id]));
   check("last-scratchpad-valid", state.lastScratchpad === null || Boolean(state.windows[state.lastScratchpad]));
   // A modal-blocked window must be reachable through its dialog: if anything is blocked, the dialog is visible.
   for (const win of wins) {
-    if (isVisible(state, win.id) && isBlocked(state, win.id)) {
-      check("blocker-is-presentable", isVisible(state, modalOf(state, win.id)));
+    // A presented, blocked window must have its blocker presented too (else nothing on screen can take input for it).
+    const output = state.workspaces[win.workspace]?.output;
+    if (isVisible(state, win.id) && isBlocked(state, win.id) && presentedWindows(state, output).some((w) => w.id === win.id)) {
+      const blocker = modalOf(state, win.id);
+      check("blocker-is-presentable", presentedWindows(state, output).some((w) => w.id === blocker));
     }
   }
   for (const output of state.outputOrder) {
