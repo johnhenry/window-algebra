@@ -172,6 +172,17 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
       closedByPopup = true;
       closePopup(id);
     };
+    // The window's chrome (`data-wm-command` buttons) lives in the popup now, outside the stage root that
+    // `attachInput` listens on: give the popup the same click delegation, and let `window/pop-in` carry the DOM back.
+    const onPopupClick = (event) => {
+      const button = event.target?.closest?.("[data-wm-command]");
+      if (!button) return;
+      const type = button.getAttribute("data-wm-command");
+      const target = button.getAttribute("data-wm-target") ?? id;
+      if (type === "window/pop-in") popIn(target);
+      else wm.dispatch({ type, id: target });
+    };
+    popupDoc?.addEventListener?.("click", onPopupClick);
     popup.addEventListener?.("focus", onFocus);
     popup.addEventListener?.("pagehide", onUnload);
     popup.addEventListener?.("beforeunload", onUnload);
@@ -189,6 +200,7 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
         return closedByPopup;
       },
       detach() {
+        popupDoc?.removeEventListener?.("click", onPopupClick);
         popup.removeEventListener?.("focus", onFocus);
         popup.removeEventListener?.("pagehide", onUnload);
         popup.removeEventListener?.("beforeunload", onUnload);

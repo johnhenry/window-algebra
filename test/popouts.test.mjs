@@ -60,6 +60,43 @@ describe("attachPopouts", () => {
     assert.equal(popup.document.head.querySelectorAll("style").length, 1);
   });
 
+  test("the popup's data-wm-command buttons work (the chrome moved out of the stage root); window/pop-in carries the DOM back", () => {
+    const { doc, root, renderer, wm } = setup();
+    const popup = createFakeWindow();
+    const popouts = attachPopouts({ wm, renderer, open: () => popup });
+    popouts.popOut("b");
+    const bElement = popup.document.body.childNodes[0];
+    const button = (command, extra = {}) => {
+      const el = popup.document.createElement("button");
+      el.setAttribute("data-wm-command", command);
+      for (const [k, v] of Object.entries(extra)) el.setAttribute(k, v);
+      bElement.append(el);
+      return el;
+    };
+    const click = (el) => popup.document.dispatch("click", { target: el });
+    click(button("window/minimize"));
+    assert.equal(wm.state.windows.b.status, "minimized", "dispatched { type, id } for the popped-out window");
+    assert.equal(popouts.isPoppedOut("b"), false, "leaving popped-out closes the popup");
+
+    // A second round trip: the pop-in button routes through popIn, so the element returns to the stage.
+    wm.restore("b");
+    const popup2 = createFakeWindow();
+    const popouts2 = attachPopouts({ wm, renderer, open: () => popup2 });
+    popouts2.popOut("b");
+    const element = popup2.document.body.childNodes[0];
+    const popIn = popup2.document.createElement("button");
+    popIn.setAttribute("data-wm-command", "window/pop-in");
+    element.append(popIn);
+    popup2.document.dispatch("click", { target: popIn });
+    assert.equal(wm.state.windows.b.status, "normal");
+    assert.equal(renderer.elementFor("b"), element, "the same DOM node came back");
+    assert.ok(root.contains(element));
+    assert.equal(popup2.closed, true);
+    // A click on something that is not a command does nothing, and detach() removes the delegate.
+    popouts2.detach();
+    void doc;
+  });
+
   test("pop-out: a popup blocker (open returns null) rejects with an event and touches nothing", () => {
     const { renderer, wm } = setup();
     const popouts = attachPopouts({ wm, renderer, open: () => null });
