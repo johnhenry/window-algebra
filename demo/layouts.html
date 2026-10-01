@@ -115,7 +115,7 @@
         </div>
         <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--line)">
           <h2>wm.present().tree <span class="spacer"></span><span class="chip" id="nodes"></span></h2>
-          <pre id="tree"></pre>
+          <pre id="tree" tabindex="0" role="region" aria-label="Layout tree"></pre>
         </div>
       </aside>
     </main>
@@ -277,7 +277,8 @@
             const spec = entry.key === current ? ws.layout : entry.spec;
             const probe = { ...state, workspaces: { ...state.workspaces, [ws.id]: { ...ws, layout: spec } } };
             const html = toHTML(compile(derive(probe, { layouts }), context, { key: `thumb-${entry.key}` }));
-            const mini = h("div", { class: "mini", html });
+            // A picture of the layout, inside a button: nothing in it may be focusable (no nested interactive controls).
+            const mini = h("div", { class: "mini", html, "aria-hidden": "true", inert: true });
             for (const el of mini.querySelectorAll("wm-view[data-view]")) el.style.setProperty("--c", colorOf.get(el.getAttribute("data-view")) ?? "var(--faint)");
             return h("button", { class: "thumb", type: "button", "aria-pressed": String(entry.key === current), onclick: () => setLayout(entry.key) }, mini, entry.label);
           }),

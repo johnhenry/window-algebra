@@ -439,6 +439,16 @@ describe("createPalette: running commands", () => {
     assert.equal(t.palette.isOpen, false);
   });
 
+  test("a list filter matches the label fuzzily but the detail only as a phrase, so a short query does not match everything (found in the browser)", () => {
+    const t = setup();
+    t.palette.open({ query: "close win" });
+    t.press("Enter");
+    t.type("ter");
+    assert.deepEqual(t.names(), ["Terminal"], "Editor's detail `editor · main · tiled` must not match t…e…r by scattering");
+    t.type("main");
+    assert.equal(t.names().length, 3, "a typed phrase still matches the detail (the workspace)");
+  });
+
   test("text and number fields take typed answers and report bad input without losing your place", () => {
     const t = setup();
     t.palette.open({ query: "rename window" });

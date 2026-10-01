@@ -88,7 +88,10 @@
         ctx.style.left = `${Math.max(8, Math.min(clientX, innerWidth - 180))}px`;
         ctx.style.top = `${Math.max(8, Math.min(clientY, innerHeight - 200))}px`;
         ctx.hidden = false;
-        ctx.querySelector("button").focus();
+        // The finger is still down: the lift (and the click that may follow it) would move focus back to the window.
+        const focusMenu = () => !ctx.hidden && ctx.querySelector("button")?.focus();
+        document.addEventListener("pointerup", () => setTimeout(focusMenu, 60), { once: true, capture: true });
+        setTimeout(focusMenu, 800);
       };
       document.addEventListener("keydown", (event) => event.key === "Escape" && hideMenu());
       document.addEventListener("pointerdown", (event) => !ctx.contains(event.target) && !ctx.hidden && hideMenu(), true);

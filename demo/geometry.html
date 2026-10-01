@@ -18,9 +18,9 @@
       .mark.overlap { background: repeating-linear-gradient(45deg, color-mix(in oklab, var(--danger) 30%, transparent) 0 6px, transparent 6px 12px); border: 1px solid var(--danger); }
       .mark.union { border: 1px dotted var(--violet); }
       .mark .tag { position: absolute; left: 4px; top: -18px; font: 600 10.5px var(--mono); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
-      .mark.req .tag { background: var(--warn); color: #fff; top: auto; bottom: -18px; }
+      .mark.req .tag { background: var(--warn); color: var(--surface); top: auto; bottom: -18px; }
       .mark.act .tag { background: var(--accent); color: var(--accent-fg); }
-      .mark.overlap .tag { background: var(--danger); color: #fff; }
+      .mark.overlap .tag { background: var(--danger); color: var(--surface); }
       .dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
       .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); align-items: center; }
       .legend i { display: inline-block; width: 18px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
@@ -157,7 +157,7 @@
             <button class="btn small" id="unpin-corner">un-pin</button>
           </div>
           <div class="note">The tooltip is anchored to <code>editor</code> with <code>anchor({ to, side, align, offset, gravity, flip, slide, resize })</code>. The fallback destroys the renderer and creates a new one with <code>anchorFallback: true</code>, which strips the CSS anchor declarations and runs the same <code>positionPopup</code> math in JS — the only place <code>slide</code>/<code>resize</code> take effect, since CSS anchor positioning can't express either.</div>
-          <pre class="code" id="anchor-style"></pre>
+          <pre class="code" id="anchor-style" tabindex="0" role="region" aria-label="Compiled anchor style"></pre>
         </section>
         <section>
           <h2>Geometry & input primitives</h2>

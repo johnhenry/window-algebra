@@ -261,6 +261,8 @@ attachPopouts({
 
 **`popIn(id)`**: closes the popup, carries the element back (`adoptNode` + `renderer.adopt`, so the surface was never unmounted) and dispatches `window/pop-in`. The same happens automatically when the popup closes itself (`pagehide`/`beforeunload`).
 
+**Chrome in the popup**: the window's `data-wm-command` buttons move into the popup with it, outside the stage root `attachInput` listens on, so the popup gets the same click delegation: a button dispatches `{ type, id }` (`data-wm-target` overrides `id`), and `window/pop-in` goes through `popIn(id)` so the DOM is carried back. Give a pop-out button `data-wm-command="window/pop-in"` while its window is popped out and it works from inside the popup.
+
 **Other paths**: if the window leaves `"popped-out"` some other way (`window/restore`, undo/redo), the popup is closed and the surface **remounts fresh** in the main document. If the window closes (`window/closed`), the popup closes.
 
 **`isPoppedOut(id)`** reports whether this helper has a popup open for the window. **`detach()`** stops listening and closes every popup without dispatching pop-in.

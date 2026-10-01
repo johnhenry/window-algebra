@@ -40,7 +40,7 @@
       .paths li .ty { font-weight: 650; }
       .paths li .ty.c { color: var(--accent); } .paths li .ty.m { color: var(--violet); } .paths li .ty.v { color: var(--ok); }
       .paths li.sel { background: var(--warn-soft); }
-      .cq-demo { height: 100%; display: grid; place-content: center; text-align: center; gap: 2px; color: var(--win-color); background: color-mix(in oklab, var(--win-color) 12%, var(--surface)); font-weight: 650; container-type: normal; }
+      .cq-demo { height: 100%; display: grid; place-content: center; text-align: center; gap: 2px; color: var(--fg); background: color-mix(in oklab, var(--win-color) 12%, var(--surface)); border-inline-start: 4px solid var(--win-color); font-weight: 650; container-type: normal; }
       .cq-demo small { font: 11px var(--mono); color: var(--muted); }
       .cq-demo .big { display: none; font-weight: 400; font-size: 11.5px; color: var(--muted); }
       @container wm-view (width > 220px) and (height > 120px) { .cq-demo .big { display: block; } }
@@ -110,7 +110,7 @@
         </div>
         <div class="panel">
           <header>Constructor code for this preset</header>
-          <pre class="code" id="code" style="max-height: 160px"></pre>
+          <pre class="code" id="code" style="max-height: 160px" tabindex="0" role="region" aria-label="Layout tree code"></pre>
         </div>
       </section>
 
@@ -139,11 +139,11 @@
             </span>
             <span class="spacer"></span><span class="chip" id="rules"></span>
           </header>
-          <pre class="code scroll" id="out"></pre>
+          <pre class="code scroll" id="out" tabindex="0" role="region" aria-label="Output"></pre>
         </div>
         <div class="panel">
           <header>Analysis <span class="spacer"></span><span class="chip" id="eq"></span></header>
-          <div class="scroll">
+          <div class="scroll" tabindex="0" role="region" aria-label="Analysis">
             <dl class="kv" id="analysis"></dl>
             <ol class="paths" id="paths"></ol>
           </div>

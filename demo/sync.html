@@ -120,7 +120,9 @@
           refresh();
         }
       };
-      if (!wm.getState().windows.w0) wm.create({ id: "w0", title: "Editor" });
+      // The first tab seeds a window. A tab that joins an existing one is handed its state within a moment, so it waits
+      // briefly instead of creating a second "w0" that would race with the state it is about to receive.
+      setTimeout(() => !Object.keys(wm.getState().windows).length && wm.create({ id: "w0", title: "Editor" }), 200);
 
       window.wm = wm;
       window.sync = () => sync;

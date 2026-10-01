@@ -205,7 +205,9 @@ export const createPalette = (options = {}) => {
     const choices = fieldChoices(state, field, { layouts });
     if (!choices) return [];
     return choices
-      .map((choice) => ({ choice, hit: fuzzyMatch(query, choice.label) ?? fuzzyMatch(query, `${choice.label} ${choice.detail}`) }))
+      // The label is matched fuzzily; the detail (ids, workspace, status) only as a typed phrase, so a short query
+      // does not scatter across both and match everything.
+      .map((choice) => ({ choice, hit: fuzzyMatch(query, choice.label) ?? (choice.detail.toLowerCase().includes(query.trim().toLowerCase()) ? { score: 0, ranges: [] } : null) }))
       .filter(({ hit }) => hit)
       .sort((a, b) => b.hit.score - a.hit.score)
       .map(({ choice, hit }, i) => ({ id: `${uid}-opt-${i}`, value: choice.value, label: choice.label, detail: choice.detail, ranges: fuzzyMatch(query, choice.label) ? hit.ranges : [] }));

@@ -103,6 +103,39 @@ export const initPage = ({ current, title } = {}) => {
 
 // ------------------------------------------------------------------ window chrome
 
+/**
+ * A region that scrolls must be reachable from the keyboard (WCAG 2.1.1): while its content overflows, make it a
+ * labelled, focusable region; when it stops overflowing, take the tab stop away again.
+ */
+export const keepScrollFocusable = (el, label) => {
+  const Observer = globalThis.ResizeObserver;
+  if (!Observer) return;
+  const update = () => {
+    const overflows = el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+    if (overflows && el.getAttribute("tabindex") === null) {
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("role", "region");
+      el.setAttribute("aria-label", `${label} (scrollable)`);
+    } else if (!overflows && el.getAttribute("role") === "region") {
+      el.removeAttribute("tabindex");
+      el.removeAttribute("role");
+      el.removeAttribute("aria-label");
+    }
+  };
+  // Deferred a frame: changing attributes inside the callback can loop ("ResizeObserver loop completed" in WebKit).
+  new Observer(() => requestAnimationFrame(update)).observe(el);
+  // Content can grow without the box changing size (a log that fills up): look again when it changes.
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      update();
+    });
+  }).observe(el, { childList: true, subtree: true, characterData: true });
+};
+
 const ICONS = {
   min: `<svg viewBox="0 0 14 14"><path d="M3 10h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   max: `<svg viewBox="0 0 14 14"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`,
@@ -155,6 +188,7 @@ export const windowSurface = ({ id, title = id, color = nextSwatch(), body, acti
       h("button", { type: "button", "data-wm-command": commandFor[action], "data-action": action, title: titles[action], "aria-label": titles[action], html: ICONS[action] }),
     );
     const bodyEl = h("div", { class: "wa-body" });
+    keepScrollFocusable(bodyEl, title);
     if (bare) {
       const win = h("div", { class: "wa-win bare" }, bodyEl);
       target.append(win);

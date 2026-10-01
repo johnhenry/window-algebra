@@ -70,7 +70,7 @@
         </div>
         <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--line)">
           <h2>Lifecycle log <span class="spacer"></span><button class="btn small ghost" id="clear">clear</button></h2>
-          <div class="scroll"><ul class="log" id="log"></ul></div>
+          <div class="scroll" tabindex="0" role="region" aria-label="Lifecycle log"><ul class="log" id="log"></ul></div>
         </div>
       </aside>
     </main>
@@ -78,7 +78,7 @@
     <script type="module">
       import { createWindowManager, createState } from "../src/index.mjs";
       import { createDomRenderer, attachInput, htmlSurface, lazySurface, iframeSurface, canvasSurface, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
-      import { initPage, h, $, $$, syncChrome, createLog, currentTheme } from "./shared/kit.mjs";
+      import { initPage, h, $, $$, syncChrome, createLog, currentTheme, keepScrollFocusable } from "./shared/kit.mjs";
 
       initPage({ current: "./surfaces.html", title: "Surfaces" });
       const log = createLog($("#log"), { max: 300 });
@@ -93,6 +93,7 @@
           log.add("event", `mount ${kind}`, id);
           target.style.setProperty("--win-color", color);
           const body = h("div", { class: "wa-body" });
+          keepScrollFocusable(body, title);
           const win = h("div", { class: "wa-win" },
             h("div", { class: "wa-bar", "data-wm-handle": "move" }, h("span", { class: "wa-dot" }), h("span", { class: "wa-title" }, title), h("span", { class: "wa-meta", "data-meta": id }, `${kind}Surface`), h("span", { class: "wa-actions" },
               h("button", { type: "button", "data-wm-command": "window/minimize", title: "Minimize (unmounts)", html: "–" }),
@@ -129,7 +130,7 @@
           h("input", { type: "range", "aria-label": "Range", class: "wide" }),
         ),
         h("div", { class: "bar", title: "CSS animation: restarts if the element leaves the document" }, h("i")),
-        h("div", { class: "list", "aria-label": "Scrollable list" }, Array.from({ length: 60 }, (_, i) => h("div", {}, `row ${String(i + 1).padStart(2, "0")} — scroll me`))),
+        h("div", { class: "list", tabindex: "0", role: "region", "aria-label": "Scrollable list" }, Array.from({ length: 60 }, (_, i) => h("div", {}, `row ${String(i + 1).padStart(2, "0")} — scroll me`))),
       );
 
       // 2. lazySurface: built on each mount, cleanup on unmount.
@@ -154,7 +155,7 @@
       // 3. iframeSurface with srcdoc (no external sites). The parent counts load events.
       const srcdoc = (theme) => `<!doctype html><html><head><meta charset="utf-8"><style>
         :root{color-scheme:${theme}} body{margin:0;font:13px/1.5 system-ui,sans-serif;padding:12px;background:${theme === "dark" ? "#181c22" : "#fff"};color:${theme === "dark" ? "#e7eaef" : "#161a20"}}
-        .n{font:700 34px/1 ui-monospace,monospace;color:#2c9fb8} button{font:inherit;padding:3px 10px} .muted{color:#8a93a0;font-size:12px}
+        .n{font:700 34px/1 ui-monospace,monospace;color:${theme === "dark" ? "#5fc4dc" : "#1b6f85"}} button{font:inherit;padding:3px 10px} .muted{color:${theme === "dark" ? "#a3abb8" : "#566070"};font-size:12px}
         @keyframes spin{to{transform:rotate(360deg)}} .spin{display:inline-block;width:14px;height:14px;border:2px solid #2c9fb8;border-right-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle}
       </style></head><body>
         <strong>iframeSurface</strong> <span class="spin"></span>

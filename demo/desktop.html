@@ -216,7 +216,7 @@
           <h2>Window rules <span class="spacer"></span><span class="chip" id="rules-chip">config.rules</span></h2>
           <ul class="rules-list" id="rules-list"></ul>
           <div class="rule-form">
-            <select id="rule-match-kind" title="match field">
+            <select id="rule-match-kind" title="match field" aria-label="Match field">
               <option value="idPrefix">id starts with</option>
               <option value="id">id is</option>
               <option value="role">role is</option>
@@ -226,7 +226,7 @@
             </select>
             <input id="rule-match-value" placeholder="value" size="10" />
             <span class="arrow">→</span>
-            <select id="rule-set-kind" title="set field">
+            <select id="rule-set-kind" title="set field" aria-label="Set field">
               <option value="layer">layer</option>
               <option value="mode">mode</option>
               <option value="workspace">workspace</option>
@@ -360,6 +360,7 @@
           const id = button.closest("wm-view[data-view]")?.getAttribute("data-view");
           const poppedOut = id && state.windows[id]?.status === "popped-out";
           button.setAttribute("data-state", poppedOut ? "popped-out" : "normal");
+          button.removeAttribute("data-wm-command"); // only meaningful inside a popup (set when it pops out)
           button.setAttribute("title", poppedOut ? "Pop in" : "Pop out");
           button.setAttribute("aria-label", poppedOut ? "Pop in" : "Pop out");
           button.setAttribute("aria-pressed", String(Boolean(poppedOut)));
@@ -373,6 +374,14 @@
         if (!id) return;
         const state = wm.getState();
         const out = state.windows[id]?.status === "popped-out" ? popouts.popIn(id) : popouts.popOut(id);
+        // The button travels into the popup with its window, outside this root: make it a pop-in command there
+        // (attachPopouts gives the popup the same data-wm-command delegation attachInput gives the stage).
+        if (!out.events.some((e) => e.type === "command/rejected") && wm.getState().windows[id]?.status === "popped-out") {
+          button.setAttribute("data-wm-command", "window/pop-in");
+          button.setAttribute("title", "Pop in");
+          button.setAttribute("aria-label", "Pop in");
+          button.innerHTML = POPOUT_ICONS.popin;
+        }
         const rejectedEvent = out.events.find((e) => e.type === "command/rejected");
         if (rejectedEvent) toast("Pop-out blocked", rejectedEvent.reason === "popup-blocked" ? "The browser blocked the popup — allow popups for this page and try again." : rejectedEvent.reason, "rejected");
       });

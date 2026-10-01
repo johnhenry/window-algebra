@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drag frame-time bench</title>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      #stage { position: absolute; inset: 0; }
+      wm-view { background: #fff; border: 1px solid #ccc; box-sizing: border-box; font: 10px system-ui; overflow: hidden; }
+      .bar { background: #dde; padding: 2px 4px; cursor: grab; user-select: none; }
+    </style>
+  </head>
+  <body>
+    <main id="stage" aria-label="Bench stage"></main>
+    <script type="module">
+      // 99 tiled windows in a grid, plus one floating window to drag: 100 views on the stage.
+      import { createWindowManager, createState, BASE_CSS } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, lazySurface, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+
+      const style = document.createElement("style");
+      style.textContent = BASE_CSS;
+      document.head.prepend(style);
+      const root = document.getElementById("stage");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({ state: createState({ layout: { type: "grid", columns: 10 }, config: { gap: 2 } }), renderer, schedule: createFrameScheduler() });
+      attachInput({ root, wm });
+      for (let i = 0; i < 100; i++) {
+        const id = i === 99 ? "bench-drag" : `w${i}`;
+        surfaces.set(
+          id,
+          lazySurface((target) => {
+            target.innerHTML = `<div class="bar" data-wm-handle="move">${id}</div><div>content ${i}</div>`;
+          }),
+        );
+        wm.create({ id, title: id, focus: false, ...(i === 99 ? { mode: "floating", placement: { x: 40, y: 40, width: 260, height: 160 } } : {}) });
+      }
+      let frames = [];
+      let recording = false;
+      let last = 0;
+      const tick = (now) => {
+        if (recording) {
+          if (last) frames.push(now - last);
+          last = now;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      window.startFrameRecording = () => {
+        frames = [];
+        last = 0;
+        recording = true;
+      };
+      window.stopFrameRecording = () => {
+        recording = false;
+        return frames;
+      };
+      requestAnimationFrame(() => requestAnimationFrame(() => (window.benchReady = true)));
+    </script>
+  </body>
+</html>

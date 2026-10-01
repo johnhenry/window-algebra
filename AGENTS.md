@@ -6,12 +6,13 @@
 
 ## The verification loop (before every push)
 
-1. `npm test`: currently 785 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
+1. `npm test`: currently 970 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
 2. `npm run examples`: six self-verifying scripts (`examples/NN-*.mjs`), each exiting non-zero on failure. `npm run test:types`: `tsc --noEmit` over `test/types/usage.mts` (its `@ts-expect-error` lines must fail to compile).
 3. `npm pack --dry-run`: read the file list. Only `src/` (which holds the hand-written `.d.mts` declarations), `README.md`, `LICENSE` and `package.json` should ship; no `demo/`, `test/`, `docs/` or `examples/`.
 4. A genuinely fresh clone: `git clone . /tmp/window-algebra-verifyN && cd $_ && npm ci && npm test && npm run examples`.
-5. For anything in `src/browser/`, `src/css/` or `demo/`: serve the repo root (`python3 -m http.server`), open `/demo/`, and exercise the page that covers the change (the hub's checklist says which).
-6. Commit and push, then close the issue with a comment naming the commit SHA.
+5. `npm run test:browser`: Playwright drives the demo pages in Chromium, Firefox and WebKit (`e2e/`, served by `e2e/serve.mjs`), including an axe-core scan of every demo page (no serious or critical violations). Locally pick engines with `--project=chromium`. `npm run bench` prints non-gating performance numbers.
+6. For anything in `src/browser/`, `src/css/` or `demo/`: serve the repo root (`python3 -m http.server`), open `/demo/`, and exercise the page that covers the change (the hub's checklist says which).
+7. Commit and push, then close the issue with a comment naming the commit SHA.
 
 CI (`.github/workflows/ci.yml`) runs `npm ci`, `npm test`, `npm run examples` and `npm pack --dry-run` on Node 26. Match it locally. Node 24 also passes the suite, but `engines` stays at the family floor of 26; don't lower it to match a local install.
 

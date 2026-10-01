@@ -267,6 +267,44 @@ See [Framework bindings](docs/api/bindings.md).
 
 The design rationale, prior art (xmonad's StackSet, River's policy/compositor split, AwesomeWM's stateless and stateful layouts, Elm's update loop) and open questions are in [`docs/PRD.md`](docs/PRD.md).
 
+## Performance
+
+`npm run bench` (non-gating; `bench/run.mjs`) measures the pure core in Node and a real drag in browsers. Numbers from one run on an Apple M-series laptop, Node 24, with other work running, so read them as orders of magnitude and compare runs on your own machine. Browser frame times are paced at one pointer move per frame (a 60 Hz mouse); the drag drives a floating window across a stage of 100 views (`bench/drag.html`).
+
+Throughput, 50 windows (master-stack), mixed commands
+
+| step | ops/s | µs/op |
+| --- | ---: | ---: |
+| update | 145,752 | 6.86 |
+| update + derive | 21,403 | 46.72 |
+| update + derive + compile | 8,744 | 114 |
+
+Median time per call (ms)
+
+| layout | derive 10 | +compile 10 | derive 100 | +compile 100 | derive 500 | +compile 500 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| master-stack | 0.01 | 0.03 | 0.07 | 0.20 | 0.53 | 1.27 |
+| columns | 0.01 | 0.03 | 0.08 | 0.27 | 0.50 | 1.59 |
+| rows | 0.01 | 0.02 | 0.08 | 0.26 | 0.49 | 1.59 |
+| grid | 0.01 | 0.02 | 0.08 | 0.20 | 0.51 | 1.22 |
+| spiral | 0.02 | 0.05 | 0.24 | 0.54 | 1.71 | 3.68 |
+| bsp | 0.03 | 0.05 | 0.30 | 0.66 | 2.57 | 4.60 |
+| tree | 0.01 | 0.03 | 0.09 | 0.30 | 0.57 | 1.77 |
+| tabs | 0.01 | 0.03 | 0.09 | 0.29 | 0.59 | 1.78 |
+
+Drag frame time, a floating window dragged over a stage of 100 windows (ms between frames)
+
+| browser | windows | frames | p50 | p95 | max | frames over 20 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chromium | 100 | 242 | 16.70 | 16.70 | 33.40 | 1 |
+| webkit | 100 | 120 | 17.00 | 18.00 | 35.00 | 1 |
+
+Writing the bench found two super-linear spots in deep trees, now fixed: `bspReconcile` was cubic (a 500-window BSP `derive` took about 340 ms, now about 3 ms) and `compile` built a view list per splitter (a 500-window spiral compile took about 90 ms, now about 4 ms).
+
+## Testing
+
+`npm test` runs the pure core and the DOM adapters against a fake DOM (Node). `npm run test:types` type-checks a usage file against the shipped declarations. `npm run test:browser` drives the demo pages in **Chromium, Firefox and WebKit** with Playwright (keyboard tab navigation, floating move/resize by keyboard, drag-and-drop docking with real pointer events, focus following visible windows, pop-out, frame-coalesced commits, RTL, the command palette, touch gestures, cross-tab sync) and scans every demo page with axe-core, light and dark, which must find no serious or critical violation.
+
 ## Adding a new layout
 
 The docking tree (`{ type: "tree" }`, commit `7ef2291`, with a follow-up fix in `067191b`) is the best worked example in this package's own history. It is the most recent built-in layout, and it is the harder of the two kinds: it is **stateful**, like BSP, so its structure lives in the spec and has to stay in sync with the windows. Its tests are `test/tree.test.mjs`, and `demo/layouts.html` and `demo/desktop.html` show it running.
@@ -296,6 +334,7 @@ A layout **modifier** (`smart-gaps`, `mirror`, …) is the other extension point
 - **Keyboard accessibility is opt-in and partial.** Tabs and splitters work from the keyboard always; moving and resizing a floating window (Alt+Shift+Arrow, Ctrl+Alt+Shift+Arrow) needs `attachInput({ keyboard })`. Tabs use manual activation (arrows move focus, Enter/Space activates). Moves are not announced, and `workspace/rename` leaves `config.rules` that name the old id untouched.
 - **Right-to-left mirrors the horizontal axis of the whole stage, not its content.** Window content inherits `dir="rtl"` from the stage root (set `dir="ltr"` on content that must not flip). A floating window's `placement.x` is measured from the right edge under `rtl`, so a saved placement does not carry across a direction change. The page's `dir` is followed through an explicit `dir` attribute (or computed `direction: rtl`); a page with none leaves `config.direction` alone.
 - **The command palette lists commands, not targets.** It asks for the common payload fields only (`window/create` takes an id and a title, `layout/set` a layout type without options; JSON fields cover the rest), and `window/pop-out` opens a real browser window only when you give it your `attachPopouts` handle. Its default shortcut can be reserved by a browser (Firefox's private window), so it is configurable.
+- **Browser coverage is real but not exhaustive.** Touch is driven with real multi-touch only in Chromium (Playwright has no multi-touch in Firefox or WebKit, where the same pointer streams are dispatched as synthetic `PointerEvent`s), and the end-to-end tests run on the demo pages, not on every combination of options.
 - **Cross-tab sync is same-origin and last-writer-wins.** `attachSync` shares whole logical states over a `BroadcastChannel`; it is not collaboration between users, it does not merge concurrent edits (the loser's change is dropped), it syncs no surfaces or DOM, and pop-outs stay in the tab that opened them (peers see the window minimized). Two tabs that never changed anything share nothing, so seed them identically.
 - **Touch gestures are opt-in and trade scrolling for recognition.** Pinch needs `touch-action: none` on floating windows (their content cannot be panned by touch) and the two-finger workspace swipe needs `pan-y` on the stage (nothing inside scrolls horizontally by touch). Pinch and the workspace swipe are touch-only, a pen being one pointer. Moving or docking a tiled window by touch still needs a still long press, so it does not compete with scrolling.
 - **The bindings commit once per animation frame.** `<wa-stage>` and `WindowManagerStage` coalesce commits with `createFrameScheduler()`, so a hidden tab (which never runs `requestAnimationFrame`) does not repaint until it is shown again. Pass `schedule: immediateScheduler` for synchronous commits.
