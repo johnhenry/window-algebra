@@ -17,7 +17,7 @@ Browser applications that need multiple windows (IDEs, dashboards, browser-OS ex
 ## Non-goals (v0)
 
 - Replacing an operating-system window manager or compositor.
-- Collaborative synchronization. Determinism and the command log make it possible, but it isn't built.
+- Multi-user collaborative synchronization. Determinism and the command log make it possible, but it isn't built. (Syncing one user's tabs is `attachSync`: whole-state snapshots, last writer wins.)
 
 ## Architecture
 

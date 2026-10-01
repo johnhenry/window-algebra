@@ -15,6 +15,7 @@ import { createWindowManager } from "../manager.mjs";
 import { createDomRenderer } from "../browser/dom.mjs";
 import { attachInput } from "../browser/input.mjs";
 import { createFrameScheduler } from "../browser/scheduler.mjs";
+import { attachSync } from "../browser/sync.mjs";
 
 /**
  * @param {Element} host mount point (usually the custom element itself)
@@ -24,22 +25,27 @@ import { createFrameScheduler } from "../browser/scheduler.mjs";
  * @param {boolean} [options.anchorFallback] forwarded to `createDomRenderer`
  * @param {(id: string) => object} [options.surfaceFor] forwarded to `createDomRenderer`
  * @param {object} [options.input] extra options merged into `attachInput`
+ * @param {boolean|object} [options.sync] keep this stage's window manager in step with other tabs: `true`, or
+ *   options for `attachSync` (`channel`, `id`, ...). Off by default.
  * @param {(task: () => void) => void} [options.schedule] when commits run after a state change; default
  *   `createFrameScheduler()` (many commands, one commit per frame). Pass `immediateScheduler` to commit synchronously.
- * @returns {{ wm: object, renderer: object, detach(): void }}
+ * @returns {{ wm: object, renderer: object, sync: object|null, detach(): void }}
  */
 export const attachStage = (host, options = {}) => {
-  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, schedule = createFrameScheduler() } = options;
+  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, schedule = createFrameScheduler() } = options;
   const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor });
   let live = true;
   const commit = () => live && renderer.commit(wm.present().render);
   commit();
   const unsubscribe = wm.subscribe(() => schedule(commit));
   const detachInput = attachInput({ root: host, wm, ...input });
+  const syncHandle = sync ? attachSync({ wm, ...(sync === true ? {} : sync) }) : null;
   return {
     wm,
     renderer,
+    sync: syncHandle,
     detach() {
+      syncHandle?.detach();
       live = false; // a commit still queued for the next frame must not touch the torn-down renderer
       unsubscribe();
       detachInput();

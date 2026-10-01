@@ -19,6 +19,7 @@ For the rationale, prior art and open questions, see the design document, [`docs
 | [Geometry and interaction](./geometry.md) | The `geometry` namespace (rects, `constrainSize`, `sizeToCells`, …), `positionPopup`, move/resize/ratio gesture math, and snap zones and magnetism. |
 | [The manager](./manager.md) | `createWindowManager`: options, every method and getter, gestures, the command log, `load`/`serialize`, multiple renderers. |
 | [Browser adapters](./browser.md) | `createDomRenderer` (reconciliation, measurement, the anchor fallback, animation, `release`/`adopt`), `attachInput` (options, markup contract, attributes it sets, keyboard), surfaces, schedulers, and `attachPopouts`. |
+| [Cross-tab sync](./sync.md) | `attachSync`: BroadcastChannel state snapshots, the Lamport-clock last-writer-wins policy, undo/redo and pop-out behaviour, `toSnapshot`/`fromSnapshot`. |
 | [Framework bindings](./bindings.md) | `createReactBindings` (`useWindowManager`, `useWindowState`, `WindowManagerStage`) and the `<wa-stage>` custom element (`defineWindowAlgebraElement`, `attachStage`). |
 | [Versioning and migration](./versioning.md) | `STATE_VERSION`, `migrate`, `MIGRATIONS`, what each migration step does, how to add one, and the known `config.snap` gap. |
 | [Errors](./errors.md) | What is rejected as an event and what throws, with every rejection reason in one table. |
@@ -30,7 +31,7 @@ For the rationale, prior art and open questions, see the design document, [`docs
 | Import specifier | File | Contents |
 | --- | --- | --- |
 | `@johnhenry/window-algebra` | `src/index.mjs` | Everything pure (algebra, transforms, layouts, geometry, interaction, state, commands, queries, history, compile) plus `createWindowManager`. Runs in Node, workers and browsers. |
-| `@johnhenry/window-algebra/browser` | `src/browser/index.mjs` | `createDomRenderer`, `attachInput`, `DEFAULT_MOVE_KEYS`, `htmlSurface`, `lazySurface`, `iframeSurface`, `canvasSurface`, `createSurfaceRegistry`, `createFrameScheduler`, `immediateScheduler`, `attachPopouts`. Importing it touches no DOM; calling the functions does. |
+| `@johnhenry/window-algebra/browser` | `src/browser/index.mjs` | `createDomRenderer`, `attachInput`, `DEFAULT_MOVE_KEYS`, `htmlSurface`, `lazySurface`, `iframeSurface`, `canvasSurface`, `createSurfaceRegistry`, `createFrameScheduler`, `immediateScheduler`, `attachPopouts`, `attachSync`, `toSnapshot`, `fromSnapshot`. Importing it touches no DOM; calling the functions does. |
 | `@johnhenry/window-algebra/algebra` | `src/algebra/nodes.mjs` | Just the primitives, guards, `validate`, `fromJSON` and the kind lists. |
 | `@johnhenry/window-algebra/transforms` | `src/algebra/transforms.mjs` | Just the tree transforms. |
 | `@johnhenry/window-algebra/layouts` | `src/layouts/index.mjs` | The derived-layout functions and every BSP and docking-tree helper (including `isTreeContainer`). |

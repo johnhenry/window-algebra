@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cross-tab sync</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      #stage { margin: 8px; border-radius: 10px; border: 1px solid var(--line); }
+      .note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); }
+      .note code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+      .status { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 16px; font: 12px var(--mono); color: var(--muted); }
+      .status b { color: var(--fg); font-weight: 600; }
+      #sync-log { list-style: none; margin: 0 16px 8px; padding: 0; max-height: 96px; overflow: auto; font: 12px var(--mono); color: var(--muted); }
+      #sync-log li { padding: 1px 0; }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar">
+      <button class="btn small" id="new">New window</button>
+      <button class="btn small" id="close">Close focused</button>
+      <button class="btn small" id="float">Toggle floating</button>
+      <select id="layout" aria-label="Layout">
+        <option value="master-stack">master-stack</option>
+        <option value="columns">columns</option>
+        <option value="rows">rows</option>
+        <option value="grid">grid</option>
+        <option value="tabs">tabs</option>
+      </select>
+      <span class="sep"></span>
+      <button class="btn small" id="undo">Undo</button>
+      <button class="btn small" id="redo">Redo</button>
+      <span class="sep"></span>
+      <button class="btn small" id="another">Open another tab</button>
+      <label class="inline"><input type="checkbox" id="sync-on" checked /> Sync</label>
+    </nav>
+    <p class="note">
+      Open this page in two tabs (the button opens a second one) and change windows in either:
+      <code>attachSync({ wm })</code> broadcasts a versioned state snapshot over a <code>BroadcastChannel</code> after every local change.
+      Concurrent edits resolve last-writer-wins by Lamport clock; undo and redo sync like any change; pop-outs stay in the tab that opened them.
+    </p>
+    <div class="status" aria-live="off">
+      <span>tab <b id="tab-id">-</b></span>
+      <span>clock <b id="clock">0</b></span>
+      <span>peers <b id="peers">0</b></span>
+      <span>windows <b id="count">0</b></span>
+    </div>
+    <ul id="sync-log" aria-label="Sync log"></ul>
+    <div id="stage" class="stage" aria-label="Synced stage"></div>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, attachSync, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+
+      initPage({ current: "./sync.html", title: "Cross-tab sync" });
+
+      const root = document.getElementById("stage");
+      // Surfaces (content) are not synced, only state: build each window's content from its id and title on demand.
+      const cache = new Map();
+      const surfaceFor = (id) => {
+        if (!cache.has(id)) {
+          const title = () => wm.getState().windows[id]?.title || id;
+          cache.set(id, windowSurface({ id, title: title(), body: (el) => (el.textContent = `${id}: its content is local to this tab; its state is shared.`) }));
+        }
+        return cache.get(id);
+      };
+      const renderer = createDomRenderer({ root, surfaceFor });
+      const wm = createWindowManager({ state: createState({ config: { gap: 6, inset: 6 } }), renderer, schedule: createFrameScheduler(), history: 200 });
+      attachInput({ root, wm, keyboard: true });
+      syncChrome(wm, root);
+
+      const logEl = document.getElementById("sync-log");
+      const log = (text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        logEl.prepend(li);
+        while (logEl.children.length > 30) logEl.lastElementChild.remove();
+      };
+      let sync = null;
+      const refresh = () => {
+        document.getElementById("tab-id").textContent = sync?.id.slice(0, 8) ?? "off";
+        document.getElementById("clock").textContent = sync?.clock ?? "-";
+        document.getElementById("peers").textContent = sync?.peers().length ?? 0;
+        document.getElementById("count").textContent = Object.keys(wm.getState().windows).length;
+      };
+      const start = () => {
+        sync = attachSync({
+          wm,
+          channel: "window-algebra-demo",
+          onSync: ({ direction, clock, from, applied }) => {
+            log(`${direction === "out" ? "sent" : applied ? "applied" : "ignored"} clock ${clock} from ${from.slice(0, 8)}`);
+            refresh();
+          },
+          onError: (error) => log(`error: ${error.message}`),
+        });
+        refresh();
+      };
+      wm.subscribe(refresh);
+      start();
+
+      const suffix = () => Math.random().toString(36).slice(2, 6);
+      const focused = () => wm.getState().focus.window;
+      document.getElementById("new").onclick = () => {
+        const id = `w-${suffix()}`;
+        wm.create({ id, title: `Window ${Object.keys(wm.getState().windows).length + 1}` });
+      };
+      document.getElementById("close").onclick = () => focused() && wm.close(focused());
+      document.getElementById("float").onclick = () => focused() && wm.toggleFloating(focused());
+      document.getElementById("layout").onchange = (event) => wm.setLayout({ type: event.target.value });
+      document.getElementById("undo").onclick = () => wm.undo();
+      document.getElementById("redo").onclick = () => wm.redo();
+      document.getElementById("another").onclick = () => window.open(location.href, "_blank");
+      document.getElementById("sync-on").onchange = (event) => {
+        if (event.target.checked) start();
+        else {
+          sync.detach();
+          sync = null;
+          refresh();
+        }
+      };
+      if (!wm.getState().windows.w0) wm.create({ id: "w0", title: "Editor" });
+
+      window.wm = wm;
+      window.sync = () => sync;
+    </script>
+  </body>
+</html>

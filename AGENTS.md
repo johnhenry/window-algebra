@@ -39,7 +39,7 @@ A change is done when all of the following hold, not just when tests pass:
 
 ## Non-goals
 
-Replacing an operating-system window manager or compositor, and collaborative synchronization (the deterministic command log makes it possible, but it is not built). See `docs/PRD.md`, "Non-goals". A runtime dependency is also a non-goal: bindings take React as an argument rather than importing it.
+Replacing an operating-system window manager or compositor, and multi-user collaborative synchronization (cross-tab sync of one user's tabs exists, `attachSync`; merging concurrent edits between users does not). See `docs/PRD.md`, "Non-goals". A runtime dependency is also a non-goal: bindings take React as an argument rather than importing it.
 
 ## Releases
 

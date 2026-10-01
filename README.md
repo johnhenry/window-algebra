@@ -220,6 +220,7 @@ In the browser (`@johnhenry/window-algebra/browser`):
 - **Surfaces** share one contract, `{ mount(target), unmount() }`: `htmlSurface`, `lazySurface`, `iframeSurface`, `canvasSurface`, plus `createSurfaceRegistry`.
 - **`createFrameScheduler()`** coalesces commits to one per frame.
 - **`attachPopouts({ wm, renderer })`** pops a window out into a real browser window, carrying its live DOM there and back.
+- **`attachSync({ wm, channel })`** (opt-in) keeps the tabs of one origin in step over a `BroadcastChannel`: whole-state snapshots, last writer wins by Lamport clock, undo/redo and pop-outs handled. See [Cross-tab sync](docs/api/sync.md).
 
 Every option, attribute and custom property is in [compile and CSS](docs/api/compile.md) and [Browser adapters](docs/api/browser.md).
 
@@ -249,6 +250,7 @@ See [Framework bindings](docs/api/bindings.md).
 | [Geometry and interaction](docs/api/geometry.md) | rects, size hints, `positionPopup`, gesture math, snap and magnetism |
 | [The manager](docs/api/manager.md) | options, methods, gestures, log, load/serialize |
 | [Browser adapters](docs/api/browser.md) | renderer, input, surfaces, schedulers, pop-outs |
+| [Cross-tab sync](docs/api/sync.md) | `attachSync`, the snapshot and Lamport-clock design, undo/redo and pop-outs |
 | [Framework bindings](docs/api/bindings.md) | React and `<wa-stage>` |
 | [Versioning](docs/api/versioning.md) | `migrate`, `MIGRATIONS`, adding a migration |
 | [Errors](docs/api/errors.md) | what is rejected vs thrown; every reason |
@@ -282,6 +284,7 @@ A layout **modifier** (`smart-gaps`, `mirror`, …) is the other extension point
 - **Some surfaces and observers are lazy.** A `lazySurface` builds on first mount and is never re-asked while its view stays rendered, so swapping a registry entry does not replace a mounted surface. `canvasSurface` repaints on resize only where `ResizeObserver` exists (it paints once otherwise). `<wa-stage>` creates a fresh manager on each connect or `configure()` unless you pass your own `wm`.
 - **The pure `update` cannot know your custom layouts.** `layout/set` accepts any string `type`; `derive` falls back to `columns` for a type with no interpreter instead of throwing, and only the manager rejects it up front (`unknown-layout`). Stickiness is inherited by dialogs and popovers, and a workspace switch can still bring two fullscreen windows into view (a sticky one and one on the new workspace); only one is presented.
 - **Keyboard accessibility is opt-in and partial.** Tabs and splitters work from the keyboard always; moving and resizing a floating window (Alt+Shift+Arrow, Ctrl+Alt+Shift+Arrow) needs `attachInput({ keyboard })`. Tabs use manual activation (arrows move focus, Enter/Space activates). Moves are not announced, and `workspace/rename` leaves `config.rules` that name the old id untouched.
+- **Cross-tab sync is same-origin and last-writer-wins.** `attachSync` shares whole logical states over a `BroadcastChannel`; it is not collaboration between users, it does not merge concurrent edits (the loser's change is dropped), it syncs no surfaces or DOM, and pop-outs stay in the tab that opened them (peers see the window minimized). Two tabs that never changed anything share nothing, so seed them identically.
 - **The bindings commit once per animation frame.** `<wa-stage>` and `WindowManagerStage` coalesce commits with `createFrameScheduler()`, so a hidden tab (which never runs `requestAnimationFrame`) does not repaint until it is shown again. Pass `schedule: immediateScheduler` for synchronous commits.
 
 ## Family

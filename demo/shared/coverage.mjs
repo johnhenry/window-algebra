@@ -194,6 +194,11 @@ export const CHECKLIST = [
     ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
     ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
   ]),
+  ...items("Cross-tab sync", [
+    ["attachSync", "attachSync({ wm, channel }): opt-in BroadcastChannel sync of versioned state snapshots, last-writer-wins by Lamport clock"],
+    ["sync-conflicts", "concurrent edits in two tabs converge on one winner (clock, then tab id); undo/redo sync like any change"],
+    ["sync-popouts", "pop-outs stay in the tab that opened them: peers see the window minimized and never open a popup"],
+  ]),
   ...items("Framework bindings", [
     ["createReactBindings", "createReactBindings(React) → { useWindowManager, useWindowState, WindowManagerStage }"],
     ["useWindowManager", "useWindowManager(options): creates a wm once, subscribes via useSyncExternalStore"],
@@ -369,6 +374,16 @@ export const PAGES = [
       "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
+    ],
+  },
+  {
+    href: "./sync.html",
+    short: "Sync",
+    title: "Cross-tab sync",
+    blurb: "Open the page in two tabs: window changes, undo and redo are shared over a BroadcastChannel, with a Lamport-clock status line and a log of what was sent, applied or ignored.",
+    covers: [
+      "attachSync", "sync-conflicts", "sync-popouts", "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler",
+      "window/create", "window/close", "window/toggle-floating", "layout/set", "undo-redo", "subscribe",
     ],
   },
   {

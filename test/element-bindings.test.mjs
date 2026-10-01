@@ -26,6 +26,30 @@ describe("attachStage", () => {
     assert.equal(host.querySelectorAll("wm-view").length, 0);
   });
 
+  test("sync: true or options keep two stages' window managers in step; detach stops it", async () => {
+    const { createBroadcastHub } = await import("./helpers/fake-broadcast.mjs");
+    const hub = createBroadcastHub();
+    const make = (id) => {
+      const doc = createFakeDocument();
+      const host = doc.createElement("wa-stage");
+      doc.body.append(host);
+      return attachStage(host, { schedule: immediateScheduler, sync: { channel: new hub.BroadcastChannel("wa"), id, schedule: immediateScheduler } });
+    };
+    const a = make("a");
+    const b = make("b");
+    hub.deliver();
+    a.wm.create({ id: "shared" });
+    hub.deliver();
+    assert.ok(b.wm.getState().windows.shared);
+    assert.equal(a.sync.id, "a");
+    a.detach();
+    b.detach();
+    const doc = createFakeDocument();
+    const host = doc.createElement("wa-stage");
+    doc.body.append(host);
+    assert.equal(attachStage(host, { schedule: immediateScheduler }).sync, null, "sync is off by default");
+  });
+
   test("accepts a pre-built window manager instead of creating one", () => {
     const doc = createFakeDocument();
     const host = doc.createElement("wa-stage");

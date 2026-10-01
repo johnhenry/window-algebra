@@ -17,6 +17,7 @@ The effectful edge. Everything here is exported from `@johnhenry/window-algebra/
 - [Surfaces](#surfaces)
 - [Schedulers](#schedulers)
 - [attachPopouts](#attachpopouts)
+- [attachSync](./sync.md) (cross-tab sync, its own page)
 
 ## `createDomRenderer(options)`
 
