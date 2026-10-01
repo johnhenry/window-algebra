@@ -1,3 +1,4 @@
+// @ts-self-types="./transforms.d.mts"
 /**
  * Tree transformations. Each takes a layout tree and returns a new valid
  * layout tree (or a value derived from one). None of these are primitives;

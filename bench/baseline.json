@@ -1,0 +1,106 @@
+{
+  "node": "v24.9.0",
+  "platform": "darwin/arm64",
+  "throughput": [
+    {
+      "label": "update",
+      "opsPerSecond": 284517.75797878904,
+      "microseconds": 3.5147191061253564
+    },
+    {
+      "label": "update + derive",
+      "opsPerSecond": 35222.07431391094,
+      "microseconds": 28.391286415662652
+    },
+    {
+      "label": "update + derive + compile",
+      "opsPerSecond": 14923.7584066391,
+      "microseconds": 67.007249296875
+    }
+  ],
+  "scale": [
+    {
+      "layout": "master-stack",
+      "derive 10": 0.0071250000000873115,
+      "derive+compile 10": 0.01625000000012733,
+      "derive 100": 0.04812499999979991,
+      "derive+compile 100": 0.13558299999976953,
+      "derive 500": 0.3369999999999891,
+      "derive+compile 500": 0.8426249999997708
+    },
+    {
+      "layout": "columns",
+      "derive 10": 0.0061670000000049185,
+      "derive+compile 10": 0.01779099999976097,
+      "derive 100": 0.04908300000033705,
+      "derive+compile 100": 0.17675000000008367,
+      "derive 500": 0.33854199999996126,
+      "derive+compile 500": 1.042667000000165
+    },
+    {
+      "layout": "rows",
+      "derive 10": 0.005708000000140601,
+      "derive+compile 10": 0.01587500000005093,
+      "derive 100": 0.048874999999952706,
+      "derive+compile 100": 0.16608300000007148,
+      "derive 500": 0.33341699999982666,
+      "derive+compile 500": 1.0337909999998374
+    },
+    {
+      "layout": "grid",
+      "derive 10": 0.005415999999968335,
+      "derive+compile 10": 0.013207999999849562,
+      "derive 100": 0.0472500000000764,
+      "derive+compile 100": 0.13012499999967986,
+      "derive 500": 0.31462499999997817,
+      "derive+compile 500": 0.8063750000001164
+    },
+    {
+      "layout": "spiral",
+      "derive 10": 0.014250000000174623,
+      "derive+compile 10": 0.0338329999999587,
+      "derive 100": 0.1512500000003456,
+      "derive+compile 100": 0.3548749999999927,
+      "derive 500": 1.0994999999998072,
+      "derive+compile 500": 2.2459170000001905
+    },
+    {
+      "layout": "bsp",
+      "derive 10": 0.017084000000068045,
+      "derive+compile 10": 0.033915999999862834,
+      "derive 100": 0.17983300000014424,
+      "derive+compile 100": 0.3890000000001237,
+      "derive 500": 1.4986249999997199,
+      "derive+compile 500": 2.6460000000001855
+    },
+    {
+      "layout": "tree",
+      "derive 10": 0.0071250000000873115,
+      "derive+compile 10": 0.025666000000001077,
+      "derive 100": 0.05545800000027157,
+      "derive+compile 100": 0.22754099999974642,
+      "derive 500": 0.3660830000003443,
+      "derive+compile 500": 1.0886669999999867
+    },
+    {
+      "layout": "tabs",
+      "derive 10": 0.005583000000115135,
+      "derive+compile 10": 0.017042000000401458,
+      "derive 100": 0.05233299999963492,
+      "derive+compile 100": 0.17899999999963256,
+      "derive 500": 0.3645419999998012,
+      "derive+compile 500": 1.0586669999997866
+    }
+  ],
+  "drag": [
+    {
+      "browser": "chromium",
+      "windows": 100,
+      "frames": 242,
+      "p50": 16.699999999999818,
+      "p95": 16.700000000000273,
+      "max": 16.800000000000182,
+      "slow": 0
+    }
+  ]
+}

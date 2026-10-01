@@ -1,3 +1,4 @@
+// @ts-self-types="./index.d.mts"
 /**
  * Derived layouts: ordinary functions that compose the primitives.
  * None of these are privileged by the core; users write their own the same way.

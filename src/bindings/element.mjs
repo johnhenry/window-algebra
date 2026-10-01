@@ -1,3 +1,4 @@
+// @ts-self-types="./element.d.mts"
 /**
  * A framework-agnostic custom element: `<wa-stage>` owns a window manager,
  * a `createDomRenderer`, and `attachInput`, wired together for as long as

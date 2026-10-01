@@ -53,3 +53,57 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # Size budgets (size-budgets.json): gzip of every `exports` entry bundled with esbuild (whole import graph), and the
+  # packed tarball. Fails when a budget is exceeded. Local on purpose: the reusable workflow has no such step.
+  size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - name: Size budgets
+        run: npm run size
+
+  # JSR readiness, prepare only: validates jsr.json and the `@ts-self-types` wiring without publishing anything.
+  # Creating the package on jsr.io is a manual browser step (see AGENTS.md).
+  jsr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: jsr publish --dry-run
+        run: npx --yes jsr publish --dry-run
+
+  # Non-gating: runs `npm run bench`, uploads the numbers, and compares them with bench/baseline.json at a generous
+  # threshold (3x). A regression is a warning annotation and a step-summary table, never a red build.
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run the benchmarks
+        run: node bench/run.mjs --json --browsers=chromium > bench-results.json
+      - name: Compare with the baseline (warns, never fails)
+        run: node bench/compare.mjs bench-results.json bench/baseline.json --factor=3
+      - name: Upload the numbers
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench-results.json
+          retention-days: 30

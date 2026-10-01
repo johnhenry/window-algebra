@@ -1,3 +1,4 @@
+// @ts-self-types="./nodes.d.mts"
 /**
  * The layout algebra: eleven primitives that build an immutable,
  * JSON-serializable presentation tree.

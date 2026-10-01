@@ -1,3 +1,4 @@
+// @ts-self-types="./react.d.mts"
 /**
  * React bindings, built on top of the plain `createWindowManager` facade and
  * the browser renderer/input adapters. No dependency on React is declared;

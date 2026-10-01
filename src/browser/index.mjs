@@ -1,3 +1,4 @@
+// @ts-self-types="./index.d.mts"
 export { createDomRenderer } from "./dom.mjs";
 export { attachInput, DEFAULT_MOVE_KEYS } from "./input.mjs";
 export { htmlSurface, lazySurface, iframeSurface, canvasSurface, createSurfaceRegistry } from "./surface.mjs";

@@ -58,7 +58,8 @@
     "example:04": "node examples/04-saved-state-migrates-and-newer-state-is-refused.mjs",
     "example:05": "node examples/05-rules-scratchpad-urgency-and-outputs-are-pure-policy.mjs",
     "example:06": "node examples/06-popup-snap-and-size-hint-math-needs-no-dom.mjs",
-    "demo": "echo 'Serve the repo root with any static server and open /demo/ (the example hub). ES modules do not load from file://.'"
+    "demo": "echo 'Serve the repo root with any static server and open /demo/ (the example hub). ES modules do not load from file://.'",
+    "size": "node scripts/size.mjs"
   },
   "keywords": [
     "window-manager",
@@ -85,6 +86,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   },
   "types": "./src/index.d.mts",

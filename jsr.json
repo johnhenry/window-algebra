@@ -1,0 +1,18 @@
+{
+  "name": "@johnhenry/window-algebra",
+  "version": "0.0.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./browser": "./src/browser/index.mjs",
+    "./algebra": "./src/algebra/nodes.mjs",
+    "./transforms": "./src/algebra/transforms.mjs",
+    "./layouts": "./src/layouts/index.mjs",
+    "./css": "./src/css/compile.mjs",
+    "./react": "./src/bindings/react.mjs",
+    "./element": "./src/bindings/element.mjs"
+  },
+  "publish": {
+    "include": ["src/**/*.mjs", "src/**/*.d.mts", "README.md", "LICENSE", "jsr.json"]
+  }
+}

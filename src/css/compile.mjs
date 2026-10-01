@@ -1,3 +1,4 @@
+// @ts-self-types="./compile.d.mts"
 /**
  * Pure compiler from a layout-algebra tree to a *render tree*: a plain
  * description of elements, attributes and CSS declarations. CSS (flex, grid,

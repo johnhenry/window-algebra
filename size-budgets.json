@@ -1,0 +1,14 @@
+{
+  "_comment": "Bytes. entries: gzip of the minified esbuild bundle of each exports entry with its whole import graph. Roughly 15% over the numbers at 0.0.0 (37921/53693/1259/1290/3781/8442/56245/56087 gzip; tarball 180707 packed, 630237 unpacked, 57 files).",
+  "entries": {
+    ".": 44000,
+    "./browser": 62000,
+    "./algebra": 1500,
+    "./transforms": 1500,
+    "./layouts": 4500,
+    "./css": 10000,
+    "./react": 65000,
+    "./element": 65000
+  },
+  "tarball": { "packed": 210000, "unpacked": 730000, "files": 62 }
+}

@@ -1,3 +1,4 @@
+// @ts-self-types="./index.d.mts"
 // Layout algebra: primitives
 export {
   view,
