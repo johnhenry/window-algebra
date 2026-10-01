@@ -343,10 +343,11 @@ A layout **modifier** (`smart-gaps`, `mirror`, …) is the other extension point
 
 ## Family
 
-window-algebra is one of three zero-build, browser-first ESM libraries in this family. None of them depends on another. They fit together at the page level:
+window-algebra is one of the family's browser-first libraries. None of them depends on another. They fit together at the page level:
 
 - **[`@johnhenry/html-modules`](https://github.com/johnhenry/html-modules)**: declarative HTML modules. `<html-import src="./ui.html" as="ui">` turns each `<html-export>` in an ordinary HTML file into a native custom element (`<ui--card>`). Those elements are exactly what window-algebra's surfaces host: `htmlSurface(document.createElement("ui--card"))` (or a `lazySurface` that creates one on first mount) puts an HTML-module component in a window. window-algebra only ever calls `mount(target)`/`unmount()`, so it needs no knowledge of how the element was defined. Neither package depends on the other.
 - **[`@johnhenry/mport`](https://github.com/johnhenry/mport)**: routes JavaScript imports across CDNs and compiles the result to a standard import map. A no-build page using window-algebra needs an import-map entry for each entry point it imports (see [Install](#install)), and for anything it loads alongside, such as React for the `/react` binding, which `demo/react.html` currently fetches from esm.sh by a hard-coded URL. mport can produce that map with fallback across mirrors, instead of hand-written URLs. There is no dependency in either direction; the browser only sees the resulting import map.
+- **[`@johnhenry/safe-fragment`](https://github.com/johnhenry/safe-fragment)**: Web Components that render untrusted HTML through versioned security profiles. A `<safe-fragment>` is an ordinary element, so `htmlSurface(safeFragmentEl)` puts sanitized, less-trusted content in a window; window-algebra only calls `mount`/`unmount`. Prefer its default `scope="light"` in windows that may pop out: the rendered content moves with the element into the pop-out document (`scope="shadow"` is not isolation, and its content does not receive the copied page stylesheets). Neither package depends on the other.
 
 ## License
 
