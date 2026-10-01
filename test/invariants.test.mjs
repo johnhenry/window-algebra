@@ -20,7 +20,6 @@ const WALK_STEPS = 300;
  */
 const KNOWN = [
   { finding: "1, 5, 6: focus on invisible windows", matches: (_t, i) => ["focus-visible", "active-workspace-valid", "active-workspace-matches-output"].includes(i) },
-  { finding: "2: unvalidated create fields", matches: (t, i) => t === "window/create" && ["throws", "window-valid-mode", "window-valid-layer"].includes(i) },
   { finding: "4, 6: blocked parent whose dialog is not presented", matches: (_t, i) => i === "blocker-is-presentable" },
   { finding: "3: hidden tiled window in keyboard moves", matches: (t, i) => i === "throws" && /^window\/(move-before|move-after|swap-next|swap-previous)$/.test(t) },
   { finding: "8, 11: layouts derive cannot present", matches: (_t, i) => i === "derive-throws" },

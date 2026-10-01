@@ -32,3 +32,23 @@ describe("reserved names are refused (found by the fuzz test)", () => {
     assert.equal(reason(state, { type: "window/move-to-workspace", id: "a", workspace: "constructor" }), "invalid-id");
   });
 });
+
+describe("2: window/create validates layer, role and mode", () => {
+  test("bogus layer, role and mode are rejected, not thrown or stored", () => {
+    const state = createState();
+    assert.equal(reason(state, { type: "window/create", id: "a", layer: "bogus" }), "unknown-layer");
+    assert.equal(reason(state, { type: "window/create", id: "a", layer: { type: "x" } }), "unknown-layer");
+    assert.equal(reason(state, { type: "window/create", id: "a", role: "bogus" }), "unknown-role");
+    assert.equal(reason(state, { type: "window/create", id: "a", mode: "bogus" }), "unknown-mode");
+    assert.equal(reason(state, { type: "window/create", id: "a", mode: true }), "unknown-mode");
+  });
+  test("every real layer, role and mode still creates", () => {
+    const state = createState();
+    for (const layer of ["background", "normal", "top", "modal", "popover", "notification", "system"]) {
+      assert.ok(run(state, { type: "window/create", id: "a", layer }).windows.a);
+    }
+    for (const role of ["window", "dialog", "sheet", "popover", "menu", "tooltip", "panel", "notification"]) {
+      assert.ok(run(state, { type: "window/create", id: "a", role }).windows.a);
+    }
+  });
+});

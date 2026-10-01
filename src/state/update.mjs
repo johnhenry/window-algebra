@@ -11,7 +11,7 @@
  * `update` never touches the DOM, timers, randomness, or the clock. Ids are
  * supplied by the caller.
  */
-import { LAYERS, STATUSES, createWindowRecord, createWorkspace, createOutput } from "./create.mjs";
+import { LAYERS, ROLES, STATUSES, createWindowRecord, createWorkspace, createOutput } from "./create.mjs";
 import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile } from "../layouts/bsp.mjs";
 import { treeFrom, treeFromBsp, treeNodeAt, treeSetSizesAt } from "../layouts/tree.mjs";
@@ -22,6 +22,8 @@ import { migrate } from "./migrate.mjs";
 import { validModifiers } from "./modifiers.mjs";
 
 const RENDER = Object.freeze({ type: "render" });
+
+const MODES = Object.freeze(["tiled", "floating"]);
 
 const result = (state, events = [], effects = []) => ({ state, events, effects });
 const rejected = (state, command, reason) =>
@@ -210,6 +212,9 @@ const handlers = {
     if (typeof id !== "string" || !id) return rejected(state, command, "missing-id");
     if (state.windows[id]) return rejected(state, command, "duplicate-id");
     if (command.parent && !state.windows[command.parent]) return rejected(state, command, "unknown-parent");
+    if (command.role !== undefined && !ROLES.includes(command.role)) return rejected(state, command, "unknown-role");
+    if (command.layer !== undefined && !LAYERS.includes(command.layer)) return rejected(state, command, "unknown-layer");
+    if (command.mode !== undefined && !MODES.includes(command.mode)) return rejected(state, command, "unknown-mode");
     let win = createWindowRecord(command, state);
     const appliedRules = matchRules(state, win);
     if (appliedRules.length) win = applyRulePatch(win, foldRuleSets(state, appliedRules), command);
@@ -357,7 +362,7 @@ const handlers = {
   "window/set-mode"(state, command) {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
-    if (command.mode !== "tiled" && command.mode !== "floating") return rejected(state, command, "unknown-mode");
+    if (!MODES.includes(command.mode)) return rejected(state, command, "unknown-mode");
     if (win.mode === command.mode) return result(state);
     let next = setWindow(state, win.id, { mode: command.mode });
     next =

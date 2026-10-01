@@ -35,8 +35,9 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | `unknown-window` | nearly every `window/*` command; `scratchpad/toggle`; `focus` subjects of `swap-next`/`move-before`/…; `attachPopouts` |
 | `unknown-workspace` | `window/create` (after rules), `window/move-to-workspace`, `workspace/activate`, `workspace/remove`, `workspace/move-to-output`, every `layout/*` command except `rotate-split` |
 | `unknown-output` | `workspace/create`, `workspace/move-to-output`, `output/remove`, `output/focus` |
-| `unknown-layer` | `window/set-layer` |
-| `unknown-mode` | `window/set-mode` |
+| `unknown-layer` | `window/create`, `window/set-layer` |
+| `unknown-mode` | `window/create`, `window/set-mode` |
+| `unknown-role` | `window/create` |
 | `unknown-status` | the status setters (internal guard; not reachable through the built-in commands) |
 | `unknown-zone` | `window/drop`: not a `DROP_ZONES` value, or the interpreter maps it to no op |
 | `unknown-split` | `layout/resize-split` |

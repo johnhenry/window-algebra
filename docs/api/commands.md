@@ -82,7 +82,7 @@ It is then focused through the focus policy, **unless** `focus: false` is given 
 
 - **Events:** `window/created { id, rules? }` (`rules` is the array of matched rule indices, present only when at least one matched), followed by the focus events.
 - **Effects:** `render`, plus `focus` when focused.
-- **Rejections:** `missing-id` (not a non-empty string), `duplicate-id`, `unknown-parent`, `unknown-workspace` (after rules: a rule may send the window to a workspace that does not exist).
+- **Rejections:** `missing-id` (not a non-empty string), `duplicate-id`, `unknown-parent`, `unknown-role` (not in `ROLES`), `unknown-layer` (not in `LAYERS`), `unknown-mode` (not `tiled` or `floating`), `unknown-workspace` (after rules: a rule may send the window to a workspace that does not exist).
 
 ### `window/close`
 
