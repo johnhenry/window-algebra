@@ -34,7 +34,7 @@
 import { createDrag, updateDrag, createResize, updateResize } from "../interaction/drag.mjs";
 import { dropTargetAt, zoneRect } from "../interaction/drop.mjs";
 import { snapZoneAt, snapZoneRect, magnetize, magnetizeResize } from "../interaction/snap.mjs";
-import { isBlocked, isVisible, outputActiveWorkspace } from "../state/queries.mjs";
+import { isBlocked, isVisible, inTiledBase, outputActiveWorkspace } from "../state/queries.mjs";
 import { update } from "../state/update.mjs";
 import { DROPS, dragMode, isDroppable, tiledOrder } from "../state/drops.mjs";
 import { derive, presentationContext } from "../state/derive.mjs";
@@ -179,6 +179,7 @@ const comboOf = (event) =>
  *   (see `dom.mjs`) and never receive focus.
  * @param {number} [options.splitterStep] fraction of a split's total weight
  *   an arrow key nudges a focused splitter by (default 0.05)
+ * @param {number} [options.floatStep] px a keyboard move/resize of a floating window changes it by (default 10)
  * @returns {() => void} detach
  */
 export const attachInput = (options) => {
@@ -201,6 +202,7 @@ export const attachInput = (options) => {
     announce,
     keyboard,
     splitterStep = 0.05,
+    floatStep = 10,
     output,
   } = options;
   // The workspace this root's stage actually shows: the given output's own
@@ -1206,7 +1208,84 @@ export const attachInput = (options) => {
     return false;
   };
 
+  /**
+   * WAI-ARIA tabs, manual activation: Arrow keys and Home/End move focus
+   * between the tabs of a strip (roving tabindex), Enter or Space activates
+   * the focused one (`window/focus`, which also moves focus into its panel).
+   */
+  const onTabKeyDown = (tabEl, event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return false;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault?.();
+      dispatch({ type: "window/focus", id: tabEl.getAttribute("data-wm-tab") });
+      return true;
+    }
+    const tabs = [...(tabEl.parentNode?.querySelectorAll?.("[data-wm-tab]") ?? [])];
+    const at = tabs.indexOf(tabEl);
+    if (at < 0) return false;
+    const next =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? tabs[(at + 1) % tabs.length]
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? tabs[(at - 1 + tabs.length) % tabs.length]
+          : event.key === "Home"
+            ? tabs[0]
+            : event.key === "End"
+              ? tabs[tabs.length - 1]
+              : null;
+    if (!next) return false;
+    event.preventDefault?.();
+    for (const tab of tabs) tab.setAttribute("tabindex", tab === next ? "0" : "-1");
+    next.focus?.({ preventScroll: true });
+    return true;
+  };
+
+  const FLOAT_ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  /** A floating window's rect in `root` coordinates, for a placement that is not a plain number (`"center"`). */
+  const measuredRect = (id) => {
+    const element = viewElementFor(id);
+    if (!element) return null;
+    const r = element.getBoundingClientRect();
+    const o = root.getBoundingClientRect();
+    return { x: r.left - o.left, y: r.top - o.top, width: r.width, height: r.height };
+  };
+
+  /**
+   * Keyboard move and resize for the focused floating (non-tiled) window (opt-in with
+   * `keyboard`, which is what makes it reachable without a pointer):
+   * Alt+Shift+Arrow moves it by `floatStep` px, Ctrl+Alt+Shift+Arrow resizes
+   * it (right/down grow). Tiled windows keep their reorder keys.
+   */
+  const onFloatingKey = (event) => {
+    const dir = FLOAT_ARROWS[event.key];
+    if (!dir || !event.altKey || !event.shiftKey || event.metaKey || event.type === "keyup") return false;
+    const state = getState();
+    const id = state.focus.window;
+    const win = id && state.windows[id];
+    // "Floating" here means positioned by its placement: not part of the tiled base (floating mode, a floating-layout workspace, a dialog, ...).
+    if (!win || win.status !== "normal" || inTiledBase(state, win) || !isVisible(state, id) || isBlocked(state, id)) return false;
+    const rect = measuredRect(id);
+    const num = (value, measured) => (Number.isFinite(value) ? value : measured ?? 0);
+    const { placement } = win;
+    event.preventDefault?.();
+    if (event.ctrlKey) {
+      send({
+        type: "window/resize",
+        id,
+        width: Math.max(0, num(placement.width, rect?.width) + dir[0] * floatStep),
+        height: Math.max(0, num(placement.height, rect?.height) + dir[1] * floatStep),
+      });
+    } else {
+      send({ type: "window/move", id, x: num(placement.x, rect?.x) + dir[0] * floatStep, y: num(placement.y, rect?.y) + dir[1] * floatStep });
+    }
+    return true;
+  };
+
   const onRootKeyDown = (event) => {
+    const tabEl = !drag && !gesture && !splitter ? event.target?.closest?.("[data-wm-tab]") : null;
+    if (tabEl && onTabKeyDown(tabEl, event)) return;
+    if (keyboard && !drag && !gesture && !splitter && onFloatingKey(event)) return;
     const splitterEl = !drag && !gesture && !splitter ? event.target?.closest?.("[data-wm-splitter]") : null;
     if (splitterEl && onSplitterKeyDown(splitterEl, event)) return;
     if (!drag && trapModalTab(event)) return;

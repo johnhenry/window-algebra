@@ -109,7 +109,7 @@ A `stack` with `chrome: "tabs"` gets a `wm-tabs` child first (`role="tablist"`, 
         aria-selected="true" aria-controls="wm-panel-editor">Editor</button>
 ```
 
-`data-wm-urgent` is added for urgent windows. `aria-selected` compares with the stack's `active`. The corresponding view becomes `role="tabpanel"`, `id="wm-panel-<id>"`, `aria-labelledby="wm-tab-<id>"`. `attachInput` focuses a window when its tab is pressed and drags tabs along the strip.
+`data-wm-urgent` is added for urgent windows. `aria-selected` compares with the stack's `active`. The tabs use a **roving tabindex**: the selected tab has `tabindex="0"`, the others `"-1"`, and `attachInput` implements the WAI-ARIA keys (arrows, Home/End, Enter/Space). The corresponding view becomes `role="tabpanel"`, `id="wm-panel-<id>"`, `aria-labelledby="wm-tab-<id>"`. `attachInput` focuses a window when its tab is pressed and drags tabs along the strip.
 
 ## Splitters
 
@@ -122,6 +122,8 @@ A `row`/`column` whose options carry `resize: { path, weights }` (with `weights.
 | `data-wm-index` | the index of the child before the splitter |
 | `data-wm-count` | the container's child count (so the adapter can build a full weights array) |
 | `role="separator"`, `aria-orientation` | `vertical` for a row's splitters, `horizontal` for a column's |
+| `aria-label`, `aria-controls` | `Resize <title A> and <title B>` (the first view of each neighbour; a window without a title is named by its id), and the panel ids (`wm-panel-<id>`) of those two views |
+| `tabindex="0"` | splitters are keyboard-focusable; arrows nudge them |
 | `aria-valuenow`, `aria-valuemin="0"`, `aria-valuemax="100"` | the pair's split as 0–100 |
 | `tabindex="0"` | focusable, and arrow keys resize |
 
@@ -131,11 +133,11 @@ Style: `flex: 0 0 <SPLITTER_SIZE>px; align-self: stretch; cursor: col-resize | r
 
 | Element | ARIA |
 | --- | --- |
-| ordinary window view | `role="group"`, `aria-label` = title |
-| `dialog`/`sheet` view | `role="dialog"`, `aria-modal="true"` when modal, `aria-label` = title |
+| ordinary window view | `role="group"`, `aria-label` = title, or the id when the title is empty. Every primary view also gets `id="wm-panel-<id>"` |
+| `dialog`/`sheet` view | `role="dialog"`, `aria-modal="true"` when modal, `aria-label` = title (or id) |
 | tab panel view | `role="tabpanel"`, `aria-labelledby` (no `aria-label`) |
 | tab strip / tab | `role="tablist"` / `role="tab"`, `aria-selected`, `aria-controls` |
-| splitter | `role="separator"`, orientation and value attributes |
+| splitter | `role="separator"`, label, `aria-controls`, orientation and value attributes |
 | blocked view | `aria-disabled="true"` (the contents are made `inert` by the renderer) |
 | inactive stack child | `inert`, `aria-hidden="true"` |
 
@@ -153,13 +155,14 @@ Style: `flex: 0 0 <SPLITTER_SIZE>px; align-self: stretch; cursor: col-resize | r
 
 ## `BASE_CSS` and custom properties
 
-`BASE_CSS` is an optional stylesheet string. Inject it once (`<style>` or `adoptedStyleSheets`). It sets host sizing (`[data-wm-root]` and its root `wm-overlay` fill the host), the blocked/inert tint, the selected-tab weight, the urgent outline, drag cursors, the ghost label, pinned and denied affordances, workspace-target highlighting, `touch-action: none` on `[data-wm-handle]` (with `pan-x` on tab strips, so window content keeps scrolling), splitter visuals, and View Transition timing, including a `prefers-reduced-motion: reduce` override.
+`BASE_CSS` is an optional stylesheet string. Inject it once (`<style>` or `adoptedStyleSheets`). It sets host sizing (`[data-wm-root]` and its root `wm-overlay` fill the host), the blocked/inert tint, the selected-tab weight, the urgent outline, drag cursors, the ghost label, pinned and denied affordances, workspace-target highlighting, `touch-action: none` on `[data-wm-handle]` (with `pan-x` on tab strips, so window content keeps scrolling), splitter visuals, a visible focus ring (a 3px `:focus-visible` outline on views, tabs, splitters and handles; focus is never hidden), and View Transition timing. Under `prefers-reduced-motion: reduce` the view transitions are off and so are CSS transitions and animations on the library's elements (the DOM renderer also skips `startViewTransition`).
 
 Theme it with these custom properties (defaults in parentheses):
 
 | Property | Used for |
 | --- | --- |
 | `--wm-urgent-line` (`rgb(234 88 12)`) | urgent outline on views and tabs |
+| `--wm-focus-ring` (`#1d4ed8`), `--wm-focus-ring-halo` (`#fff`) | the `:focus-visible` ring on views, tabs, splitters and handles, and the 1px halo around it |
 | `--wm-ghost-line` (`rgb(59 130 246)`), `--wm-ghost-fill`, `--wm-ghost-fill-strong`, `--wm-ghost-radius` (`6px`) | the drag-preview ghost outlines (the dragged window uses `-fill-strong`) |
 | `--wm-ghost-label-fg` (`#fff`) | ghost label text |
 | `--wm-ghost-bad` (`rgb(220 38 38 / 0.9)`) | slots that would violate constraints; denied drags |

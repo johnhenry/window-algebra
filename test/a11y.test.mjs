@@ -186,3 +186,122 @@ describe("attachInput: modal focus trap", () => {
     assert.equal(t.doc.activeElement, first);
   });
 });
+
+// ------------------------------------------------------------ audit item 13: WAI-ARIA patterns
+
+describe("compile: names, splitters and tabs (audit 13)", () => {
+  test("a window with an empty title is named by its id", () => {
+    const out = compile(row({}, view("a"), view("d")), { titles: { a: "", d: "" }, roles: { a: "window", d: "dialog" } });
+    assert.equal(out.children[0].attrs["aria-label"], "a");
+    assert.equal(out.children[1].attrs["aria-label"], "d");
+  });
+
+  test("a splitter is labelled by the pair it divides and controls both panels", () => {
+    const tree = row({ resize: { path: "", weights: [1, 3] } }, view("a"), view("b"));
+    const out = compile(tree, { titles: { a: "Editor", b: "" } });
+    const splitter = out.children.find((child) => child.attrs["data-wm-splitter"] !== undefined);
+    assert.equal(splitter.attrs["aria-label"], "Resize Editor and b");
+    assert.equal(splitter.attrs["aria-controls"], `${panelId("a")} ${panelId("b")}`);
+    assert.equal(splitter.attrs["aria-orientation"], "vertical");
+    assert.equal(splitter.attrs["aria-valuenow"], "25");
+    // The ids it names exist on the views.
+    assert.deepEqual(out.children.filter((child) => child.view).map((child) => child.attrs.id), [panelId("a"), panelId("b")]);
+  });
+
+  test("tabs use a roving tabindex: only the selected tab is a Tab stop", () => {
+    const out = compile(stack({ active: "b", chrome: "tabs" }, view("a"), view("b"), view("c")), {});
+    const strip = out.children.find((child) => child.tag === "wm-tabs");
+    assert.deepEqual(strip.children.map((tab) => tab.attrs.tabindex), ["-1", "0", "-1"]);
+  });
+});
+
+describe("attachInput: tab keyboard navigation and floating move/resize (audit 13)", () => {
+  const rig = ({ layout = { type: "tabs" }, ids = ["a", "b", "c"], input = {} } = {}) => {
+    const doc = createFakeDocument();
+    const root = doc.createElement("div");
+    root.rect = { left: 0, top: 0, width: 600, height: 400 };
+    doc.body.append(root);
+    const renderer = createDomRenderer({ root, document: doc, anchorFallback: false });
+    const wm = createWindowManager({ state: createState({ layout }), renderer, history: true });
+    for (const id of ids) wm.create({ id, title: id.toUpperCase() });
+    const detach = attachInput({ root, wm, ...input });
+    const key = (target, props) => {
+      let prevented = false;
+      root.dispatch("keydown", { target, type: "keydown", preventDefault: () => (prevented = true), ...props });
+      return prevented;
+    };
+    const tabs = () => root.querySelectorAll("[data-wm-tab]");
+    return { doc, root, wm, detach, key, tabs };
+  };
+
+  test("arrows and Home/End move focus between tabs and wrap; Enter activates", () => {
+    const t = rig();
+    const [a, b, c] = t.tabs();
+    assert.equal(t.wm.state.focus.window, "c");
+    assert.equal(t.key(c, { key: "ArrowRight" }), true);
+    assert.equal(t.doc.activeElement, a, "wraps from the last tab to the first");
+    assert.deepEqual(t.tabs().map((tab) => tab.getAttribute("tabindex")), ["0", "-1", "-1"]);
+    t.key(a, { key: "ArrowRight" });
+    assert.equal(t.doc.activeElement, b);
+    t.key(b, { key: "End" });
+    assert.equal(t.doc.activeElement, c);
+    t.key(c, { key: "Home" });
+    assert.equal(t.doc.activeElement, a);
+    t.key(a, { key: "ArrowLeft" });
+    assert.equal(t.doc.activeElement, c);
+    // Moving focus alone does not change the WM focus (manual activation) ...
+    assert.equal(t.wm.state.focus.window, "c");
+    t.key(b, { key: "Enter" });
+    assert.equal(t.wm.state.focus.window, "b");
+    t.key(a, { key: " " });
+    assert.equal(t.wm.state.focus.window, "a");
+    assert.equal(t.key(a, { key: "x" }), false);
+    t.detach();
+  });
+
+  test("Alt+Shift+Arrow moves the focused floating window; Ctrl+Alt+Shift+Arrow resizes it", () => {
+    const t = rig({ layout: { type: "columns" }, ids: ["a", "f"], input: { keyboard: true, floatStep: 10 } });
+    t.wm.dispatch({ type: "window/set-mode", id: "f", mode: "floating" });
+    t.wm.dispatch({ type: "window/move", id: "f", x: 100, y: 50 });
+    t.wm.dispatch({ type: "window/resize", id: "f", width: 200, height: 100 });
+    assert.equal(t.key(t.root, { key: "ArrowRight", altKey: true, shiftKey: true }), true);
+    assert.deepEqual([t.wm.state.windows.f.placement.x, t.wm.state.windows.f.placement.y], [110, 50]);
+    t.key(t.root, { key: "ArrowUp", altKey: true, shiftKey: true });
+    assert.equal(t.wm.state.windows.f.placement.y, 40);
+    t.key(t.root, { key: "ArrowRight", altKey: true, shiftKey: true, ctrlKey: true });
+    t.key(t.root, { key: "ArrowDown", altKey: true, shiftKey: true, ctrlKey: true });
+    assert.deepEqual([t.wm.state.windows.f.placement.width, t.wm.state.windows.f.placement.height], [210, 110]);
+    t.key(t.root, { key: "ArrowLeft", altKey: true, shiftKey: true, ctrlKey: true });
+    assert.equal(t.wm.state.windows.f.placement.width, 200);
+    // A tiled window keeps the reorder keys: no window/move is dispatched for it.
+    t.wm.dispatch({ type: "window/focus", id: "a" });
+    const before = t.wm.state.windows.a.placement;
+    t.key(t.root, { key: "ArrowRight", altKey: true, shiftKey: true });
+    assert.deepEqual(t.wm.state.windows.a.placement, before);
+    t.detach();
+  });
+
+  test("without the keyboard option the floating keys are inert", () => {
+    const t = rig({ layout: { type: "columns" }, ids: ["f"] });
+    t.wm.dispatch({ type: "window/set-mode", id: "f", mode: "floating" });
+    const before = t.wm.state.windows.f.placement;
+    assert.equal(t.key(t.root, { key: "ArrowRight", altKey: true, shiftKey: true }), false);
+    assert.deepEqual(t.wm.state.windows.f.placement, before);
+    t.detach();
+  });
+});
+
+describe("BASE_CSS accessibility (audit 13)", () => {
+  test("focus is never hidden: a strong :focus-visible ring replaces `outline: none`", async () => {
+    const { BASE_CSS } = await import("../src/css/compile.mjs");
+    assert.ok(!/focus-visible[^{]*\{\s*outline:\s*none/.test(BASE_CSS), "no outline: none on :focus-visible");
+    assert.match(BASE_CSS, /\[data-wm-splitter\]:focus-visible[^{]*\{[^}]*outline: 3px solid/);
+    assert.match(BASE_CSS, /wm-tabs > button:focus-visible/);
+  });
+  test("prefers-reduced-motion switches transitions and animations off", async () => {
+    const { BASE_CSS } = await import("../src/css/compile.mjs");
+    const block = BASE_CSS.slice(BASE_CSS.indexOf("@media (prefers-reduced-motion: reduce)"));
+    assert.match(block, /transition: none !important/);
+    assert.match(block, /view-transition/);
+  });
+});

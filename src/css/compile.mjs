@@ -269,7 +269,7 @@ export const SPLITTER_SIZE = 6;
  * expects back; `data-wm-count` is the container's live child count, so the
  * input adapter can rebuild a full `weights` array before its first resize.
  */
-const splitterAfter = (target, index, elementKey) => {
+const splitterAfter = (target, index, elementKey, context = {}) => {
   if (target.type !== "row" && target.type !== "column") return null;
   const resize = target.options.resize;
   if (!resize || !Array.isArray(resize.weights)) return null;
@@ -278,6 +278,11 @@ const splitterAfter = (target, index, elementKey) => {
   const [a, b] = [weights[index], weights[index + 1]];
   const total = a + b;
   const now = total > 0 ? Math.round((a / total) * 100) : 50;
+  // Name the pair it divides and point at the two panels it resizes (WAI-ARIA window splitter pattern).
+  const [first, second] = [views(target.children[index])[0], views(target.children[index + 1])[0]];
+  const nameOf = (id) => (id === undefined ? undefined : context.titles?.[id] || id);
+  const label = first !== undefined && second !== undefined ? `Resize ${nameOf(first)} and ${nameOf(second)}` : "Resize";
+  const controls = [first, second].filter((id) => id !== undefined).map(panelId).join(" ");
   return {
     tag: "wm-splitter",
     key: `${elementKey}/splitter:${index}`,
@@ -291,6 +296,8 @@ const splitterAfter = (target, index, elementKey) => {
       "aria-valuenow": String(now),
       "aria-valuemin": "0",
       "aria-valuemax": "100",
+      "aria-label": label,
+      ...(controls ? { "aria-controls": controls } : {}),
       tabindex: "0",
     },
     style: {
@@ -415,17 +422,20 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       // region of its own; a dialog/sheet is a "dialog" (aria-modal when the
       // window is modal); everything else is a labelled group.
       const isTabPanel = parentKind === "stack" && parent.options.chrome === "tabs";
+      // Every primary view carries its panel id, so a splitter's aria-controls can name it.
+      if (occurrence === 1) attrs.id = panelId(id);
+      // A window with no title is still named: by its id.
+      const accessibleName = context.titles?.[id] || id;
       if (isTabPanel) {
-        attrs.id = panelId(id);
         attrs.role = "tabpanel";
         attrs["aria-labelledby"] = tabId(id);
       } else if (role === "dialog" || role === "sheet") {
         attrs.role = "dialog";
         if (modal.has(id)) attrs["aria-modal"] = "true";
-        if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
+        attrs["aria-label"] = accessibleName;
       } else {
         attrs.role = "group";
-        if (context.titles?.[id]) attrs["aria-label"] = context.titles[id];
+        attrs["aria-label"] = accessibleName;
       }
       if (context.pinned?.includes(id)) attrs["data-wm-draggable"] = "false";
       if (context.sticky?.includes(id)) attrs["data-wm-sticky"] = "";
@@ -468,6 +478,8 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
                 "data-wm-tab": id,
                 "aria-selected": String(id === target.options.active),
                 "aria-controls": panelId(id),
+                // Roving tabindex: only the selected tab is a Tab stop; arrows move among the rest (see `attachInput`).
+                tabindex: id === target.options.active ? "0" : "-1",
                 ...(urgent.has(id) ? { "data-wm-urgent": "" } : {}),
               },
               style: {},
@@ -479,7 +491,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
     }
     target.children.forEach((child, childIndex) => {
       element.children.push(visit(child, target, childIndex, `${elementKey}/${childIndex}:${elementType(child)}`));
-      const splitter = splitterAfter(target, childIndex, elementKey);
+      const splitter = splitterAfter(target, childIndex, elementKey, context);
       if (splitter) element.children.push(splitter);
     });
     return element;
@@ -538,10 +550,12 @@ wm-tabs { touch-action: pan-x; }
 [data-wm-splitter][aria-orientation="vertical"]::after { width: 1px; height: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
 [data-wm-splitter][aria-orientation="horizontal"]::after { height: 1px; width: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
 [data-wm-splitter]:hover, [data-wm-splitter]:focus-visible, [data-wm-splitter][data-wm-active] { background: var(--wm-splitter-fill-active, rgb(59 130 246 / 0.35)); }
-[data-wm-splitter]:focus-visible { outline: none; }
+wm-view:focus-visible, wm-tabs > button:focus-visible, [data-wm-splitter]:focus-visible, [data-wm-handle]:focus-visible { outline: 3px solid var(--wm-focus-ring, #1d4ed8); outline-offset: 2px; box-shadow: 0 0 0 1px var(--wm-focus-ring-halo, #fff); }
+wm-view:focus-visible { outline-offset: -3px; }
 ::view-transition-group(*) { animation-duration: var(--wm-transition-duration, 0.25s); }
 ::view-transition-old(*), ::view-transition-new(*) { animation-duration: var(--wm-transition-duration, 0.25s); animation-timing-function: var(--wm-transition-easing, ease); }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  wm-overlay, wm-row, wm-column, wm-grid, wm-stack, wm-view, wm-tabs, wm-tabs > button, [data-wm-splitter] { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 `.trim();
