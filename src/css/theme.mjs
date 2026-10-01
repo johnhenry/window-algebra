@@ -81,6 +81,9 @@ export const THEME_TOKENS = Object.freeze({
   "--wa-font": { description: "Font for the library's own text (tabs, ghost label, palette)", light: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", dark: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" },
   "--wa-font-size": { description: "Base size for the library's own text", light: "14px", dark: "14px" },
   "--wa-font-size-sm": { description: "Small text (ghost label, palette hints)", light: "12px", dark: "12px" },
+  "--wa-palette-width": { description: "Command palette width (it shrinks to fit narrow screens)", light: "40rem", dark: "40rem" },
+  "--wa-palette-max-height": { description: "Command palette maximum height", light: "32rem", dark: "32rem" },
+  "--wa-palette-top": { description: "Gap above the command palette", light: "12vh", dark: "12vh" },
   "--wa-transition-duration": { description: "View Transition animations (set by the renderer's `animate` option)", light: "0.25s", dark: "0.25s" },
   "--wa-transition-easing": { description: "Easing for those animations", light: "ease", dark: "ease" },
 });

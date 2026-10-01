@@ -16,6 +16,7 @@ import { createDomRenderer } from "../browser/dom.mjs";
 import { attachInput } from "../browser/input.mjs";
 import { createFrameScheduler } from "../browser/scheduler.mjs";
 import { attachSync } from "../browser/sync.mjs";
+import { createPalette } from "../browser/palette.mjs";
 
 /**
  * @param {Element} host mount point (usually the custom element itself)
@@ -27,12 +28,14 @@ import { attachSync } from "../browser/sync.mjs";
  * @param {object} [options.input] extra options merged into `attachInput`
  * @param {boolean|object} [options.sync] keep this stage's window manager in step with other tabs: `true`, or
  *   options for `attachSync` (`channel`, `id`, ...). Off by default.
+ * @param {boolean|object} [options.palette] a command palette (Ctrl/Cmd+Shift+P) for this stage's window
+ *   manager: `true`, or options for `createPalette` (`shortcut`, `exclude`, ...). Off by default.
  * @param {(task: () => void) => void} [options.schedule] when commits run after a state change; default
  *   `createFrameScheduler()` (many commands, one commit per frame). Pass `immediateScheduler` to commit synchronously.
- * @returns {{ wm: object, renderer: object, sync: object|null, detach(): void }}
+ * @returns {{ wm: object, renderer: object, sync: object|null, palette: object|null, detach(): void }}
  */
 export const attachStage = (host, options = {}) => {
-  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, schedule = createFrameScheduler() } = options;
+  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, palette, schedule = createFrameScheduler() } = options;
   const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor });
   let live = true;
   const commit = () => live && renderer.commit(wm.present().render);
@@ -40,12 +43,15 @@ export const attachStage = (host, options = {}) => {
   const unsubscribe = wm.subscribe(() => schedule(commit));
   const detachInput = attachInput({ root: host, wm, ...input });
   const syncHandle = sync ? attachSync({ wm, ...(sync === true ? {} : sync) }) : null;
+  const paletteHandle = palette ? createPalette({ wm, document: host.ownerDocument, ...(palette === true ? {} : palette) }) : null;
   return {
     wm,
     renderer,
     sync: syncHandle,
+    palette: paletteHandle,
     detach() {
       syncHandle?.detach();
+      paletteHandle?.detach();
       live = false; // a commit still queued for the next frame must not touch the torn-down renderer
       unsubscribe();
       detachInput();
@@ -108,4 +114,83 @@ export const defineWindowAlgebraElement = (
 
   registry.define(name, WindowAlgebraStage);
   return WindowAlgebraStage;
+};
+
+/**
+ * Defines (and returns) a `<name>` custom element (default `wa-palette`) that
+ * hosts a command palette: `el.configure({ wm, shortcut, ... })` (or `el.wm = wm`)
+ * once, then it opens on the shortcut, or with `el.open()`, `el.close()` and
+ * `el.toggle()`. The palette lives as long as the element is connected. Pass
+ * `options` (anything `createPalette` takes) through `configure`.
+ *
+ * @param {string} [name] tag name, must contain a hyphen
+ * @param {object} [deps] for testing outside a browser: `{ customElements, HTMLElement }`
+ */
+export const defineCommandPaletteElement = (
+  name = "wa-palette",
+  { customElements: registry = globalThis.customElements, HTMLElement: Base = globalThis.HTMLElement } = {},
+) => {
+  if (!registry || !Base) {
+    throw new Error(
+      "defineCommandPaletteElement: no customElements registry / HTMLElement available; pass { customElements, HTMLElement } explicitly outside a browser",
+    );
+  }
+  const existing = registry.get?.(name);
+  if (existing) return existing;
+
+  class CommandPaletteElement extends Base {
+    #palette = null;
+    #options = {};
+    #connected = false;
+
+    connectedCallback() {
+      this.#connected = true;
+      this.#mount();
+    }
+
+    disconnectedCallback() {
+      this.#connected = false;
+      this.#palette?.detach();
+      this.#palette = null;
+    }
+
+    #mount() {
+      this.#palette?.detach();
+      this.#palette = this.#options.wm ? createPalette({ document: this.ownerDocument, ...this.#options }) : null;
+    }
+
+    /** Set (or replace) the palette's options (`wm` is required); re-mounts immediately if connected. */
+    configure(options) {
+      this.#options = options ?? {};
+      if (this.#connected) this.#mount();
+      return this;
+    }
+
+    set wm(wm) {
+      this.configure({ ...this.#options, wm });
+    }
+
+    get wm() {
+      return this.#options.wm ?? null;
+    }
+
+    open(options) {
+      this.#palette?.open(options);
+    }
+
+    close() {
+      this.#palette?.close();
+    }
+
+    toggle() {
+      this.#palette?.toggle();
+    }
+
+    get isOpen() {
+      return this.#palette?.isOpen ?? false;
+    }
+  }
+
+  registry.define(name, CommandPaletteElement);
+  return CommandPaletteElement;
 };

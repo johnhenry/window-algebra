@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Command palette</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 8px; padding: 8px; min-height: 0; }
+      #stage { border-radius: 10px; border: 1px solid var(--line); min-height: 320px; }
+      aside { overflow: auto; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13px; }
+      aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 10px 0 6px; }
+      #log { list-style: none; margin: 0; padding: 0; font: 12px var(--mono); }
+      #log li { padding: 2px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+      kbd { font: 600 11px var(--mono); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; background: var(--surface-2); }
+      @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar">
+      <button class="btn small" id="open" aria-haspopup="dialog">Command palette</button>
+      <span class="sep"></span>
+      <label class="inline">Shortcut
+        <select id="shortcut">
+          <option value="Mod+Shift+P">Ctrl/Cmd+Shift+P</option>
+          <option value="Mod+K">Ctrl/Cmd+K</option>
+          <option value="F1">F1</option>
+        </select>
+      </label>
+      <span class="sep"></span>
+      <span class="chip">Press <kbd id="keys">Ctrl/Cmd+Shift+P</kbd></span>
+    </nav>
+    <main>
+      <div id="stage" class="stage" aria-label="Palette stage"></div>
+      <aside aria-label="Dispatched commands">
+        <h2>Try</h2>
+        <p>"close", "new ws", "layout", "float", "pin", "gap". Arrow keys move, Enter chooses, Escape steps back.</p>
+        <h2>Dispatched</h2>
+        <ol id="log" aria-live="polite"></ol>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, attachPopouts, createPalette, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+
+      initPage({ current: "./palette.html", title: "Command palette" });
+
+      const root = document.getElementById("stage");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({
+        state: createState({ workspaces: ["main", "docs"], config: { gap: 6, inset: 6 } }),
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 200,
+      });
+      attachInput({ root, wm, keyboard: true });
+      const popouts = attachPopouts({ wm, renderer });
+      syncChrome(wm, root);
+
+      // Any window the palette opens gets content from its id.
+      const fill = (id, title) => surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${id}: opened from the palette or the page.`) }));
+      for (const [id, title] of [["editor", "Editor"], ["term", "Terminal"], ["notes", "Notes"]]) {
+        fill(id, title);
+        wm.create({ id, title });
+      }
+      wm.subscribe((state, events) => {
+        for (const event of events) {
+          if (event.type === "window/created" && !surfaces.has(event.id)) fill(event.id, state.windows[event.id]?.title || event.id);
+        }
+      });
+
+      const log = document.getElementById("log");
+      const original = wm.dispatch;
+      wm.dispatch = (command) => {
+        const out = original(command);
+        const li = document.createElement("li");
+        const rejected = out.events.find((event) => event.type === "command/rejected");
+        li.textContent = `${JSON.stringify(command)}${rejected ? ` -> rejected: ${rejected.reason}` : ""}`;
+        log.prepend(li);
+        return out;
+      };
+
+      let palette;
+      const mountPalette = () => {
+        palette?.detach();
+        palette = createPalette({ wm, popouts, shortcut: document.getElementById("shortcut").value });
+        document.getElementById("keys").textContent = document.getElementById("shortcut").selectedOptions[0].textContent;
+      };
+      mountPalette();
+      document.getElementById("shortcut").onchange = mountPalette;
+      document.getElementById("open").onclick = () => palette.open();
+      window.wm = wm;
+    </script>
+  </body>
+</html>

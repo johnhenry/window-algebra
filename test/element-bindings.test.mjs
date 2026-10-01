@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { attachStage, defineWindowAlgebraElement } from "../src/bindings/element.mjs";
+import { attachStage, defineWindowAlgebraElement, defineCommandPaletteElement } from "../src/bindings/element.mjs";
 import { createWindowManager } from "../src/manager.mjs";
 import { immediateScheduler } from "../src/browser/scheduler.mjs";
 import { createFakeDocument, FakeElement } from "./helpers/fake-dom.mjs";
@@ -200,6 +200,75 @@ describe("defineWindowAlgebraElement", () => {
     assert.equal(el.querySelectorAll("wm-view").length, 2);
 
     el.disconnectedCallback();
+  });
+});
+
+describe("command palette bindings", () => {
+  const registryFor = () => ({
+    defs: new Map(),
+    define(name, ctor) {
+      this.defs.set(name, ctor);
+    },
+    get(name) {
+      return this.defs.get(name);
+    },
+  });
+  const press = (doc) => doc.dispatch("keydown", { key: "P", ctrlKey: true, shiftKey: true, preventDefault() {}, stopPropagation() {} });
+
+  test("attachStage({ palette: true }) opens a palette on Ctrl+Shift+P for the stage's manager; detach removes it", () => {
+    const doc = createFakeDocument();
+    const host = doc.createElement("wa-stage");
+    doc.body.append(host);
+    const stage = attachStage(host, { schedule: immediateScheduler, palette: true });
+    assert.ok(stage.palette);
+    press(doc);
+    assert.equal(stage.palette.isOpen, true);
+    assert.ok(doc.body.querySelector("[data-wm-palette]"));
+    stage.palette.close();
+    stage.detach();
+    assert.equal(doc.body.querySelector("[data-wm-palette]"), null);
+    const plain = attachStage(host, { schedule: immediateScheduler });
+    assert.equal(plain.palette, null, "off by default");
+    const custom = attachStage(host, { schedule: immediateScheduler, palette: { shortcut: "Ctrl+K" } });
+    press(doc);
+    assert.equal(custom.palette.isOpen, false);
+    custom.detach();
+    plain.detach();
+  });
+
+  test("<wa-palette>: configure({ wm }) mounts a palette while connected; open/close/toggle; wm setter", () => {
+    const doc = createFakeDocument();
+    const registry = registryFor();
+    class FakeHTMLElement extends FakeElement {
+      constructor() {
+        super("wa-palette", doc);
+      }
+    }
+    const Ctor = defineCommandPaletteElement("wa-palette", { customElements: registry, HTMLElement: FakeHTMLElement });
+    assert.equal(defineCommandPaletteElement("wa-palette", { customElements: registry, HTMLElement: FakeHTMLElement }), Ctor, "idempotent");
+    const el = new Ctor();
+    doc.body.append(el);
+    el.connectedCallback();
+    el.open();
+    assert.equal(el.isOpen, false, "no manager yet: nothing to open");
+    const wm = createWindowManager();
+    wm.create({ id: "a", title: "Alpha" });
+    el.wm = wm;
+    assert.equal(el.wm, wm);
+    el.open();
+    assert.equal(el.isOpen, true);
+    assert.ok(doc.body.querySelector("[data-wm-palette]"));
+    el.close();
+    el.toggle();
+    assert.equal(el.isOpen, true);
+    press(doc);
+    assert.equal(el.isOpen, false, "the shortcut works too");
+    el.configure({ wm, shortcut: false });
+    press(doc);
+    assert.equal(el.isOpen, false);
+    el.disconnectedCallback();
+    assert.equal(doc.body.querySelector("[data-wm-palette]"), null);
+    assert.throws(() => defineCommandPaletteElement("x-y", { customElements: null, HTMLElement: null }), /no customElements/);
   });
 });
 

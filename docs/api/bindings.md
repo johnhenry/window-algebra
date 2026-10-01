@@ -93,6 +93,25 @@ Instance API:
 
 Lifecycle: `connectedCallback` → `attachStage(this, options)`; `disconnectedCallback` → `detach()`. **Without an explicit `wm` in the options, a new manager is created on every connect and every `configure`**, so the previous windows are gone. Pass your own `wm` to keep state across re-parenting or reconfiguration.
 
+### `defineCommandPaletteElement(name = "wa-palette", deps?)`
+
+Registers and returns a custom element class that hosts a [command palette](./palette.md) for as long as it is connected. Idempotent for an already-registered `name`; `deps` as above; without a registry it **throws `Error`**.
+
+```html
+<wa-palette></wa-palette>
+<script type="module">
+  import { defineCommandPaletteElement } from "@johnhenry/window-algebra/element";
+  defineCommandPaletteElement();
+  document.querySelector("wa-palette").configure({ wm, shortcut: "Mod+K" });
+</script>
+```
+
+| Member | Description |
+| --- | --- |
+| `configure(options)` | Options for `createPalette` (`wm` required). If connected, it re-mounts immediately. Returns the element. |
+| `wm` (getter and setter) | The manager; assigning it mounts the palette. |
+| `open(options?)`, `close()`, `toggle()`, `isOpen` | As on the palette handle. They do nothing until a `wm` is set. |
+
 ### `attachStage(host, options?)`
 
 The reusable core that the element wraps. It needs only `host.ownerDocument` and the usual Element methods (the real DOM, or the fake one in `test/helpers/fake-dom.mjs`).
@@ -105,7 +124,9 @@ attachStage(host, {
   surfaceFor,      // forwarded to createDomRenderer
   input,           // merged into attachInput's options
   schedule,        // (task) => void; default createFrameScheduler(). immediateScheduler commits synchronously
-}) → { wm, renderer, detach() }
+  sync,            // true | attachSync options: keep this stage in step with other tabs (off by default)
+  palette,         // true | createPalette options: a command palette for this stage's manager (off by default)
+}) → { wm, renderer, sync, palette, detach() }   // sync/palette are the handles, or null
 ```
 
 It commits once, then re-commits after dispatches, coalesced to one commit per frame (a bare `requestAnimationFrame`; outside a browser it falls back to a 16 ms timer, so pass `schedule: immediateScheduler` in tests). `detach()` unsubscribes, detaches input and destroys the renderer.

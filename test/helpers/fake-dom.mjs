@@ -116,6 +116,13 @@ export class FakeElement {
   append(...nodes) {
     nodes.forEach((node) => this.appendChild(node));
   }
+  /** Real `ParentNode.replaceChildren`: drops every child (and own text), then appends `nodes`. */
+  replaceChildren(...nodes) {
+    this.childNodes.forEach((node) => (node.parentNode = null));
+    this.childNodes = [];
+    this.#text = "";
+    nodes.forEach((node) => this.appendChild(node));
+  }
   removeChild(node) {
     this.#detach(node);
     return node;
@@ -173,19 +180,21 @@ export class FakeElement {
   }
 }
 
-/** Supports `tag`, `[attr]`, `[attr="v"]`, and `tag[attr]...` compound selectors, comma-separated. */
+/** Supports `tag`, `#id`, `[attr]`, `[attr="v"]`, and `tag#id[attr]...` compound selectors, comma-separated. */
 function compileSelector(selector) {
   const alternatives = selector.split(",").map((part) => {
-    const match = part.trim().match(/^([a-zA-Z-]*)((?:\[[^\]]+\])*)$/);
+    const match = part.trim().match(/^([a-zA-Z0-9-]*)(?:#([\w-]+))?((?:\[[^\]]+\])*)$/);
     if (!match) throw new Error(`fake-dom: unsupported selector ${part}`);
     const tag = match[1].toLowerCase();
-    const attrs = [...match[2].matchAll(/\[([^\]=^]+)(\^?=)?"?([^\]"]*)"?\]/g)].map(([, name, op, value]) => ({
+    const id = match[2];
+    const attrs = [...match[3].matchAll(/\[([^\]=^]+)(\^?=)?"?([^\]"]*)"?\]/g)].map(([, name, op, value]) => ({
       name,
       op,
       value,
     }));
     return (element) =>
       (!tag || element.localName === tag) &&
+      (!id || element.getAttribute("id") === id) &&
       attrs.every(({ name, op, value }) => {
         if (!element.hasAttribute(name)) return false;
         if (op === "=") return element.getAttribute(name) === value;

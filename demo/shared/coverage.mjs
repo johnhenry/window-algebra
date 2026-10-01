@@ -194,6 +194,11 @@ export const CHECKLIST = [
     ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
     ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
   ]),
+  ...items("Command palette", [
+    ["createPalette", "createPalette({ wm }): fuzzy command palette, WAI-ARIA combobox/listbox, Ctrl/Cmd+Shift+P (configurable), prompts for payload fields, dispatches"],
+    ["palette-catalog", "COMMAND_CATALOG / paletteEntries / fuzzyMatch / fieldChoices / parseField / buildCommand: the pure palette data, one entry per command"],
+    ["wa-palette", "<wa-palette> element (defineCommandPaletteElement) and attachStage({ palette })"],
+  ]),
   ...items("Theming", [
     ["theme-tokens", "THEME_TOKENS / THEME_CSS: the --wa-* custom properties (colours, radii, spacing, focus ring, splitter, title bar, shadows), light and dark defaults, prefers-contrast: more"],
     ["theme-override", "override any token on :root (or an ancestor of one stage); defaults have zero specificity"],
@@ -386,6 +391,16 @@ export const PAGES = [
       "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
+    ],
+  },
+  {
+    href: "./palette.html",
+    short: "Palette",
+    title: "Command palette",
+    blurb: "Press Ctrl/Cmd+Shift+P: fuzzy-search every command that makes sense for the current state, answer its payload fields, and dispatch. A combobox/listbox you can drive from the keyboard.",
+    covers: [
+      "createPalette", "palette-catalog", "wa-palette", "keyboard", "attachPopouts", "window/create", "window/close", "window/set-title", "window/set-draggable", "layout/set", "config/set",
+      "workspace/create", "workspace/activate", "undo-redo", "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "subscribe",
     ],
   },
   {
