@@ -4,7 +4,7 @@ import { createWindowManager } from "../src/index.mjs";
 import { createDomRenderer, createSurfaceRegistry, attachPopouts } from "../src/browser/index.mjs";
 import { createFakeDocument, createFakeWindow } from "./helpers/fake-dom.mjs";
 
-const setup = () => {
+const setup = (wmOptions = {}) => {
   const doc = createFakeDocument();
   const style = doc.createElement("style");
   style.textContent = ".wa-win { color: red; }";
@@ -26,7 +26,7 @@ const setup = () => {
     });
   }
   const renderer = createDomRenderer({ root, surfaceFor: registry, document: doc, anchorFallback: false });
-  const wm = createWindowManager({ renderer });
+  const wm = createWindowManager({ renderer, ...wmOptions });
   wm.create({ id: "a" });
   wm.create({ id: "b", title: "B" });
   return { doc, root, renderer, contents, registry, wm };
@@ -184,6 +184,31 @@ describe("attachPopouts", () => {
     popouts.popOut("b");
     wm.dispatch({ type: "window/pop-in", id: "b" });
     assert.equal(popup.closed, true);
+    assert.equal(popouts.isPoppedOut("b"), false);
+  });
+
+  test("undoing a pop-out closes the popup; redoing it pops the window back in instead of leaving it invisible (regression)", () => {
+    const { renderer, wm } = setup({ history: true });
+    const popup = createFakeWindow();
+    const popouts = attachPopouts({ wm, renderer, open: () => popup });
+    popouts.popOut("b");
+    assert.equal(wm.state.windows.b.status, "popped-out");
+    wm.undo();
+    assert.equal(wm.state.windows.b.status, "normal");
+    assert.equal(popup.closed, true, "undo used to leave the popup open");
+    assert.equal(popouts.isPoppedOut("b"), false);
+    // Redo cannot reopen a popup (no gesture, and the DOM was released): the window is popped back in.
+    wm.redo();
+    assert.equal(wm.state.windows.b.status, "normal");
+  });
+
+  test("loading a state with a popped-out window pops it back in", () => {
+    const { renderer, wm } = setup({ history: true });
+    const popouts = attachPopouts({ wm, renderer, open: () => createFakeWindow() });
+    const saved = JSON.parse(wm.serialize());
+    saved.windows.b.status = "popped-out";
+    wm.load(saved);
+    assert.equal(wm.state.windows.b.status, "normal");
     assert.equal(popouts.isPoppedOut("b"), false);
   });
 

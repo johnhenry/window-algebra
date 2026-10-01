@@ -4,7 +4,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { createState, update, derive, compile, presentationContext, isVisible, focusable, paintOrder, views } from "../src/index.mjs";
+import { createWindowManager, createState, update, derive, compile, presentationContext, isVisible, focusable, paintOrder, views } from "../src/index.mjs";
 
 const run = (state, ...commands) => commands.reduce((s, c) => update(s, c).state, state);
 const mk = (state, id, extra = {}) => run(state, { type: "window/create", id, ...extra });
@@ -176,5 +176,39 @@ describe("4, 5: fullscreen and maximize", () => {
     const state = run(withWindows(["a"]), { type: "window/fullscreen", id: "a" }, { type: "window/create", id: "n", role: "notification" });
     assert.equal(state.windows.a.status, "fullscreen");
     assert.equal(state.focus.window, "a");
+  });
+});
+
+describe("7: undo, redo and load re-sync focus", () => {
+  test("undo reports the focus change as an event and a focus effect", () => {
+    const effects = [];
+    const events = [];
+    const wm = createWindowManager({ history: true, onEffect: (effect) => effects.push(effect) });
+    wm.subscribe((_state, evs) => events.push(...evs));
+    wm.create({ id: "a" });
+    wm.create({ id: "b" });
+    effects.length = 0;
+    events.length = 0;
+    wm.undo(); // b never existed: focus goes back to a
+    assert.equal(wm.state.focus.window, "a");
+    assert.deepEqual(effects, [{ type: "focus", id: "a" }]);
+    assert.ok(events.some((e) => e.type === "window/focused" && e.id === "a"));
+    effects.length = 0;
+    wm.redo();
+    assert.deepEqual(effects, [{ type: "focus", id: "b" }]);
+    effects.length = 0;
+    wm.undo();
+    wm.undo(); // back to no windows: blurred
+    assert.deepEqual(effects.at(-1), { type: "focus", id: null });
+    assert.ok(events.some((e) => e.type === "window/blurred"));
+  });
+  test("an undo that does not move focus emits no focus effect", () => {
+    const effects = [];
+    const wm = createWindowManager({ history: true, onEffect: (effect) => effects.push(effect) });
+    wm.create({ id: "a" });
+    wm.resize("a", 300, 200);
+    effects.length = 0;
+    wm.undo();
+    assert.deepEqual(effects, []);
   });
 });

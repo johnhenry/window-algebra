@@ -158,6 +158,20 @@ export const createWindowManager = ({
     return out;
   };
 
+  /**
+   * Undo, redo and load replace the state without running `update`, so nothing
+   * says where focus went. Report it the way a command would: the focus event
+   * (`window/focused` or `window/blurred`) for subscribers, and a `focus`
+   * effect for `onEffect`, so keyboard focus follows the restored WM focus.
+   */
+  const focusChange = (before, after) => {
+    const previous = before.focus?.window ?? null;
+    const id = after.focus?.window ?? null;
+    if (previous === id) return [];
+    onEffect?.({ type: "focus", id }, api);
+    return [id ? { type: "window/focused", id, previous } : { type: "window/blurred", id: previous }];
+  };
+
   const travel = (fn, direction) => {
     const before = getState();
     history = fn(history);
@@ -165,7 +179,7 @@ export const createWindowManager = ({
       if (direction < 0 && entries.length) undone.unshift(entries.pop());
       if (direction > 0 && undone.length) entries.push(undone.shift());
       render();
-      notify([{ type: "history/changed" }], null);
+      notify([{ type: "history/changed" }, ...focusChange(before, getState())], null);
     }
     return getState();
   };
@@ -301,11 +315,12 @@ export const createWindowManager = ({
         return null;
       }
       const next = migrated.state;
+      const before = getState();
       history = historyOption ? record(history, next) : { ...history, present: next };
       entries.push({ load: next });
       undone = [];
       render();
-      notify([{ type: "state/loaded" }], null);
+      notify([{ type: "state/loaded" }, ...focusChange(before, next)], null);
       return next;
     },
   };

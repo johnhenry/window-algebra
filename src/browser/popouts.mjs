@@ -1,3 +1,5 @@
+import { poppedOutWindows } from "../state/queries.mjs";
+
 /**
  * GoldenLayout/Dockview-style pop-out: move a window's rendered DOM into a
  * real, separate browser window, and back again.
@@ -200,33 +202,37 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
   /** Bring a popped-out window back: closes its popup (if any) and dispatches `window/pop-in`. */
   const popIn = (id) => closePopup(id) ?? wm.dispatch({ type: "window/pop-in", id });
 
+  /** Forget a popup and close it, without carrying any DOM back (the window already left "popped-out"). */
+  const discard = (id) => {
+    const entry = popups.get(id);
+    if (!entry) return;
+    popups.delete(id);
+    entry.detach();
+    try {
+      entry.popup.close?.();
+    } catch {
+      /* already closing */
+    }
+  };
+
+  // Keep the popups and the state in step on every notification, whatever
+  // changed it: a restore, a close, or undo/redo/load stepping over a
+  // pop-out. A popup whose window is no longer popped out (or is gone) is
+  // closed. The reverse (the state says popped-out but this helper opened no
+  // popup) can only come from redo or load: a popup cannot be reopened
+  // without a user gesture, and the window's DOM was released when the
+  // pop-out was undone, so the window is popped back in instead of being
+  // left invisible. Windows popped out by a bare `window/pop-out` dispatch
+  // are left alone.
   const unsubscribeAll = wm.subscribe((state, events = []) => {
-    for (const event of events) {
-      // Something other than this helper's own popIn()/popOut() moved the
-      // window out of "popped-out" (restore, undo/redo, ...): drop the
-      // popup-tracking entry so it isn't closed a second time, but there is
-      // no DOM to carry back — it already remounted fresh (see module doc).
-      if (event.type === "window/status-changed" && event.previous === "popped-out" && event.status !== "popped-out") {
-        const entry = popups.get(event.id);
-        if (entry) {
-          popups.delete(event.id);
-          entry.detach();
-          try {
-            entry.popup.close?.();
-          } catch {
-            /* already closing */
-          }
-        }
-      }
-      if (event.type === "window/closed" && popups.has(event.id)) {
-        const entry = popups.get(event.id);
-        popups.delete(event.id);
-        entry.detach();
-        try {
-          entry.popup.close?.();
-        } catch {
-          /* already closing */
-        }
+    // The surface remounts fresh when a window leaves "popped-out" behind this
+    // helper's back (see the module doc); there is no DOM to carry back.
+    for (const id of [...popups.keys()]) {
+      if (state.windows[id]?.status !== "popped-out") discard(id);
+    }
+    if (events.some((event) => event.type === "history/changed" || event.type === "state/loaded")) {
+      for (const win of poppedOutWindows(state)) {
+        if (!popups.has(win.id)) wm.dispatch({ type: "window/pop-in", id: win.id });
       }
     }
   });
