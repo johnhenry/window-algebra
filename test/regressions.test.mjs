@@ -576,4 +576,19 @@ describe("found while writing the API reference (regression)", () => {
     assert.ok(sticky.events.some((e) => e.type === "window/status-changed" && e.id === "a" && e.status === "normal"));
   });
 
+  test("deep trees are not super-linear: bspReconcile and compile's splitter labels scaled cubically/quadratically with 500 windows (found by `npm run bench`)", () => {
+    const build = (layout, n) => replay(createState({ layout }), Array.from({ length: n }, (_, i) => ({ type: "window/create", id: `w${i}`, focus: false })));
+    for (const layout of [{ type: "bsp" }, { type: "spiral" }]) {
+      const state = build(layout, 500);
+      const started = performance.now();
+      const tree = derive(state);
+      const rendered = compile(tree, { titles: {} });
+      const elapsed = performance.now() - started;
+      assert.equal(views(tree).length, 500);
+      assert.ok(rendered.children.length > 0);
+      // It took 340 ms (bsp derive) and 90 ms (spiral compile) before; a few ms now. 150 ms leaves slack for a slow CI box.
+      assert.ok(elapsed < 150, `${layout.type}: derive + compile took ${elapsed.toFixed(0)} ms`);
+    }
+  });
+
 });

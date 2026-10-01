@@ -300,6 +300,16 @@ const elementType = (node) => {
 
 const isActiveChild = (child, active) => active === undefined || views(child).includes(active);
 
+/** The first view id of a subtree in document order (early exit: `views(node)[0]` walked the whole subtree). */
+const firstView = (node) => {
+  if (node.type === "view") return node.id;
+  for (const child of CONTAINER_KINDS.includes(node.type) ? node.children : [node.child]) {
+    const found = firstView(child);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+};
+
 /** Default cross-axis thickness (px) of a rendered splitter handle. Override with CSS on `[data-wm-splitter]`. */
 export const SPLITTER_SIZE = 6;
 
@@ -324,7 +334,7 @@ const splitterAfter = (target, index, elementKey, context = {}) => {
   const total = a + b;
   const now = total > 0 ? Math.round((a / total) * 100) : 50;
   // Name the pair it divides and point at the two panels it resizes (WAI-ARIA window splitter pattern).
-  const [first, second] = [views(target.children[index])[0], views(target.children[index + 1])[0]];
+  const [first, second] = [firstView(target.children[index]), firstView(target.children[index + 1])];
   const nameOf = (id) => (id === undefined ? undefined : context.titles?.[id] || id);
   const label = first !== undefined && second !== undefined ? `Resize ${nameOf(first)} and ${nameOf(second)}` : "Resize";
   const controls = [first, second].filter((id) => id !== undefined).map(panelId).join(" ");

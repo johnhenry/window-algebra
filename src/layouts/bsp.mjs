@@ -91,8 +91,15 @@ export const bspParentDirection = (tree, id) => {
 /** Make a stored tree agree with the windows present: drop missing leaves, append new ones. */
 export const bspReconcile = (tree, ids) => {
   let next = tree ?? null;
-  for (const id of bspIds(next)) if (!ids.includes(id)) next = bspRemove(next, id);
-  for (const id of ids) if (!bspIds(next).includes(id)) next = bspInsert(next, { id });
+  // Sets, not `includes` over a freshly built id list per id: reconciling a 500-window tree was cubic.
+  const wanted = new Set(ids);
+  for (const id of bspIds(next)) if (!wanted.has(id)) next = bspRemove(next, id);
+  const present = new Set(bspIds(next));
+  for (const id of ids) {
+    if (present.has(id)) continue;
+    next = bspInsert(next, { id });
+    present.add(id);
+  }
   return next;
 };
 
