@@ -35,7 +35,7 @@ COMMANDS                                              // frozen array of the 51 
 - `events`: an array of event objects recording what happened, in order. See [Events](./events.md).
 - `effects`: an array of effect values for the effectful shell. There are only two types, `{ type: "render" }` and `{ type: "focus", id }` (`id` may be `null`). Effects are de-duplicated by `type`, keeping the **last** occurrence, so a command that focuses twice yields one `focus` effect naming the final target.
 - `extensions`: optional `{ [type]: (state, command) => ({ state, events?, effects? }) }`. An extension handler **overrides** a built-in of the same type. Missing `events`/`effects` default to `[]`.
-- A `null`/non-object command, or one without a string `type`, is rejected as `invalid-command`. An unknown `type` is rejected as `unknown-command`.
+- A `null`/non-object command, or one without a string `type`, is rejected as `invalid-command`. An unknown `type` is rejected as `unknown-command`. A command whose `id`, `a`, `b`, `target`, `parent`, `workspace`, `output` or `fallback` is an `Object.prototype` key (`__proto__`, `constructor`, `toString`, ...) is rejected as `invalid-id`, so those names can never be window, workspace or output ids.
 - `replay` migrates its starting state first (see [Versioning](./versioning.md)). If migration fails, it replays from the state as given.
 
 `COMMANDS` is `Object.keys` of the built-in handler table, 51 entries, in the order the sections below follow.

@@ -18,10 +18,7 @@ const WALK_STEPS = 300;
  * matches one is tolerated, anything else fails the test. Each fix commit deletes its entry, and an entry that no
  * longer matches any failure fails the test too (so the list cannot rot).
  */
-const ID_FIELDS = ["id", "a", "b", "target", "parent", "workspace", "output", "fallback"];
-const reservedId = (command) => ID_FIELDS.some((f) => typeof command[f] === "string" && command[f] in Object.prototype);
 const KNOWN = [
-  { finding: "reserved ids (extra)", matches: (_t, _i, command) => reservedId(command) },
   { finding: "1, 5, 6: focus on invisible windows", matches: (_t, i) => ["focus-visible", "active-workspace-valid", "active-workspace-matches-output"].includes(i) },
   { finding: "2: unvalidated create fields", matches: (t, i) => t === "window/create" && ["throws", "window-valid-mode", "window-valid-layer"].includes(i) },
   { finding: "4, 6: blocked parent whose dialog is not presented", matches: (_t, i) => i === "blocker-is-presentable" },

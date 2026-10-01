@@ -1085,6 +1085,15 @@ function setStatus(state, command, status) {
   return changed;
 }
 
+/**
+ * Command fields that name a window, workspace or output. A name that is also
+ * an `Object.prototype` key (`__proto__`, `constructor`, ...) would make a
+ * plain `state.windows[id]` lookup find an inherited non-window, so those
+ * names are refused up front.
+ */
+const NAME_FIELDS = ["id", "a", "b", "target", "parent", "workspace", "output", "fallback"];
+const hasReservedName = (command) => NAME_FIELDS.some((field) => typeof command[field] === "string" && command[field] in Object.prototype);
+
 /** Names of all built-in commands. */
 export const COMMANDS = Object.freeze(Object.keys(handlers));
 
@@ -1098,6 +1107,7 @@ export const update = (state, command, extensions) => {
   }
   const handler = extensions?.[command.type] ?? handlers[command.type];
   if (!handler) return rejected(state, command, "unknown-command");
+  if (hasReservedName(command)) return rejected(state, command, "invalid-id");
   const out = handler(state, command);
   return result(out.state, out.events ?? [], dedupeEffects(out.effects ?? []));
 };

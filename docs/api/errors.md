@@ -28,6 +28,7 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | --- | --- |
 | `invalid-command` | `update`: a non-object command, or one without a string `type` |
 | `unknown-command` | `update`: no handler for `type` |
+| `invalid-id` | `update`: a name field (`id`, `a`, `b`, `target`, `parent`, `workspace`, `output`, `fallback`) that is an `Object.prototype` key such as `__proto__` or `constructor` |
 | `missing-id` | `window/create`, `workspace/create`, `output/create` |
 | `duplicate-id` | `window/create`, `workspace/create`, `output/create` |
 | `unknown-parent` | `window/create` |
