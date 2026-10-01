@@ -6,7 +6,7 @@
 
 ## The verification loop (before every push)
 
-1. `npm test`: currently 1005 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
+1. `npm test`: currently 1006 tests, **0 skipped**. Nothing in this suite skips, so a skip count above 0 means something is wrong.
 2. `npm run examples`: six self-verifying scripts (`examples/NN-*.mjs`), each exiting non-zero on failure. `npm run test:types`: `tsc --noEmit` over `test/types/usage.mts` (its `@ts-expect-error` lines must fail to compile).
 3. `npm pack --dry-run`: read the file list. Only `src/` (which holds the hand-written `.d.mts` declarations), `README.md`, `LICENSE` and `package.json` should ship; no `demo/`, `test/`, `docs/` or `examples/`.
 4. A genuinely fresh clone: `git clone . /tmp/window-algebra-verifyN && cd $_ && npm ci && npm test && npm run examples`.
@@ -14,7 +14,7 @@
 6. For anything in `src/browser/`, `src/css/` or `demo/`: serve the repo root (`python3 -m http.server`), open `/demo/`, and exercise the page that covers the change (the hub's checklist says which).
 7. Commit and push, then close the issue with a comment naming the commit SHA.
 
-CI (`.github/workflows/ci.yml`) runs `npm ci`, `npm test`, `npm run examples` and `npm pack --dry-run` on Node 26. Match it locally. Node 24 also passes the suite, but `engines` stays at the family floor of 26; don't lower it to match a local install.
+CI (`.github/workflows/ci.yml`) calls the family's reusable `johnhenry/workflows/.github/workflows/ci.yml@v1` for the Node 26 gate (`npm ci`, `npm test`, `npm run examples`, `npm run test:types`, `npm pack --dry-run`) and keeps one local job, `browser` (Playwright on all three engines plus the axe scan). Match it locally. Node 24 also passes the suite, but `engines` stays at the family floor of 26; don't lower it to match a local install.
 
 ## Repo-specific gotchas
 
@@ -45,3 +45,16 @@ Replacing an operating-system window manager or compositor, and multi-user colla
 ## Releases
 
 Bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge, then `gh release create v<version>`. The release event triggers `.github/workflows/publish.yml`, which runs the tests and examples, skips if the version is already on npm, and publishes with `--provenance --access public`. It needs a scope-capable `NPM_TOKEN` secret, and `repository.url` must match the publishing repo for provenance.
+
+### Publish workflow
+
+`.github/workflows/publish.yml` calls `johnhenry/workflows/.github/workflows/npm-publish.yml@v1` with `secrets: inherit` and `id-token: write` on the caller job. Triggers: `release: published`, a redundant `push: tags: ["v*"]` (a release created soon after a push can drop the release event; the `npm view` guard makes a double fire a no-op), and `workflow_dispatch`. The gate runs inside the reusable workflow: `npx playwright install --with-deps`, `npm test`, `npm run examples`, `npm run test:types`, `npm run test:browser` (all three engines plus axe). The reusable workflow then runs the `npm view <name>@<version>` guard (a 404 for a never-published package is non-zero, which means "publish") and `npm publish --provenance --access public`.
+
+### First release checklist (nothing has been published yet; `0.0.0` is a placeholder)
+
+1. `npm view @johnhenry/window-algebra` returns 404 today; that is expected. Confirm the `@johnhenry` npm scope is the maintainer's and that the `NPM_TOKEN` repo secret exists and can create a new public scoped package (`gh api repos/johnhenry/window-algebra/actions/secrets`).
+2. In a PR: bump `version` in `package.json` (not `0.0.0`), move the `CHANGELOG.md` entry from Unreleased to the version with a date, merge.
+3. Run the whole loop above, then `npm pack --dry-run` and `npm publish --dry-run` (no token needed; the 57-file list must hold `src/` including every `.d.mts`, plus `README.md`, `LICENSE`, `package.json`; no `demo/`, `test/`, `e2e/`, `docs/`, `examples/`, `.env`).
+4. `repository.url` must stay `git+https://github.com/johnhenry/window-algebra.git` (provenance compares it to the publishing repo); `homepage` is `https://opensource.johnhenry.me/window-algebra/`, which must be live (docs section on the opensource site) before announcing.
+5. `gh release create v<version>`. Both the release and the `v*` tag trigger the publish; a same-second second run may show a red `403 cannot publish over` on the losing trigger. That is expected; confirm with an anonymous `npm view @johnhenry/window-algebra version`.
+6. Afterwards: check the provenance badge on npmjs.com, and install the tarball into a scratch project to import each `exports` entry and its types.

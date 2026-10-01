@@ -19,22 +19,32 @@ const makeTouch = async (page, browserName) => {
       end: () => send("touchEnd", []),
     };
   }
-  const fire = (type, id, x, y) =>
-    page.evaluate(
-      ([type, id, x, y]) => {
-        // A touch pointer is implicitly captured by the element it went down on: later events go there, wherever the finger is.
-        window.__touch ??= new Map();
+  // One page.evaluate per batch of events: a gesture with a wall-clock limit (the two-finger swipe allows 900 ms)
+  // must not be stretched by a round trip per event on a loaded machine.
+  const fireAll = (events) =>
+    page.evaluate((events) => {
+      // A touch pointer is implicitly captured by the element it went down on: later events go there, wherever the finger is.
+      window.__touch ??= new Map();
+      for (const [type, id, x, y] of events) {
         let target = window.__touch.get(id);
         if (type === "pointerdown" || !target?.isConnected) target = document.elementFromPoint(x, y) ?? document.body;
         if (type === "pointerdown") window.__touch.set(id, target);
         if (type === "pointerup") window.__touch.delete(id);
         target.dispatchEvent(new PointerEvent(type, { pointerId: id + 1, pointerType: "touch", isPrimary: id === 0, clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true, button: 0, buttons: type === "pointerup" ? 0 : 1 }));
-      },
-      [type, id, x, y],
-    );
+      }
+    }, events);
+  const fire = (type, id, x, y) => fireAll([[type, id, x, y]]);
   let down = [];
   return {
     native: false,
+    /** A whole stroke (down, moves, up) in one evaluate, so its duration does not depend on machine load. */
+    stroke: (from, to, steps) => {
+      const events = [];
+      from.forEach(([x, y], k) => events.push(["pointerdown", k, x, y]));
+      for (let i = 1; i <= steps; i++) from.forEach(([x, y], k) => events.push(["pointermove", k, lerp(x, to[k][0], i / steps), lerp(y, to[k][1], i / steps)]));
+      from.forEach((_, k) => events.push(["pointerup", k, to[k][0], to[k][1]]));
+      return fireAll(events);
+    },
     start: async (points) => {
       down = points;
       for (const [i, [x, y]] of points.entries()) await fire("pointerdown", i, x, y);
@@ -53,6 +63,7 @@ const makeTouch = async (page, browserName) => {
 const lerp = (a, b, t) => a + (b - a) * t;
 /** Slide the points from `from` to `to` in `steps`. */
 const slide = async (touch, from, to, steps = 8) => {
+  if (touch.stroke) return touch.stroke(from, to, steps);
   await touch.start(from);
   for (let i = 1; i <= steps; i++) await touch.move(from.map(([x, y], k) => [lerp(x, to[k][0], i / steps), lerp(y, to[k][1], i / steps)]));
   await touch.end();

@@ -124,7 +124,6 @@ test.describe("built-in window chrome (chrome.html)", () => {
   test("a body that scrolls is a focusable, labelled region (the axe rule); one that fits is not", async ({ demo, page }) => {
     await demo("chrome.html");
     await settle(page);
-    await page.waitForTimeout(150);
     const long = win(page, "long").locator("[data-wa-chrome-body]");
     await expect(long).toHaveAttribute("tabindex", "0");
     await expect(long).toHaveAttribute("role", "region");

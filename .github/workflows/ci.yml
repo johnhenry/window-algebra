@@ -1,9 +1,3 @@
-# Family-standard single-package CI workflow (adopt-library Phase 3).
-#
-# PENDING -- not yet built: `johnhenry/workflows` will offer this as a
-# `workflow_call` target (`ci.yml@v1` with matrix / gate / drift-check
-# inputs). Until it is tagged v1, inline this file.
-
 name: CI
 
 on:
@@ -11,45 +5,32 @@ on:
     branches: [main]
   pull_request:
 
-# Supersede an in-flight run when new commits land on the same ref -- the
-# whole family shares this block so a rapid push sequence never queues N
-# redundant runs.
+# The reusable `test` job carries the family's own concurrency block
+# (group `ci-<workflow>-<ref>`). This caller-level group must be a DIFFERENT
+# string, or the caller and the called workflow cancel each other.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: wa-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # engines.node >=26.0.0 -- test the floor version directly rather
-        # than a matrix of now-unsupported older majors.
-        node-version: [26]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          # `cache: npm` is fine on ubuntu-latest; never on a self-hosted runner.
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - name: Examples smoke test
-        run: npm run examples
-      - name: Type declarations
-        # tsc --noEmit over a typed usage file that imports every entry point; its @ts-expect-error
-        # lines must fail to compile, so a type that goes loose breaks the build.
-        run: npm run test:types
-      - name: Package contents
-        # Read the list, not just the exit code: only src/ plus README,
-        # LICENSE and package.json should ship (no demo/, test/, docs/).
-        run: npm pack --dry-run
+    # Family gate: install, unit suite, examples, type declarations, pack list.
+    uses: johnhenry/workflows/.github/workflows/ci.yml@v1
+    with:
+      node-versions: '["26"]'
+      os: '["ubuntu-latest"]'
+      gate-commands: |
+        npm test
+        npm run examples
+        npm run test:types
+        npm pack --dry-run
 
+  # Deviation from the shared workflow (kept local on purpose): the reusable
+  # ci.yml has no browser-install, report-upload or timeout inputs, and this
+  # job is window-algebra specific: Playwright drives every demo page in
+  # Chromium, Firefox and WebKit, including an axe-core scan that must find no
+  # serious or critical violation.
   browser:
-    # Real-browser tests of the demo pages in Chromium, Firefox and WebKit (Playwright), including an axe-core
-    # accessibility scan of every demo page that must find no serious or critical violation.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

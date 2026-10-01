@@ -18,7 +18,7 @@ test.describe("frame-scheduler commits (<wa-stage>)", () => {
       const synchronous = stage.querySelectorAll("wm-view").length; // nothing has been committed yet
       await raf();
       await raf();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => queueMicrotask(resolve)); // MutationObserver records are delivered at the microtask checkpoint
       const after = stage.querySelectorAll("wm-view").length;
       observer.disconnect();
       return { before, synchronous, after, batches };
