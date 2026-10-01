@@ -23,6 +23,16 @@ Every visual value in the library's own CSS (`BASE_CSS`, the drag ghost and drop
 
 The defaults are declared inside `:where()`, so they have **zero specificity**: a plain `:root { --wa-color-accent: hotpink }` wins wherever it appears in the stylesheet order.
 
+## Under a strict Content-Security-Policy
+
+Setting `BASE_CSS` as a `<style>`'s `textContent` (the snippet above), and the `<style data-wm-palette-style>` that
+`createPalette` injects, are inline styles, which `style-src 'self'` blocks. Everything else the library does to the DOM
+goes through the CSSOM (`element.style.setProperty`), which a CSP allows, so the fix is only about these two sheets:
+write `BASE_CSS` and `PALETTE_CSS` (both exported; `PALETTE_CSS` from `@johnhenry/window-algebra/browser`) to a `.css`
+file at build time, link it, and pass `injectStyles: false` to `createPalette` (or to `<wa-palette>`'s `configure`).
+Nothing else needs `'unsafe-inline'`. The [workbench](https://github.com/johnhenry/workbench) app does exactly this under
+`require-trusted-types-for 'script'`.
+
 ## Light, dark and high contrast
 
 | Condition | Result |
