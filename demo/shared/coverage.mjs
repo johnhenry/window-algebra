@@ -194,6 +194,13 @@ export const CHECKLIST = [
     ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
     ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
   ]),
+  ...items("Touch and pen", [
+    ["touch-option", "attachInput({ touch }): opt-in; sets data-wm-touch, which BASE_CSS maps to the touch-action each gesture needs"],
+    ["touch-pinch", "pinch: two touches on a floating window resize it (one gesture, honours constraints); createPinch / updatePinch"],
+    ["touch-swipe-tabs", "swipe a tab strip left/right to switch tabs (touch or pen); swipeOf"],
+    ["touch-swipe-workspaces", "two-finger horizontal swipe switches workspace"],
+    ["touch-context", "long-press a window: wm-contextmenu event / callback / command; the native menu is suppressed"],
+  ]),
   ...items("Cross-tab sync", [
     ["attachSync", "attachSync({ wm, channel }): opt-in BroadcastChannel sync of versioned state snapshots, last-writer-wins by Lamport clock"],
     ["sync-conflicts", "concurrent edits in two tabs converge on one winner (clock, then tab id); undo/redo sync like any change"],
@@ -374,6 +381,17 @@ export const PAGES = [
       "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
+    ],
+  },
+  {
+    href: "./touch.html",
+    short: "Touch",
+    title: "Touch and pen gestures",
+    blurb: "Pinch a floating window, swipe the tab strip, two-finger swipe between workspaces, long-press for a menu. Opt-in through attachInput({ touch }).",
+    covers: [
+      "touch-option", "touch-pinch", "touch-swipe-tabs", "touch-swipe-workspaces", "touch-context", "touch-longpress", "drag-move", "tiled-drag", "keyboard",
+      "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "workspace/activate", "window/resize", "window/focus",
+      "window/toggle-floating", "window/maximize", "window/minimize", "window/close", "undo-redo", "subscribe",
     ],
   },
   {

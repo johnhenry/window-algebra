@@ -633,7 +633,9 @@ describe("touch", () => {
 
   test("only handles opt out of touch panning; window content keeps scrolling", () => {
     assert.match(BASE_CSS, /\[data-wm-handle\] \{ touch-action: none; \}/);
-    assert.doesNotMatch(BASE_CSS, /wm-view[^{]*\{[^}]*touch-action/);
+    // The one exception is opt-in: pinch, keyed on the root's `data-wm-touch` token (see touch.test.mjs).
+    const rules = BASE_CSS.split("\n").filter((line) => !line.includes("data-wm-touch")).join("\n");
+    assert.doesNotMatch(rules, /wm-view[^{]*\{[^}]*touch-action/);
   });
 });
 

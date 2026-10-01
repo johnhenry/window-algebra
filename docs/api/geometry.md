@@ -100,6 +100,9 @@ Pointer-agnostic: feed them positions from a mouse, touch, pen, a synthetic sour
 | `createResize({ origin, bounds, edge = "se", constraints = {} })` | Starts a resize from an edge or corner. **Throws `TypeError`** for an unknown edge. |
 | `updateResize(resize, pointer)` | The resulting `{ x, y, width, height }`, constrained by `constrainSize`. For a single-axis edge (`n`/`s` or `e`/`w`), `preserve` holds the dragged dimension, so an aspect ratio adjusts the other one. West and north edges keep the opposite edge fixed. |
 | `updateRatio({ ratio, origin, total }, pointer, axis = "x")` | A split ratio after dragging a divider across `total` px, clamped to [0.05, 0.95]. |
+| `createPinch({ points: [a, b], bounds, constraints = {}, minSize = PINCH_MIN_SIZE })` | Starts a two-finger resize: `{ kind: "pinch", start, centroid, distance, constraints }`. `PINCH_MIN_SIZE` is 48. |
+| `updatePinch(pinch, [a, b])` | The resulting `{ x, y, width, height }`: size scales with the distance between the fingers (through `constrainSize`, so an aspect ratio holds), and the point of the window that started under the fingers' midpoint stays under it. |
+| `swipeOf({ dx, dy, duration }, { distance = 48, dominance = 2, maxDuration = 700 }?)` | Classifies a finished stroke: `"left"`, `"right"`, `"up"`, `"down"` or `null` (too short, too slow or diagonal). |
 
 ## Snap zones and magnetism
 

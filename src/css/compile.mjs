@@ -545,6 +545,10 @@ wm-view[data-wm-drag-denied] { outline: 2px solid var(--wm-ghost-bad, rgb(220 38
 [data-wm-workspace-target][data-wm-drop-active] { outline: 2px solid var(--wm-zone-line, rgb(59 130 246)); outline-offset: 1px; }
 [data-wm-handle] { touch-action: none; }
 wm-tabs { touch-action: pan-x; }
+[data-wm-touch~="pinch"] wm-view[data-mode="floating"] { touch-action: none; }
+[data-wm-touch~="swipe-tabs"] wm-tabs { touch-action: pan-y; }
+[data-wm-touch~="swipe-workspaces"] { touch-action: pan-y; }
+[data-wm-touch~="context"] wm-view { -webkit-touch-callout: none; }
 [data-wm-splitter] { background: var(--wm-splitter-fill, transparent); position: relative; z-index: 1; }
 [data-wm-splitter]::after { content: ""; position: absolute; inset: 0; margin: auto; }
 [data-wm-splitter][aria-orientation="vertical"]::after { width: 1px; height: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }

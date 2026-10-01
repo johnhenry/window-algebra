@@ -50,6 +50,7 @@ export * from "./layouts/index.mjs";
 export * as geometry from "./geometry/rect.mjs";
 export { positionPopup, SIDES as POPUP_SIDES } from "./geometry/positioner.mjs";
 export { createDrag, updateDrag, createResize, updateResize, updateRatio, EDGES } from "./interaction/drag.mjs";
+export { createPinch, updatePinch, swipeOf, PINCH_MIN_SIZE } from "./interaction/pinch.mjs";
 export { dropZoneAt, dropTargetAt, previewDrop, zoneRect } from "./interaction/drop.mjs";
 export { snapZoneAt, snapZoneRect, magnetize, magnetizeResize, SNAP_ZONES } from "./interaction/snap.mjs";
 

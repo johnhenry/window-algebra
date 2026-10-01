@@ -42,6 +42,7 @@ import { compile, SPLITTER_SIZE } from "../css/compile.mjs";
 import { bspNodeAt } from "../layouts/bsp.mjs";
 import { DEFAULT_CONFIG } from "../state/create.mjs";
 import { createDomRenderer } from "./dom.mjs";
+import { createTouchGestures, touchOptions, touchTokens } from "./touch.mjs";
 
 /** Elements that handle their own pointer input, even inside a drag handle. */
 const INTERACTIVE = "[data-wm-command], button, a, input, select, textarea, label, [contenteditable]";
@@ -180,6 +181,15 @@ const comboOf = (event) =>
  * @param {number} [options.splitterStep] fraction of a split's total weight
  *   an arrow key nudges a focused splitter by (default 0.05)
  * @param {number} [options.floatStep] px a keyboard move/resize of a floating window changes it by (default 10)
+ * @param {boolean|object} [options.touch] opt-in touch and pen gestures (see `touch.mjs` and docs/api/browser.md):
+ *   `true` turns on pinch-to-resize for floating windows (two touches), a horizontal swipe on a tab strip to
+ *   switch tabs, and a long-press context event. An object picks: `pinch` (default true), `swipe`
+ *   (`{ tabs, workspaces }`, a two-finger swipe switching workspaces; `false` for none), `contextMenu`
+ *   (`true` dispatches a `wm-contextmenu` event on the window, a function receives
+ *   `{ id, x, y, clientX, clientY, pointerType, target }`, a string is a command type dispatched with
+ *   `{ type, id }`; `false` turns it off), `contextDelay` (ms, default 500), `slop`, `swipeDistance`,
+ *   `workspaceSwipeDistance`. It sets `data-wm-touch` on `root`, which `BASE_CSS` maps to the `touch-action`
+ *   each gesture needs.
  * @returns {() => void} detach
  */
 export const attachInput = (options) => {
@@ -204,6 +214,7 @@ export const attachInput = (options) => {
     splitterStep = 0.05,
     floatStep = 10,
     output,
+    touch,
   } = options;
   // The workspace this root's stage actually shows: the given output's own
   // active workspace when this input is bound to one output (multi-output
@@ -951,6 +962,8 @@ export const attachInput = (options) => {
   // ------------------------------------------------------------ pointer stream
 
   const onPointerDown = (event) => {
+    // A second finger on the stage is a pinch or a swipe, not a stacked gesture.
+    if (touchGestures?.down(event)) return;
     // A second pointer (or a lost pointerup) never stacks gestures.
     if (drag) endDrag(false);
     if (gesture) endGesture(false);
@@ -1061,6 +1074,7 @@ export const attachInput = (options) => {
   };
 
   const onPointerMove = (event) => {
+    if (touchGestures?.move(event)) return;
     if (splitter) {
       if (splitter.pointerId !== undefined && event.pointerId !== undefined && event.pointerId !== splitter.pointerId) return;
       updateSplitter(event);
@@ -1115,13 +1129,15 @@ export const attachInput = (options) => {
   };
 
   const onPointerUp = (event) => {
+    touchGestures?.up(event);
     clearPending();
     if (splitter && (event?.pointerId === undefined || event.pointerId === splitter.pointerId)) endSplitter(true);
     if (gesture) endGesture(true);
     if (drag && (event?.pointerId === undefined || event.pointerId === drag.pointerId)) endDrag(true);
   };
 
-  const onPointerCancel = () => {
+  const onPointerCancel = (event) => {
+    if (event) touchGestures?.up(event, true);
     clearPending();
     if (splitter) endSplitter(false);
     if (gesture) endGesture(false);
@@ -1152,7 +1168,7 @@ export const attachInput = (options) => {
 
   const onContextMenu = (event) => {
     // A long press would otherwise open the context menu on touch devices.
-    if (pending?.touch || drag) event.preventDefault?.();
+    if (pending?.touch || drag || touchGestures?.recentContext()) event.preventDefault?.();
   };
 
   const onClick = (event) => {
@@ -1351,6 +1367,44 @@ export const attachInput = (options) => {
     if (announce) announceEvents(events);
   });
 
+  // ------------------------------------------------------------ touch and pen (opt-in)
+
+  const touchOpts = touchOptions(touch);
+  /** A floating window's rect in root coordinates when it may be pinched (the same windows the keyboard can move), else null. */
+  const pinchRect = (id) => {
+    const state = getState();
+    const win = state.windows[id];
+    if (!win || win.status !== "normal" || inTiledBase(state, win) || !isVisible(state, id) || isBlocked(state, id) || win.draggable === false) return null;
+    const measured = measuredRect(id);
+    const num = (value, fallback) => (Number.isFinite(value) ? value : fallback ?? 0);
+    const { placement } = win;
+    return { x: num(placement.x, measured?.x), y: num(placement.y, measured?.y), width: num(placement.width, measured?.width), height: num(placement.height, measured?.height) };
+  };
+  const touchGestures = touchOpts
+    ? createTouchGestures({
+        options: touchOpts,
+        root,
+        getState,
+        dispatch,
+        send,
+        local: localPoint,
+        viewOf,
+        floatRect: pinchRect,
+        rootWorkspace,
+        direction: () => (getState().config?.direction === "rtl" ? -1 : 1),
+        busy: () => Boolean(drag || splitter || gesture?.moved || (pending && pending.kind !== "denied")),
+        cancelOthers: () => {
+          if (drag) endDrag(false);
+          if (gesture) endGesture(false);
+          if (splitter) endSplitter(false);
+          clearPending();
+        },
+        timers,
+        token: gestureToken,
+      })
+    : null;
+  if (touchOpts) root.setAttribute("data-wm-touch", touchTokens(touchOpts));
+
   const listeners = {
     pointerdown: onPointerDown,
     pointermove: onPointerMove,
@@ -1369,6 +1423,8 @@ export const attachInput = (options) => {
     clearPending();
     for (const [type, fn] of Object.entries(listeners)) root.removeEventListener(type, fn);
     if (ownRegion) region.remove();
+    touchGestures?.detach();
+    if (touchOpts) root.removeAttribute("data-wm-touch");
     unsubscribe?.();
   };
 };

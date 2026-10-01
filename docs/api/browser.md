@@ -10,6 +10,7 @@ The effectful edge. Everything here is exported from `@johnhenry/window-algebra/
 - [attachInput](#attachinputoptions)
   - [Markup contract](#markup-contract)
   - [Pointer behaviour](#pointer-behaviour)
+  - [Touch and pen](#touch-and-pen)
   - [Keyboard](#keyboard)
   - [Focus sync](#focus-sync)
   - [Announcements](#announcements)
@@ -82,6 +83,7 @@ attachInput({
   splitterStep: 0.05,    // fraction of a pair's total an arrow key nudges a focused splitter by
   floatStep: 10,         // px a keyboard move/resize of a floating window changes it by
   afterRender,           // (task) => void: when to move DOM focus after a focus change (default: next frame)
+  touch,                 // true | { pinch, swipe, contextMenu, ... }: touch and pen gestures (opt-in), see below
 }) → detach
 ```
 
@@ -115,6 +117,41 @@ Anywhere on the page (usually a workspace switcher): `data-wm-workspace-target="
 - **Pinned windows** (`draggable: false`): a press on the move handle or tab marks the view or tab `data-wm-drag-denied` for the press, and nothing moves.
 - **Splitters**: a press captures the pointer; each move dispatches `layout/resize-split` with full `weights` and a shared gesture token. It is clamped so neither side crosses the min/max constraints of a single window directly on that side. <kbd>Escape</kbd> restores the original weights in the same gesture.
 - While a press or drag is live, the adapter also listens on the document (capture phase), so the pointer may leave the stage (toward a workspace tab) before the threshold. A new `pointerdown` cancels any stale gesture.
+
+### Touch and pen
+
+Everything in [Pointer behaviour](#pointer-behaviour) is pointer-event based, so a finger or a pen drags a floating window (its title bar sets `touch-action: none`), and drags a tiled window or a tab after a still `longPress`. A pen behaves like a mouse for those (a drag starts after `threshold` px). `touch` adds the gestures a mouse has no equivalent for. It is **opt-in**: without it nothing below is recognised, and `pointerType: "mouse"` is never touched by any of it.
+
+```js
+attachInput({ root, wm, touch: true });
+attachInput({
+  root, wm,
+  touch: {
+    pinch: true,                       // two touches on a floating window resize it
+    swipe: { tabs: true, workspaces: false },
+    contextMenu: (press) => openMenu(press), // true | (press) => void | "window/toggle-floating" | false
+    contextDelay: 500,                 // ms held still
+    slop: 10,                          // px of drift that cancels a long press
+    swipeDistance: 48,                 // px for a tab swipe
+    workspaceSwipeDistance: 64,        // px for a two-finger workspace swipe
+  },
+});
+```
+
+`touch: true` means `pinch`, `swipe: { tabs: true }` and `contextMenu: true`. `swipe: false` turns both swipes off; `workspaces` is off by default because it needs `touch-action: pan-y` on the whole stage.
+
+| Gesture | Pointers | Result |
+| --- | --- | --- |
+| Pinch | two **touch** pointers on the same floating window (not tiled, blocked, pinned or minimized) | `window/resize` with `x`, `y`, `width`, `height` per move and one shared `gesture` token: one undo step, one log entry. The window scales with the finger distance (honouring `constraints`, never below 48 px) and follows the fingers' midpoint. `pointercancel` puts it back. The pure math is `createPinch`/`updatePinch`. |
+| Tab swipe | one touch or pen pointer, a horizontal stroke on a tab strip of at least `swipeDistance` px, mostly horizontal, within 700 ms | `window/focus` on the next tab (swipe left) or previous (swipe right); no wrap. A vertical stroke scrolls as usual. The classifier is `swipeOf`. |
+| Workspace swipe | two **touch** pointers, a horizontal stroke of the midpoint of at least `workspaceSwipeDistance` px (when they are not a pinch) | `workspace/activate` on the next (swipe left) or previous workspace of the stage's output; no wrap. |
+| Long press | one touch or pen pointer held still for `contextDelay` ms on a window (not on a control, tab or splitter) | `contextMenu`: `true` dispatches a bubbling `wm-contextmenu` event on the window element (`detail` is the press); a function is called with `{ id, x, y, clientX, clientY, pointerType, target }` (`x`/`y` are relative to `root`); a string is a command type dispatched as `{ type, id }`. The native context menu that follows is suppressed. A held press on a floating title bar cancels its (unmoved) move first; on a **tiled** title bar it still starts a drag, as before, and does not fire. |
+
+A second finger always ends a single-finger gesture in progress (a floating move is put back, a drag cancelled), then starts a pinch if both fingers are on one floating window, else a workspace swipe if enabled.
+
+**`touch-action`.** The browser decides which touch gestures it keeps by `touch-action` on the touched element and its ancestors, so each gesture needs its own. The adapter sets `data-wm-touch` on `root` (tokens `pinch`, `swipe-tabs`, `swipe-workspaces`, `context`), and `BASE_CSS` maps them: floating windows get `touch-action: none` (pinch), tab strips `pan-y` (horizontal strokes are the page's, vertical ones scroll), the stage `pan-y` for workspace swipes, windows `-webkit-touch-callout: none` (long press). Handles and splitters are always `touch-action: none`. Without `BASE_CSS`, set the same rules yourself. The costs: with `pinch`, a floating window's own content cannot be panned by touch; with `swipe.workspaces`, nothing inside the stage scrolls horizontally by touch.
+
+Under `config.direction: "rtl"` swipes mirror: swiping toward the inline-start edge (right) goes to the next tab or workspace.
 
 ### Keyboard
 

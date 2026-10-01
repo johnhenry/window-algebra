@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Touch and pen gestures</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      #stage { margin: 8px; border-radius: 10px; border: 1px solid var(--line); }
+      .note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); }
+      .note code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+      #gesture-log { list-style: none; margin: 4px 16px 8px; padding: 0; max-height: 84px; overflow: auto; font: 12px var(--mono); color: var(--muted); }
+      #ctx { position: fixed; z-index: 10; min-width: 160px; padding: 4px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); box-shadow: var(--shadow-lg); }
+      #ctx[hidden] { display: none; }
+      #ctx button { display: block; width: 100%; text-align: start; font: inherit; padding: 8px 10px; border: 0; background: none; color: var(--fg); border-radius: 6px; cursor: pointer; }
+      #ctx button:hover, #ctx button:focus-visible { background: var(--accent-soft); }
+      #ctx header { padding: 4px 10px; font: 600 11px var(--mono); color: var(--muted); }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar" aria-label="Workspaces">
+      <button class="btn small" data-ws="floaty">Floating</button>
+      <button class="btn small" data-ws="tabbed">Tabs</button>
+      <button class="btn small" data-ws="tiles">Tiles</button>
+      <span class="sep"></span>
+      <span id="where" class="chip" aria-live="polite">floaty</span>
+    </nav>
+    <p class="note">
+      Touch or pen, or the buttons: <code>attachInput({ touch })</code>. <strong>Pinch</strong> a floating window with two fingers to resize it,
+      <strong>swipe</strong> left or right on the tab strip to switch tabs, <strong>two-finger swipe</strong> to switch workspace,
+      <strong>long-press</strong> a window for its menu, and drag a title bar to move it (a tiled one after a short hold). A mouse never triggers these.
+    </p>
+    <ul id="gesture-log" aria-label="Gesture log"></ul>
+    <div id="stage" class="stage" aria-label="Touch stage"></div>
+    <div id="ctx" role="menu" aria-label="Window menu" hidden></div>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+
+      initPage({ current: "./touch.html", title: "Touch and pen gestures" });
+
+      const root = document.getElementById("stage");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({
+        state: createState({
+          workspaces: [{ id: "floaty", layout: { type: "floating" } }, { id: "tabbed", layout: { type: "tabs" } }, { id: "tiles", layout: { type: "columns" } }],
+          config: { gap: 6, inset: 6 },
+        }),
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 200,
+      });
+
+      const logEl = document.getElementById("gesture-log");
+      const log = (text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        logEl.prepend(li);
+        while (logEl.children.length > 20) logEl.lastElementChild.remove();
+      };
+
+      const ctx = document.getElementById("ctx");
+      const hideMenu = () => {
+        ctx.hidden = true;
+        ctx.replaceChildren();
+      };
+      const showMenu = ({ id, clientX, clientY, pointerType }) => {
+        log(`long-press (${pointerType}) on ${id}`);
+        ctx.replaceChildren();
+        const title = document.createElement("header");
+        title.textContent = wm.getState().windows[id]?.title ?? id;
+        ctx.append(title);
+        for (const [label, type] of [["Toggle floating", "window/toggle-floating"], ["Maximize", "window/maximize"], ["Minimize", "window/minimize"], ["Close", "window/close"]]) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.setAttribute("role", "menuitem");
+          button.textContent = label;
+          button.onclick = () => {
+            wm.dispatch({ type, id });
+            hideMenu();
+          };
+          ctx.append(button);
+        }
+        ctx.style.left = `${Math.max(8, Math.min(clientX, innerWidth - 180))}px`;
+        ctx.style.top = `${Math.max(8, Math.min(clientY, innerHeight - 200))}px`;
+        ctx.hidden = false;
+        ctx.querySelector("button").focus();
+      };
+      document.addEventListener("keydown", (event) => event.key === "Escape" && hideMenu());
+      document.addEventListener("pointerdown", (event) => !ctx.contains(event.target) && !ctx.hidden && hideMenu(), true);
+
+      attachInput({
+        root,
+        wm,
+        keyboard: true,
+        touch: { swipe: { tabs: true, workspaces: true }, contextMenu: showMenu },
+      });
+      wm.subscribe((state, events) => {
+        document.getElementById("where").textContent = state.activeWorkspace;
+        for (const event of events) {
+          if (event.type === "workspace/activated") log(`workspace -> ${event.id}`);
+        }
+      });
+      syncChrome(wm, root);
+
+      let counter = 0;
+      const open = (workspace, options = {}) => {
+        const id = `w${++counter}`;
+        const title = options.title ?? `Window ${counter}`;
+        surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${id}: try pinching, swiping or holding me.`) }));
+        wm.create({ id, title, workspace, focus: false, ...options });
+      };
+      open("floaty", { title: "Notes", mode: "floating", placement: { x: 30, y: 30, width: 280, height: 180 } });
+      open("floaty", { title: "Clock", mode: "floating", placement: { x: 220, y: 120, width: 240, height: 160 } });
+      open("tabbed", { title: "Inbox" });
+      open("tabbed", { title: "Drafts" });
+      open("tabbed", { title: "Sent" });
+      open("tiles", { title: "Left" });
+      open("tiles", { title: "Middle" });
+      open("tiles", { title: "Right" });
+      wm.activateWorkspace("floaty");
+
+      for (const button of document.querySelectorAll("[data-ws]")) button.onclick = () => wm.activateWorkspace(button.dataset.ws);
+      window.wm = wm;
+    </script>
+  </body>
+</html>
