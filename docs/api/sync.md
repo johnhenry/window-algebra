@@ -20,7 +20,7 @@ Every message carries `(clock, from)`. A tab raises its clock to the highest clo
 
 ### Late joiners
 
-A new tab announces itself (`hello`). A tab that has ever sent or applied a change answers with its current snapshot, which the newcomer applies (it is newer than the newcomer's clock 0). Two tabs that have never changed anything share nothing: seed them identically.
+A new tab announces itself (`hello`). A tab that has ever sent or applied a change answers with its current snapshot, which the newcomer applies (it is newer than the newcomer's clock 0). Either way the tab also answers with a presence reply (a `hello` with `reply: true`, which is not answered in turn), so the newcomer's `peers()` lists every tab that was already open even when none has anything to share. Two tabs that have never changed anything share no state: seed them identically.
 
 ### Undo and redo
 

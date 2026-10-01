@@ -156,10 +156,14 @@ export const attachSync = ({ wm, channel = SYNC_CHANNEL, id = randomId(), schedu
       return;
     }
     if (message.kind === "hello") {
+      if (message.to !== undefined && message.to !== id) return;
       peers.add(message.from);
-      // A newcomer: hand it the current state if this tab has any history to share.
+      if (message.reply) return; // an answer to our own hello: all it tells us is that the sender is here
+      // A newcomer: hand it the current state if this tab has any history to share ...
       send();
       if (last.clock > 0) post({ kind: "state", clock: last.clock, state: toSnapshot(wm.getState()), to: message.from });
+      // ... and tell it we exist, so it counts us even when we have nothing to send (peers() would be one-sided).
+      post({ kind: "hello", clock, reply: true, to: message.from });
       return;
     }
     if (message.kind !== "state" || !Number.isFinite(message.clock) || !message.state || typeof message.state !== "object") return;

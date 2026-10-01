@@ -102,10 +102,18 @@ describe("attachSync: state snapshots over a BroadcastChannel", () => {
     assert.deepEqual(late.peers(), ["a"]);
   });
 
-  test("two tabs that never changed stay quiet on hello (nothing to share)", () => {
-    const { hub } = tabs(["a", "b"]);
+  test("two tabs that never changed stay quiet on hello (nothing to share), but each counts the other as a peer", () => {
+    const { hub, a, b } = tabs(["a", "b"]);
     hub.deliver();
     assert.equal(hub.sent.filter((m) => m.kind === "state").length, 0);
+    // regression: the first tab answered hello with nothing when it had no history, so the newcomer never learned it
+    // was there and peers() was one-sided (found by the workbench app's "Tabs: 2" indicator)
+    assert.deepEqual(a.sync.peers(), ["b"]);
+    assert.deepEqual(b.sync.peers(), ["a"]);
+    // the answer is not answered in turn: two hellos, two replies, and the conversation ends
+    const hellos = hub.sent.filter((m) => m.kind === "hello");
+    assert.deepEqual(hellos.map((m) => Boolean(m.reply)), [false, false, true, true]);
+    assert.equal(hub.pending(), 0);
   });
 
   test("undo and redo are ordinary changes: they propagate", () => {
