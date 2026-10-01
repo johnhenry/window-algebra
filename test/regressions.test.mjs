@@ -61,6 +61,35 @@ describe("renderer: state-preserving moves (regression)", () => {
   });
 });
 
+describe("renderer: attributes are patched after a view moves (regression)", () => {
+  // Chromium's moveBefore() does not carry an element's pending style invalidation to its new ancestors, so an attribute
+  // written before the move (data-status on a window that goes from a column to the overlay) left descendants with a
+  // stale style: after a mouse click on Maximize, the Restore button stayed display:none. Writing after the move is safe.
+  test("a view's attributes are written after it moves to its new container, not before", () => {
+    const { root, renderer } = setup();
+    renderer.commit(compile(overlay({}, row({}, column({}, view("a"), view("b")))), { statuses: {} }));
+    const a = renderer.elementFor("a");
+    const log = [];
+    const setAttribute = a.setAttribute.bind(a);
+    a.setAttribute = (name, value) => { log.push(`set ${name}=${value}`); return setAttribute(name, value); };
+    const proto = Object.getPrototypeOf(root);
+    const moveBefore = proto.moveBefore;
+    proto.moveBefore = function (node, reference) { if (node === a) log.push("move a"); return moveBefore.call(this, node, reference); };
+    try {
+      // a becomes maximized (data-status) and is promoted out of the row into the overlay
+      renderer.commit(compile(overlay({}, row({}, column({}, view("b"))), view("a")), { statuses: { a: "maximized" } }));
+      assert.equal(a.getAttribute("data-status"), "maximized");
+      assert.equal(a.disconnects, 0);
+      const moved = log.indexOf("move a");
+      const written = log.indexOf("set data-status=maximized");
+      assert.ok(moved !== -1 && written !== -1, `expected a move and the attribute write, got ${JSON.stringify(log)}`);
+      assert.ok(moved < written, `data-status was written before the move: ${JSON.stringify(log)}`);
+    } finally {
+      proto.moveBefore = moveBefore;
+    }
+  });
+});
+
 describe("renderer: explicit JS anchor fallback (regression)", () => {
   const tree = overlay(
     {},

@@ -37,6 +37,25 @@ test.describe("built-in window chrome (chrome.html)", () => {
     await expect.poll(async () => (await stateOf(page)).windows.notes).toBeUndefined();
   });
 
+  test("a tiled window maximized with a real click shows Restore (Chromium moveBefore left a stale style)", async ({ demo, page }) => {
+    await demo("chrome.html");
+    await settle(page);
+    await page.evaluate(() => {
+      for (const id of ["notes", "long", "form"]) window.wm.dispatch({ type: "window/set-mode", id, mode: "tiled" });
+      window.wm.setLayout({ type: "master-stack", ratio: 0.55 });
+    });
+    await settle(page);
+    // a tiled window moves from its column to the overlay when it maximizes; the attribute write must follow the move
+    await button(page, "form", "Maximize window: Settings").click();
+    await expect.poll(async () => (await stateOf(page)).windows.form.status).toBe("maximized");
+    await settle(page);
+    await expect(button(page, "form", "Restore window: Settings")).toBeVisible();
+    await button(page, "form", "Restore window: Settings").click();
+    await expect.poll(async () => (await stateOf(page)).windows.form.status).toBe("normal");
+    await settle(page);
+    await expect(button(page, "form", "Maximize window: Settings")).toBeVisible();
+  });
+
   test("keyboard: Tab reaches the buttons; Enter and Space press them", async ({ demo, page, browserName }) => {
     await demo("chrome.html");
     await settle(page);
@@ -111,6 +130,26 @@ test.describe("built-in window chrome (chrome.html)", () => {
     await expect(long).toHaveAttribute("role", "region");
     await expect(long).toHaveAccessibleName("Long document");
     await expect(win(page, "form").locator("[data-wa-chrome-body]")).not.toHaveAttribute("tabindex", /.*/);
+  });
+
+  test("a body whose content grows after it mounted becomes a focusable, labelled region (and stops being one when it shrinks)", async ({ demo, page }) => {
+    await demo("chrome.html");
+    await settle(page);
+    const body = win(page, "notes").locator("[data-wa-chrome-body]");
+    await expect(body).not.toHaveAttribute("tabindex", /.*/);
+    // a component that renders late: the window's size does not change, only what is inside it
+    await body.evaluate((el) => {
+      const late = document.createElement("div");
+      late.id = "late";
+      late.style.height = "900px";
+      el.append(late);
+    });
+    await expect(body).toHaveAttribute("tabindex", "0");
+    await expect(body).toHaveAttribute("role", "region");
+    await expect(body).toHaveAccessibleName("Notes");
+    await body.evaluate((el) => { el.querySelector("#late").style.height = "10px"; });
+    await expect(body).not.toHaveAttribute("tabindex", /.*/);
+    await body.evaluate((el) => el.querySelector("#late").remove());
   });
 
   test("right to left: the bar and the buttons mirror, and the grips stay on their physical edges", async ({ demo, page }) => {

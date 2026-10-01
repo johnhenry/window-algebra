@@ -26,7 +26,8 @@ test.describe("<wa-stage> exposes its handles (element.html)", () => {
     await settle(page);
     await expect(other.locator('wm-view[data-view="from-a"]')).toHaveCount(1, { timeout: 10_000 });
     expect(await page.evaluate(() => typeof document.getElementById("stage").sync.flush)).toBe("function");
-    await other.close();
+    // navigating away fires pagehide in every engine; Playwright's WebKit does not fire it on page.close()
+    await other.goto("about:blank");
     await expect(page.locator("#tabs")).toHaveText("Tabs: 1", { timeout: 10_000 });
   });
 });

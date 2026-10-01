@@ -165,11 +165,27 @@ export const buildChrome = (doc, { id, title = id, buttons = DEFAULT_CHROME_BUTT
   const setTitle = (next) => setChromeTitle(frame, next);
   setTitle(title);
 
+  // The body resizes with the window; its content grows on its own (a component that renders after the surface mounted,
+  // a list that fills). The body's box does not change then, so each child of the body is observed too, and a
+  // MutationObserver keeps that set in step with what the surface mounts and unmounts.
   let observer;
+  let mutations;
   const Observer = doc.defaultView?.ResizeObserver;
   if (Observer) {
     observer = new Observer(syncScrollable);
     observer.observe(body);
+    const watched = new Set();
+    const watch = () => {
+      for (const child of watched) if (child.parentNode !== body) { observer?.unobserve(child); watched.delete(child); }
+      for (const child of body.children) if (!watched.has(child)) { watched.add(child); observer?.observe(child); }
+      syncScrollable();
+    };
+    const Mutation = doc.defaultView?.MutationObserver;
+    if (Mutation) {
+      mutations = new Mutation(watch);
+      mutations.observe(body, { childList: true });
+    }
+    watch();
   }
 
   return {
@@ -186,7 +202,9 @@ export const buildChrome = (doc, { id, title = id, buttons = DEFAULT_CHROME_BUTT
     syncScrollable,
     dispose() {
       observer?.disconnect();
+      mutations?.disconnect();
       observer = undefined;
+      mutations = undefined;
     },
   };
 };

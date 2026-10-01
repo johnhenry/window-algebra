@@ -203,6 +203,10 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       const element = ensure(child, live);
       const reference = previous ? previous.nextSibling : parent.firstChild;
       if (element !== reference) place(parent, element, reference);
+      // Patch AFTER placing. Chromium's `moveBefore()` does not carry an element's pending style invalidation to its new
+      // ancestors, so attributes written before the move (`data-status` on a view that moves from a column to the
+      // overlay) can leave descendants with a stale style until something else restyles the page.
+      patch(element, child);
       previous = element;
       if (child.view === undefined && child.text === undefined) reconcileChildren(element, child.children, live);
       else if (child.view !== undefined) {
@@ -233,7 +237,6 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       element = undefined;
     }
     element ??= create(node);
-    patch(element, node);
     return element;
   };
 

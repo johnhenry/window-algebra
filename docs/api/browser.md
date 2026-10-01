@@ -263,7 +263,7 @@ createDomRenderer({ root, surfaceFor, chrome: { buttons: ["minimize", "maximize"
 - **Drag and resize** are the pointer adapter's: the bar moves a floating window (or drags a tiled one after the threshold or a long press), a grip resizes it. The grips show only while the window floats and is not maximized, minimized or popped out.
 - **Double-click** the bar maximizes, and again restores. A control inside the bar keeps its own click; a window a modal blocks ignores it.
 - **Tab strips.** A window that is a tab panel (`stack` with `chrome: "tabs"`) gets no title bar, since its tab is its title; the bar returns when the layout changes.
-- **Scrolling.** A body that scrolls becomes a focusable, labelled region (`tabindex="0"`, `role="region"`, `aria-labelledby` the title), as axe's `scrollable-region-focusable` requires; one that fits is not a tab stop. This is re-evaluated on every commit and when the body resizes, not when its content grows inside a fixed size.
+- **Scrolling.** A body that scrolls becomes a focusable, labelled region (`tabindex="0"`, `role="region"`, `aria-labelledby` the title), as axe's `scrollable-region-focusable` requires; one that fits is not a tab stop. This is re-evaluated on every commit, when the body resizes and when any child of the body (what the surface mounted) changes size, so content that renders late is covered; content that grows only inside a child with a fixed size is not seen.
 - **Pop-outs.** In the popup the bar shows pop-in and close, hides the layout buttons and the grips, and follows the window's title.
 - **Blocked windows.** A window blocked by a modal has its chrome inert, like the rest of its contents.
 
