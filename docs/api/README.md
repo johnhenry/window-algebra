@@ -33,7 +33,7 @@ For the rationale, prior art and open questions, see the design document, [`docs
 | Import specifier | File | Contents |
 | --- | --- | --- |
 | `@johnhenry/window-algebra` | `src/index.mjs` | Everything pure (algebra, transforms, layouts, geometry, interaction, state, commands, queries, history, compile, the command palette's catalog) plus `createWindowManager`. Runs in Node, workers and browsers. |
-| `@johnhenry/window-algebra/browser` | `src/browser/index.mjs` | `createDomRenderer`, `attachInput`, `DEFAULT_MOVE_KEYS`, `htmlSurface`, `lazySurface`, `iframeSurface`, `canvasSurface`, `createSurfaceRegistry`, `createFrameScheduler`, `immediateScheduler`, `attachPopouts`, `attachSync`, `toSnapshot`, `fromSnapshot`, `createPalette`, `parseShortcut`, `matchesShortcut`, `PALETTE_CSS`. Importing it touches no DOM; calling the functions does. |
+| `@johnhenry/window-algebra/browser` | `src/browser/index.mjs` | `createDomRenderer`, `attachInput`, `DEFAULT_MOVE_KEYS`, `htmlSurface`, `lazySurface`, `iframeSurface`, `canvasSurface`, `createSurfaceRegistry`, `createFrameScheduler`, `immediateScheduler`, `attachPopouts`, `attachSync`, `toSnapshot`, `fromSnapshot`, `attachDirection`, `pageDirection`, `createPalette`, `parseShortcut`, `matchesShortcut`, `PALETTE_CSS`. Importing it touches no DOM; calling the functions does. |
 | `@johnhenry/window-algebra/algebra` | `src/algebra/nodes.mjs` | Just the primitives, guards, `validate`, `fromJSON` and the kind lists. |
 | `@johnhenry/window-algebra/transforms` | `src/algebra/transforms.mjs` | Just the tree transforms. |
 | `@johnhenry/window-algebra/layouts` | `src/layouts/index.mjs` | The derived-layout functions and every BSP and docking-tree helper (including `isTreeContainer`). |

@@ -801,9 +801,9 @@ Shallow-patches `state.config` with every field of the command except `type`. A 
 - `urgency`: a plain object; `clearOnFocus` a boolean.
 - `snap`: a plain object; `edges` a boolean; `threshold` and `magnet` numbers ≥ 0; `zones` in `"halves-quarters"`/`"halves"`/`"quarters"`/`"off"`.
 
-- `gap`, `inset`: finite numbers ≥ 0. `focusRaises`: a boolean.
+- `gap`, `inset`: finite numbers ≥ 0. `focusRaises`: a boolean. `direction`: `"ltr"` or `"rtl"`.
 - `defaultPlacement`: a plain object with only `x`, `y` (finite number or `"center"`) and `width`, `height` (finite numbers ≥ 0).
-- Any other key is rejected: `config` has a fixed set of keys (`focusRaises`, `gap`, `inset`, `defaultPlacement`, `drag`, `rules`, `urgency`, `snap`).
+- Any other key is rejected: `config` has a fixed set of keys (`focusRaises`, `gap`, `inset`, `defaultPlacement`, `drag`, `rules`, `urgency`, `snap`, `direction`).
 
 - **Events:** `config/changed { patch }` (the patch as given, without `type`).
 - **Effects:** `render`.

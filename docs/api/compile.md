@@ -58,7 +58,7 @@ Views are keyed by window id alone, **not** by their position. That is what lets
 | `overlay` | the same single-cell grid plus `position: relative; overflow: hidden`. Children stack by `z-index` = index. |
 | child of `row`/`column` | `flex: 1 1 0` unless `size` overrides |
 | `size` | `weight` → `flex: w 1 0`; main-axis `width`/`height` → `flex: 0 0 auto` + the extent; `min`/`max` → main-axis `min-*`/`max-*`; `preferred` → `flex-basis` (and `flex: 1 1 <preferred>` without a weight); cross-axis `width`/`height`; `minWidth`… → `min-width`…; `aspectRatio` → `aspect-ratio`. `"content"` → `max-content`. |
-| `place` | grid parent: `grid-area`/`grid-row`/`grid-column`; flex parent: `align-self`; `x`/`y` keywords → `justify-self`/`align-self`; numeric or other string `x`/`y` → `position: absolute; left: 0; top: 0; translate: x y`; `top`/`right`/`bottom`/`left` → `position: absolute` + insets |
+| `place` | grid parent: `grid-area`/`grid-row`/`grid-column`; flex parent: `align-self`; `x`/`y` keywords → `justify-self`/`align-self`; numeric or other string `x`/`y` → `position: absolute; inset-inline-start: 0; inset-block-start: 0; translate: x y` (x negated when `context.direction` is `"rtl"`); `top`/`right`/`bottom`/`left` → `position: absolute` + the logical insets `inset-block-start`, `inset-inline-end`, `inset-block-end`, `inset-inline-start` (`left`/`right` are the inline edges) |
 | `gap` (on a container) | `gap`, or `row-gap`/`column-gap`, or `gap` + `padding` for `inner`/`outer` |
 | `inset` | `padding` |
 | `anchor` | see [Anchors](#anchors) |
@@ -90,6 +90,10 @@ View attributes:
 | `data-wm-draggable="false"` | pinned |
 | `data-wm-sticky` | sticky |
 | `anchor-name: --wm-<id>` (style) | the first occurrence of a view that some `anchor` targets |
+
+## Direction
+
+`compile(tree, context)` reads `context.direction` (`"ltr"` default, or `"rtl"`, from `presentationContext(state)`). In `"rtl"` the **root** element gets `dir="rtl"`, so flex rows, grids and tab strips run right to left by themselves and the compiled styles stay identical to the left-to-right ones. The only styles that change are the physical ones: a numeric `place` `x` is negated, and an `anchor`'s horizontal side, gravity and (along the horizontal axis) alignment are mirrored, so `position-area` and `data-wm-anchor-opts` are always the physical truth. No compiled style contains `left`, `right`, `margin-left` or `padding-right` except the anchor offset margin, which faces the already-mirrored side. See [Layouts › Right-to-left](./layouts.md#right-to-left).
 
 ## Anchors
 

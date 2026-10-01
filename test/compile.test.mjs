@@ -118,7 +118,7 @@ describe("compile: tree → CSS declarations", () => {
 
   test("place with edges and keyword alignment", () => {
     const out = compile(overlay({}, place({ right: 16, bottom: 16 }, view("pip")), place({ x: "center", y: "center" }, view("dlg"))));
-    assert.equal(out.children[0].style.right, "16px");
+    assert.equal(out.children[0].style["inset-inline-end"], "16px", "left/right are the inline edges");
     assert.equal(out.children[0].style.position, "absolute");
     assert.equal(out.children[1].style["justify-self"], "center");
     assert.equal(out.children[1].style.position, "relative");

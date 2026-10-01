@@ -282,7 +282,8 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
           // Inside the anchor, aligned by justify-self / align-self.
           const jx = spec.justify ?? "center";
           const jy = spec.align ?? "center";
-          left = jx === "start" ? t.left : jx === "end" ? t.right - e.width : t.left + (t.width - e.width) / 2;
+          // start/end (LTR) and left/right (compile spells it that way in RTL) are physical here.
+          left = jx === "start" || jx === "left" ? t.left : jx === "end" || jx === "right" ? t.right - e.width : t.left + (t.width - e.width) / 2;
           top = jy === "start" ? t.top : jy === "end" ? t.bottom - e.height : t.top + (t.height - e.height) / 2;
         } else {
           left = t.left + (t.width - e.width) / 2;

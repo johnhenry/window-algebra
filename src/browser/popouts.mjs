@@ -50,7 +50,7 @@ const copyStyles = (sourceDoc, targetDoc) => {
 const fillPopup = (element) => {
   const style = element.style;
   if (!style) return;
-  for (const prop of ["left", "top", "right", "bottom", "inset", "transform", "anchor-name", "flex", "grid-area"]) {
+  for (const prop of ["left", "top", "right", "bottom", "inset", "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end", "translate", "transform", "anchor-name", "flex", "grid-area"]) {
     style.removeProperty(prop);
   }
   style.setProperty("position", "static");

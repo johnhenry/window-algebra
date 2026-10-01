@@ -24,6 +24,7 @@
  *   changes: they are broadcast like any other. A tab records each snapshot it
  *   applies as a history step, so undo in a tab that just received a peer's
  *   change steps back over that change (and the result propagates).
+ * - **Reading direction is per tab** (it follows the page's `dir`): `config.direction` is neither sent nor applied.
  * - **Pop-outs are per tab.** A popped-out window is a real browser window
  *   owned by the tab that opened it. It is broadcast as `minimized` (other
  *   tabs show it hidden, never opening a popup), and an incoming snapshot never
@@ -46,6 +47,8 @@ const randomId = () =>
  */
 export const toSnapshot = (state) => ({
   ...state,
+  // Reading direction belongs to the tab's page (its `dir`), not to the shared state.
+  config: Object.fromEntries(Object.entries(state.config ?? {}).filter(([key]) => key !== "direction")),
   windows: Object.fromEntries(
     Object.entries(state.windows).map(([id, win]) => [id, win.status === "popped-out" ? { ...win, status: "minimized" } : win]),
   ),
@@ -57,6 +60,7 @@ export const toSnapshot = (state) => ({
 /** An incoming snapshot with this tab's local parts put back (see `toSnapshot`). */
 export const fromSnapshot = (snapshot, local) => {
   let next = snapshot;
+  if (local.config?.direction !== undefined) next = { ...next, config: { ...next.config, direction: local.config.direction } };
   for (const [id, ws] of Object.entries(snapshot.workspaces ?? {})) {
     if (ws.layout !== null) continue;
     const mine = local.workspaces[id]?.layout;

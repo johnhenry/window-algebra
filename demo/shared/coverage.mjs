@@ -194,6 +194,11 @@ export const CHECKLIST = [
     ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
     ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
   ]),
+  ...items("Right-to-left", [
+    ["config-direction", "config.direction (\"ltr\" | \"rtl\"): the whole stage mirrors; the compiled root carries dir, so CSS flips rows, grids and tab strips"],
+    ["rtl-logical", "place left/right and anchor sides are inline edges (inset-inline-*), numeric x is measured from the right; zone, key, splitter and snap mirroring"],
+    ["rtl-dir-follow", "attachDirection / attachStage({ direction: \"auto\" }): follow an explicit dir on the stage or an ancestor"],
+  ]),
   ...items("Command palette", [
     ["createPalette", "createPalette({ wm }): fuzzy command palette, WAI-ARIA combobox/listbox, Ctrl/Cmd+Shift+P (configurable), prompts for payload fields, dispatches"],
     ["palette-catalog", "COMMAND_CATALOG / paletteEntries / fuzzyMatch / fieldChoices / parseField / buildCommand: the pure palette data, one entry per command"],
@@ -391,6 +396,17 @@ export const PAGES = [
       "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
+    ],
+  },
+  {
+    href: "./rtl.html",
+    short: "RTL",
+    title: "Right-to-left layouts",
+    blurb: "Switch the stage between LTR and RTL: every layout mirrors, floating windows are placed from the right, drop zones, arrows, splitters and snap zones follow.",
+    covers: [
+      "config-direction", "rtl-logical", "rtl-dir-follow", "config/set", "masterStack", "columns", "rows", "monocle", "tabs", "autoGrid", "fixedGrid", "spiral", "bsp", "tree",
+      "layout/set", "window/create", "window/toggle-floating", "tiled-drag", "drag-preview", "snap-zones", "splitter-drag", "splitter-keyboard", "keyboard-moves", "tab-reorder",
+      "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "undo-redo",
     ],
   },
   {

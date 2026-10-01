@@ -338,6 +338,18 @@ export const attachInput = (options) => {
     return { x: 0, y: 0, width: r.width, height: r.height };
   };
 
+  // ------------------------------------------------------------ right-to-left
+  // `config.direction: "rtl"` mirrors the horizontal axis. Pointer positions are always physical, but a
+  // floating window's `x` is measured from the right edge in RTL, so floating gestures run in physical
+  // space (mirrored in on the way in, and back out on the way to the command). `mirrorRect` is its own inverse.
+  const isRtlNow = () => getState().config?.direction === "rtl";
+  const mirrorRect = (r) => {
+    if (!isRtlNow() || !r || !Number.isFinite(r.x) || !Number.isFinite(r.width)) return r;
+    return { ...r, x: stageRect().width - r.x - r.width };
+  };
+  /** 1 in a left-to-right stage, -1 in a right-to-left one: the sign of a horizontal "forward". */
+  const flow = () => (isRtlNow() ? -1 : 1);
+
   /** Effective `config.snap`, defaulting fields a state saved before this feature omits. */
   const snapConfigOf = (state) => ({ ...DEFAULT_CONFIG.snap, ...state.config.snap });
 
@@ -351,7 +363,7 @@ export const attachInput = (options) => {
     const rects = [stageRect()];
     for (const win of Object.values(state.windows)) {
       if (win.id === selfId || !isVisible(state, win.id)) continue;
-      const r = win.mode === "floating" ? win.placement : geometry?.[win.id];
+      const r = win.mode === "floating" ? mirrorRect(win.placement) : geometry?.[win.id];
       if (r) rects.push(r);
     }
     return rects;
@@ -485,7 +497,9 @@ export const attachInput = (options) => {
 
   const updateSplitter = (event) => {
     const pos = splitter.axis === "x" ? event.clientX : event.clientY;
-    const pixelDelta = clampSplitterPixelDelta(splitter, pos - splitter.origin);
+    // The first pane is on the right in RTL: moving the pointer right then shrinks it.
+    const travel = splitter.axis === "x" ? (pos - splitter.origin) * flow() : pos - splitter.origin;
+    const pixelDelta = clampSplitterPixelDelta(splitter, travel);
     const { baseline, index, mainSize } = splitter;
     const total = baseline[index] + baseline[index + 1];
     const weightDelta = mainSize > 0 ? (pixelDelta * total) / mainSize : 0;
@@ -534,7 +548,9 @@ export const attachInput = (options) => {
     const workspace = rootWorkspace(state);
     const weights = readSplitWeights(state, workspace, path, count);
     const total = weights[index] + weights[index + 1];
-    [weights[index], weights[index + 1]] = nudgePair(weights[index], weights[index + 1], ARROW_SIGN[event.key] * total * splitterStep);
+    // Right-to-left: the first pane is on the right, so the right arrow shrinks it.
+    const sign = ARROW_SIGN[event.key] * (axis === "x" ? flow() : 1);
+    [weights[index], weights[index + 1]] = nudgePair(weights[index], weights[index + 1], sign * total * splitterStep);
     send({ type: "layout/resize-split", workspace, path, index, weights });
     return true;
   };
@@ -698,7 +714,8 @@ export const attachInput = (options) => {
       return {
         type: "drop",
         key: `tab:${hit.id}:${zone}`,
-        drop: { id: session.id, target: hit.id, zone, op: zone === "left" ? "before" : "after" },
+        // The strip runs right to left in RTL: the screen-left half of a tab is the later side of it.
+        drop: { id: session.id, target: hit.id, zone, op: (zone === "left") === !isRtlNow() ? "before" : "after" },
         line: { x: zone === "left" ? hit.rect.x : hit.rect.x + hit.rect.width, y: hit.rect.y, height: hit.rect.height },
       };
     }
@@ -711,7 +728,11 @@ export const attachInput = (options) => {
         const rootRect = root.getBoundingClientRect();
         const { width, height } = win.placement;
         const grabX = Math.min(session.grab.x, Math.max(24, width - 24));
-        const x = Math.round(Math.min(Math.max(point.x - grabX, 0), Math.max(0, rootRect.width - width)));
+        // The window's left edge on screen follows the pointer (keeping the grab offset); its `x` is measured
+        // from the inline-start edge, so in RTL that is the right edge. Clamped inside the stage when it fits.
+        const left = point.x - grabX;
+        const raw = isRtlNow() ? rootRect.width - left - width : left;
+        const x = Math.round(Math.min(Math.max(raw, 0), Math.max(0, rootRect.width - width)));
         const y = Math.round(Math.min(Math.max(point.y - session.grab.y, 0), Math.max(0, rootRect.height - height)));
         return { type: "detach", key: "detach", command: { type: "window/detach", id: session.id, x, y } };
       }
@@ -796,7 +817,7 @@ export const attachInput = (options) => {
     }
     if (intent.type === "detach") return [intent.command];
     if (intent.type === "snap") {
-      const rect = snapZoneRect(stageRect(), intent.zone);
+      const rect = mirrorRect(snapZoneRect(stageRect(), intent.zone));
       return [{ type: "window/resize", id: session.id, x: rect.x, y: rect.y, width: rect.width, height: rect.height }];
     }
     const { id, target, zone } = intent.drop;
@@ -1037,7 +1058,7 @@ export const attachInput = (options) => {
           kind: "floating",
           id,
           token: gestureToken(),
-          op: createDrag({ origin, bounds: win.placement }),
+          op: createDrag({ origin, bounds: mirrorRect(win.placement) }),
           start: { ...win.placement },
           pointerId: event.pointerId,
           intent: null,
@@ -1049,7 +1070,7 @@ export const attachInput = (options) => {
           kind: "resize",
           id,
           token: gestureToken(),
-          op: createResize({ origin, bounds: win.placement, edge: kind.slice(7), constraints: win.constraints }),
+          op: createResize({ origin, bounds: mirrorRect(win.placement), edge: kind.slice(7), constraints: win.constraints }),
           pointerId: event.pointerId,
         };
       } else {
@@ -1092,7 +1113,8 @@ export const attachInput = (options) => {
         const snapCfg = snapConfigOf(state);
         const moved = { ...raw, width: win?.placement.width ?? 0, height: win?.placement.height ?? 0 };
         const magnetized = snapCfg.magnet > 0 ? magnetize(moved, otherRects(state, gesture.id, gesture.geometry), snapCfg) : moved;
-        dispatch({ type: "window/move", id: gesture.id, x: magnetized.x, y: magnetized.y, gesture: gesture.token });
+        const placed = mirrorRect(magnetized); // physical -> the window's own (inline-start) x
+        dispatch({ type: "window/move", id: gesture.id, x: placed.x, y: placed.y, gesture: gesture.token });
         if (!gesture.moved) {
           gesture.moved = true;
           listenKeys(true);
@@ -1103,7 +1125,7 @@ export const attachInput = (options) => {
         gesture.geometry ??= measureViews();
         const raw = updateResize(gesture.op, pointer);
         const snapCfg = snapConfigOf(state);
-        const resized = snapCfg.magnet > 0 ? magnetizeResize(raw, otherRects(state, gesture.id, gesture.geometry), gesture.op.edge, snapCfg) : raw;
+        const resized = mirrorRect(snapCfg.magnet > 0 ? magnetizeResize(raw, otherRects(state, gesture.id, gesture.geometry), gesture.op.edge, snapCfg) : raw);
         dispatch({ type: "window/resize", id: gesture.id, ...resized, gesture: gesture.token });
       }
       return;
@@ -1239,10 +1261,13 @@ export const attachInput = (options) => {
     const tabs = [...(tabEl.parentNode?.querySelectorAll?.("[data-wm-tab]") ?? [])];
     const at = tabs.indexOf(tabEl);
     if (at < 0) return false;
+    // WAI-ARIA: in a right-to-left tab list the left arrow moves to the next tab (it is on the left).
+    const forward = isRtlNow() ? "ArrowLeft" : "ArrowRight";
+    const backward = isRtlNow() ? "ArrowRight" : "ArrowLeft";
     const next =
-      event.key === "ArrowRight" || event.key === "ArrowDown"
+      event.key === forward || event.key === "ArrowDown"
         ? tabs[(at + 1) % tabs.length]
-        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+        : event.key === backward || event.key === "ArrowUp"
           ? tabs[(at - 1 + tabs.length) % tabs.length]
           : event.key === "Home"
             ? tabs[0]
@@ -1281,19 +1306,22 @@ export const attachInput = (options) => {
     const win = id && state.windows[id];
     // "Floating" here means positioned by its placement: not part of the tiled base (floating mode, a floating-layout workspace, a dialog, ...).
     if (!win || win.status !== "normal" || inTiledBase(state, win) || !isVisible(state, id) || isBlocked(state, id)) return false;
-    const rect = measuredRect(id);
+    const rect = mirrorRect(measuredRect(id)); // measured rects are physical; x is inline-start-based
     const num = (value, measured) => (Number.isFinite(value) ? value : measured ?? 0);
     const { placement } = win;
     event.preventDefault?.();
+    // Arrow keys mean screen directions, so in RTL a physical "right" is the window's x getting smaller, and its
+    // width (which grows toward the left, away from the fixed inline-start edge) getting smaller too.
+    const dx = dir[0] * flow();
     if (event.ctrlKey) {
       send({
         type: "window/resize",
         id,
-        width: Math.max(0, num(placement.width, rect?.width) + dir[0] * floatStep),
+        width: Math.max(0, num(placement.width, rect?.width) + dx * floatStep),
         height: Math.max(0, num(placement.height, rect?.height) + dir[1] * floatStep),
       });
     } else {
-      send({ type: "window/move", id, x: num(placement.x, rect?.x) + dir[0] * floatStep, y: num(placement.y, rect?.y) + dir[1] * floatStep });
+      send({ type: "window/move", id, x: num(placement.x, rect?.x) + dx * floatStep, y: num(placement.y, rect?.y) + dir[1] * floatStep });
     }
     return true;
   };
@@ -1314,7 +1342,9 @@ export const attachInput = (options) => {
       }
     }
     if (!keymap || drag) return;
-    const type = keymap[comboOf(event)];
+    // The keymap is written for left-to-right; in RTL the left and right arrows swap meaning.
+    const combo = comboOf(event);
+    const type = keymap[isRtlNow() ? combo.replace(/Arrow(Left|Right)$/, (_, side) => `Arrow${side === "Left" ? "Right" : "Left"}`) : combo];
     const id = getState().focus.window;
     if (!type || !id) return;
     event.preventDefault?.();
@@ -1375,7 +1405,7 @@ export const attachInput = (options) => {
     const state = getState();
     const win = state.windows[id];
     if (!win || win.status !== "normal" || inTiledBase(state, win) || !isVisible(state, id) || isBlocked(state, id) || win.draggable === false) return null;
-    const measured = measuredRect(id);
+    const measured = mirrorRect(measuredRect(id));
     const num = (value, fallback) => (Number.isFinite(value) ? value : fallback ?? 0);
     const { placement } = win;
     return { x: num(placement.x, measured?.x), y: num(placement.y, measured?.y), width: num(placement.width, measured?.width), height: num(placement.height, measured?.height) };
@@ -1390,6 +1420,7 @@ export const attachInput = (options) => {
         local: localPoint,
         viewOf,
         floatRect: pinchRect,
+        mirror: mirrorRect,
         rootWorkspace,
         direction: () => (getState().config?.direction === "rtl" ? -1 : 1),
         busy: () => Boolean(drag || splitter || gesture?.moved || (pending && pending.kind !== "denied")),

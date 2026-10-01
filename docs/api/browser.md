@@ -11,6 +11,7 @@ The effectful edge. Everything here is exported from `@johnhenry/window-algebra/
   - [Markup contract](#markup-contract)
   - [Pointer behaviour](#pointer-behaviour)
   - [Touch and pen](#touch-and-pen)
+  - [Right-to-left](#right-to-left)
   - [Keyboard](#keyboard)
   - [Focus sync](#focus-sync)
   - [Announcements](#announcements)
@@ -153,6 +154,22 @@ A second finger always ends a single-finger gesture in progress (a floating move
 **`touch-action`.** The browser decides which touch gestures it keeps by `touch-action` on the touched element and its ancestors, so each gesture needs its own. The adapter sets `data-wm-touch` on `root` (tokens `pinch`, `swipe-tabs`, `swipe-workspaces`, `context`), and `BASE_CSS` maps them: floating windows get `touch-action: none` (pinch), tab strips `pan-y` (horizontal strokes are the page's, vertical ones scroll), the stage `pan-y` for workspace swipes, windows `-webkit-touch-callout: none` (long press). Handles and splitters are always `touch-action: none`. Without `BASE_CSS`, set the same rules yourself. The costs: with `pinch`, a floating window's own content cannot be panned by touch; with `swipe.workspaces`, nothing inside the stage scrolls horizontally by touch.
 
 Under `config.direction: "rtl"` swipes mirror: swiping toward the inline-start edge (right) goes to the next tab or workspace.
+
+### Right-to-left
+
+With `config.direction: "rtl"` (see [Layouts › Right-to-left](./layouts.md#right-to-left)) the adapter works in screen terms, so every gesture does what it looks like:
+
+| Interaction | In RTL |
+| --- | --- |
+| Floating move, resize, snap zones, magnetism, detach, pinch | pointer positions are physical, a window's `x` is measured from the right edge. Gestures run in screen coordinates and are mirrored (`x' = stage width - x - width`) on the way in and out, so the window follows the pointer; the snap preview and the resulting placement cover the same screen half |
+| Drop zones, the drop line, the tab-drag insertion point | the screen-left half of a target is the *later* side of it; the preview is drawn where the pointer is |
+| <kbd>←</kbd> <kbd>→</kbd> on a focused tab | swapped (WAI-ARIA: in a right-to-left tab list the left arrow goes to the next tab); <kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Home</kbd>, <kbd>End</kbd> unchanged |
+| Arrow keys on a focused splitter | swapped: the first pane is on the right, so the right arrow shrinks it. Dragging the splitter right shrinks it too |
+| `DEFAULT_MOVE_KEYS` and a custom `keyboard` map | the left and right arrows are swapped when looked up, so <kbd>Alt+Shift+←</kbd> still moves the window left on screen (later in layout order). The map itself is written for left-to-right |
+| <kbd>Alt+Shift+←/→</kbd> and <kbd>Ctrl+Alt+Shift+←/→</kbd> on a floating window | the window moves toward the arrow, and the arrow resizes toward itself (`placement.x` and `width` change the other way) |
+| Swipes (`touch`) | swiping toward the inline-start edge (right) goes to the next tab or workspace |
+
+**Following the page's `dir`.** `attachDirection({ wm, element })` (also on `attachStage` as `direction: "auto"`, the default) reads an explicit `dir` on the stage or any ancestor, or a computed `direction: rtl`, dispatches `config/set { direction }` when it differs, and watches `dir` changes with a `MutationObserver`. A page with **no** `dir` says nothing, so `createState({ config: { direction: "rtl" } })` still works. `pageDirection(element)` is the pure read (`"rtl"`, `"ltr"` or `undefined`). `attachStage` also takes `direction: "ltr" | "rtl"` (set once) or `false` (never touch it). Cross-tab sync keeps the direction per tab (it is neither sent nor applied).
 
 ### Keyboard
 

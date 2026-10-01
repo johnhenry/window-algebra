@@ -17,6 +17,7 @@ import { attachInput } from "../browser/input.mjs";
 import { createFrameScheduler } from "../browser/scheduler.mjs";
 import { attachSync } from "../browser/sync.mjs";
 import { createPalette } from "../browser/palette.mjs";
+import { attachDirection } from "../browser/direction.mjs";
 
 /**
  * @param {Element} host mount point (usually the custom element itself)
@@ -28,6 +29,9 @@ import { createPalette } from "../browser/palette.mjs";
  * @param {object} [options.input] extra options merged into `attachInput`
  * @param {boolean|object} [options.sync] keep this stage's window manager in step with other tabs: `true`, or
  *   options for `attachSync` (`channel`, `id`, ...). Off by default.
+ * @param {"auto"|"ltr"|"rtl"|false} [options.direction] right-to-left layout: `"auto"` (default) follows an explicit
+ *   `dir` on the stage or any ancestor (an element with no `dir` anywhere leaves `config.direction` as it is);
+ *   `"ltr"`/`"rtl"` set it once; `false` never touches it.
  * @param {boolean|object} [options.palette] a command palette (Ctrl/Cmd+Shift+P) for this stage's window
  *   manager: `true`, or options for `createPalette` (`shortcut`, `exclude`, ...). Off by default.
  * @param {(task: () => void) => void} [options.schedule] when commits run after a state change; default
@@ -35,7 +39,11 @@ import { createPalette } from "../browser/palette.mjs";
  * @returns {{ wm: object, renderer: object, sync: object|null, palette: object|null, detach(): void }}
  */
 export const attachStage = (host, options = {}) => {
-  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, palette, schedule = createFrameScheduler() } = options;
+  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, palette, direction = "auto", schedule = createFrameScheduler() } = options;
+  if (direction === "ltr" || direction === "rtl") {
+    if (wm.getState().config?.direction !== direction) wm.dispatch({ type: "config/set", direction });
+  }
+  const directionHandle = direction === "auto" ? attachDirection({ wm, element: host }) : null;
   const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor });
   let live = true;
   const commit = () => live && renderer.commit(wm.present().render);
@@ -52,6 +60,7 @@ export const attachStage = (host, options = {}) => {
     detach() {
       syncHandle?.detach();
       paletteHandle?.detach();
+      directionHandle?.detach();
       live = false; // a commit still queued for the next frame must not touch the torn-down renderer
       unsubscribe();
       detachInput();

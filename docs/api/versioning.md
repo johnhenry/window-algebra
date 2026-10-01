@@ -10,7 +10,7 @@ Every state carries a `version`, and a state saved by one build can be loaded by
 - [Shipped migrations](#shipped-migrations)
 - [Who migrates](#who-migrates)
 - [Adding a migration](#adding-a-migration)
-- [Known gap: `config.snap` and `config.urgency` on version-1 states](#known-gap-configsnap-and-configurgency-on-version-1-states)
+- [Known gap: `config.snap`, `config.urgency` and `config.direction` on older states](#known-gap-configsnap-configurgency-and-configdirection-on-older-states)
 
 ## API
 
@@ -56,6 +56,8 @@ When a change to the state shape needs one:
 
 Add a migration whenever older saved states would otherwise **break**. A new config key read with a fallback does not need one. A new required field does.
 
-## Known gap: `config.snap` and `config.urgency` on version-1 states
+## Known gap: `config.snap`, `config.urgency` and `config.direction` on older states
 
 `config.snap` entered the state **without** a version bump (and so did `config.urgency`, for states saved by a build that had versioning but not yet urgency hints). A state saved at version 1 **before** those keys existed passes `1 → 2` without them, because that step does not touch `config`. The library tolerates this: `attachInput` reads `{ ...DEFAULT_CONFIG.snap, ...state.config.snap }`, and focus reads `config.urgency?.clearOnFocus !== false`. But code of your own that reads `state.config.snap.magnet` directly will throw on such a state. Read with a fallback (`{ ...DEFAULT_CONFIG.snap, ...state.config.snap }`), or dispatch `config/set { snap: { ...DEFAULT_CONFIG.snap } }` after loading. A bare `config/set { snap: {} }` would store an empty object, because it only merges into an **existing** plain object. This is deliberate and documented in the tests (`migrate()` passes a pre-snap version-1 state through unchanged). A version-0 state is unaffected, because `0 → 1` rebuilds `config` from `DEFAULT_CONFIG`.
+
+`config.direction` was added the same way: a saved state without it is read as `"ltr"` (`directionOf(state)`; `presentationContext` and every adapter go through it), and no migration backfills it, because a new config key read with a fallback does not need one.

@@ -14,6 +14,7 @@ A workspace's `layout` is a **spec**: plain data such as `{ type: "master-stack"
 - [Tree](#tree)
 - [Split sizing](#split-sizing)
 - [Layout modifiers](#layout-modifiers)
+- [Right-to-left](#right-to-left)
 
 ## `derive(state, options?)`
 
@@ -196,3 +197,26 @@ wm.setLayout({ type: "columns", modifiers: [{ type: "center" }] });
 ```
 
 A custom modifier that changes screen axes does not remap drop zones automatically. `applyModifiersToOps` only knows the built-ins. To toggle between two whole layouts rather than decorate one, use [`layout/toggle`](./commands.md#layouttoggle).
+
+## Right-to-left
+
+`config.direction: "rtl"` (set with `createState({ config: { direction: "rtl" } })`, `config/set`, or by the page's `dir`, see [Browser adapters](./browser.md#right-to-left)) mirrors the whole stage. It is the exact mirror image of the left-to-right stage, and it costs the layouts nothing: a layout spec and the tree `derive` builds from it are **identical** in both directions, because the compiled root carries `dir="rtl"` and CSS does the flipping. A flex row runs right to left, a grid fills its rows from the right, a tab strip starts at the right, and the logical properties in [`BASE_CSS`](./compile.md#base_css-and-custom-properties) follow.
+
+| Layout | In RTL |
+| --- | --- |
+| `master-stack` | the master is on the **right**, the stack on the left. `side: "right"` means the inline end, so the master goes on the left |
+| `columns` | the first window is the rightmost column |
+| `rows`, `monocle` | unchanged (no horizontal order); in `monocle` and `tabs` only the strip is mirrored |
+| `tabs` | the tab strip reads right to left, the first tab on the right |
+| `grid` (fixed and auto-fit) | each row fills from the right |
+| `spiral`, `bsp`, `tree` | every horizontal split mirrors: the first child of a row is on the right |
+| `floating` | each window's `x` is measured from the **right** edge; see below |
+| custom layouts, `modifiers` | built from the same primitives, so they mirror. `reflect-x` still reverses the DOM order, which cancels the mirror on screen |
+
+What is **logical**, so that it mirrors:
+
+- `place`: `left`/`right` are the inline-start/inline-end edges (compiled to `inset-inline-start`/`-end`), and a numeric `x` is measured from the inline-start edge (compiled to a `translate` that is negated in RTL). A floating window's `placement.x` is therefore "from the right" in RTL; a maximized window still fills all four edges; a notification (`right: 16`) sits at the left.
+- `anchor`: `side: "left"`/`"right"` and `gravity` mean inline-start/inline-end, and `align: "start"`/`"end"` along the horizontal axis mean the same. They are mirrored once in `compile` (the `position-area` and the `data-wm-anchor-opts` for the JS fallback come out physical), so CSS anchor positioning and the fallback agree. `x: "start"`/`"end"` for an inside anchor are logical too.
+- `window/drop` zones: `zone` names the **screen** side the pointer is on. In RTL the layout maps it to its own mirrored zone, so dropping on the screen-left half of a column puts the window *after* it. `dropInterpreterFor(drops, spec, { rtl })` reads the op map mirrored, and `mirrorZone(zone)` is the helper. The event keeps the screen `zone`. The keyboard commands (`window/move-before`/`-after`, `window/swap-next`/`-previous`) work in layout order and are not mirrored; the keys that call them are.
+
+What does **not** change: the layout algebra, `update`'s results for everything but `window/drop` zones and (through `config/set`) `direction`, tree and BSP structure (a split's first child stays first), `layout/resize-split` weights (they follow DOM order, so `aria-valuenow` is the first pane's share, the one on the right).

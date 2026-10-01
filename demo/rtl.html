@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Right-to-left layouts</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      #stage { margin: 8px; border-radius: 10px; border: 1px solid var(--line); }
+      .note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); }
+      .note code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+      .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+      .seg button { border: 0; background: var(--surface); color: var(--fg); font: inherit; padding: 4px 12px; cursor: pointer; }
+      .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+      .pop { padding: 8px 12px; background: var(--surface); color: var(--fg); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); font-size: 12.5px; }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar" aria-label="Direction and layout">
+      <span class="seg" role="group" aria-label="Direction">
+        <button type="button" id="ltr" aria-pressed="false">LTR</button>
+        <button type="button" id="rtl" aria-pressed="true">RTL</button>
+      </span>
+      <select id="layout" aria-label="Layout">
+        <option value="master-stack">master-stack</option>
+        <option value="columns">columns</option>
+        <option value="rows">rows</option>
+        <option value="grid">grid</option>
+        <option value="spiral">spiral</option>
+        <option value="bsp">bsp</option>
+        <option value="tree">tree</option>
+        <option value="tabs">tabs</option>
+        <option value="monocle">monocle</option>
+      </select>
+      <button class="btn small" id="new">New window</button>
+      <button class="btn small" id="float">Toggle floating</button>
+      <span class="sep"></span>
+      <span class="chip" id="dir-state">dir=rtl</span>
+    </nav>
+    <p class="note">
+      The stage root carries <code>dir</code>, so rows, grids and tab strips run right to left by themselves; floating <code>x</code> is measured from the right edge,
+      drop zones, keyboard arrows (try <code>Alt+Shift+←/→</code>), splitters and snap zones are mirrored. The stage's own <code>dir</code> attribute drives
+      <code>config.direction</code> through <code>attachDirection</code>.
+    </p>
+    <div id="stage" class="stage" dir="rtl" aria-label="Right-to-left stage"></div>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, attachDirection, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, windowSurface, syncChrome } from "./shared/kit.mjs";
+
+      initPage({ current: "./rtl.html", title: "Right-to-left layouts" });
+
+      const root = document.getElementById("stage");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({
+        state: createState({ layout: { type: "master-stack", ratio: 0.55 }, config: { gap: 6, inset: 6 } }),
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 200,
+      });
+      attachInput({ root, wm, keyboard: true, touch: true });
+      syncChrome(wm, root);
+      const direction = attachDirection({ wm, element: root });
+
+      const TITLES = ["المحرر", "الطرفية", "المتصفح", "الملاحظات", "التقويم", "الرسائل"];
+      let counter = 0;
+      const open = (options = {}) => {
+        const n = counter++;
+        const id = options.id ?? `w${n}`;
+        const title = options.title ?? TITLES[n % TITLES.length];
+        surfaces.set(id, windowSurface({ id, title, body: (el) => (el.textContent = `${n + 1}. ${title}`) }));
+        wm.create({ id, title, ...options });
+        return id;
+      };
+      for (let i = 0; i < 4; i++) open();
+      open({ mode: "floating", placement: { x: 24, y: 24, width: 220, height: 140 }, title: "عائم" });
+
+      const syncUi = () => {
+        const dir = wm.getState().config.direction;
+        document.getElementById("ltr").setAttribute("aria-pressed", String(dir === "ltr"));
+        document.getElementById("rtl").setAttribute("aria-pressed", String(dir === "rtl"));
+        document.getElementById("dir-state").textContent = `dir=${root.getAttribute("dir")} · config.direction=${dir}`;
+      };
+      wm.subscribe(syncUi);
+      for (const dir of ["ltr", "rtl"]) {
+        document.getElementById(dir).onclick = () => {
+          // The attribute is the source of truth; attachDirection mirrors it into config.direction.
+          root.setAttribute("dir", dir);
+          direction.refresh();
+        };
+      }
+      document.getElementById("layout").onchange = (event) => {
+        const type = event.target.value;
+        wm.setLayout(type === "grid" ? { type, columns: 2 } : type === "master-stack" ? { type, ratio: 0.55 } : { type });
+      };
+      document.getElementById("new").onclick = () => open();
+      document.getElementById("float").onclick = () => wm.getState().focus.window && wm.toggleFloating(wm.getState().focus.window);
+      syncUi();
+      window.wm = wm;
+    </script>
+  </body>
+</html>

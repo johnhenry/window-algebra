@@ -124,6 +124,7 @@ attachStage(host, {
   surfaceFor,      // forwarded to createDomRenderer
   input,           // merged into attachInput's options
   schedule,        // (task) => void; default createFrameScheduler(). immediateScheduler commits synchronously
+  direction,       // "auto" (default: follow an explicit dir) | "ltr" | "rtl" | false
   sync,            // true | attachSync options: keep this stage in step with other tabs (off by default)
   palette,         // true | createPalette options: a command palette for this stage's manager (off by default)
 }) → { wm, renderer, sync, palette, detach() }   // sync/palette are the handles, or null

@@ -130,6 +130,7 @@ Any window with `status: "maximized"` fills the stage (`place({ top: 0, right: 0
 
 | Key | Default | Meaning | Validated by `config/set` |
 | --- | --- | --- | --- |
+| `direction` | `"ltr"` | Reading direction: `"ltr"` or `"rtl"`. Under `"rtl"` every horizontal arrangement mirrors (see [Layouts › Right-to-left](./layouts.md#right-to-left)). May be missing on a saved state: read it as `"ltr"` (`directionOf(state)`). | `"ltr"` \| `"rtl"` |
 | `focusRaises` | `true` | Focusing a window also raises it (and its descendants) within its layer. | no |
 | `gap` | `0` | Gap in px between tiled siblings. It wraps every container in the tiled base, unless a `smart-gaps`/`no-gaps` modifier suppresses it. | no |
 | `inset` | `0` | Padding in px around the tiled base, suppressed the same way. | no |

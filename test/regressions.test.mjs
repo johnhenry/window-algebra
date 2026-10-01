@@ -556,4 +556,24 @@ describe("found while writing the API reference (regression)", () => {
     assert.ok(state.workspaces.main.windows.includes("c"));
   });
 
+  test("making a fullscreen window sticky takes the screen and focus (found by the invariant fuzz: focus was left on a window the fullscreen one hides)", () => {
+    const base = run(createState({ workspaces: ["main", "two"] }),
+      { type: "window/create", id: "a" },
+      { type: "window/create", id: "b", workspace: "two" },
+      { type: "window/fullscreen", id: "b" },
+      { type: "window/focus", id: "a" });
+    assert.equal(base.focus.window, "a", "b is fullscreen on a workspace nobody is looking at");
+    const out = update(base, { type: "window/set-sticky", id: "b" });
+    assert.equal(out.state.windows.b.sticky, true);
+    assert.equal(out.state.focus.window, "b", "b now covers the screen, so it has focus");
+    assert.deepEqual(out.events.map((e) => e.type), ["window/sticky-changed", "window/focused"]);
+    // and a fullscreen window already on the screen of the active workspace gives up the screen
+    const twoFullscreens = run(base, { type: "window/fullscreen", id: "a" });
+    const sticky = update(twoFullscreens, { type: "window/toggle-sticky", id: "b" });
+    assert.equal(sticky.state.windows.b.status, "fullscreen");
+    assert.equal(sticky.state.windows.a.status, "normal", "one fullscreen window per output");
+    assert.equal(sticky.state.focus.window, "b");
+    assert.ok(sticky.events.some((e) => e.type === "window/status-changed" && e.id === "a" && e.status === "normal"));
+  });
+
 });

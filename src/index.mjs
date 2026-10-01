@@ -78,6 +78,7 @@ export {
   orderDrops,
   createDropHandler,
   dropInterpreterFor,
+  mirrorZone,
   dragMode,
   opAllowed,
   tiledOrder,

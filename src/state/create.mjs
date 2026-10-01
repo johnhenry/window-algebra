@@ -22,6 +22,15 @@ export const DEFAULT_OUTPUT = "primary";
 export const DEFAULT_CONFIG = Object.freeze({
   /** Focusing a window also raises it within its layer. */
   focusRaises: true,
+  /**
+   * Reading direction of the stage: "ltr" or "rtl". Under "rtl" every
+   * horizontal arrangement mirrors (see docs/api/layouts.md, "Right-to-left"):
+   * the first child of a row sits on the right, `place`'s left/right and an
+   * anchor's left/right sides mean inline-start/inline-end, floating `x` is
+   * measured from the right edge, drop zones and keyboard arrows are mirrored.
+   * May be missing on a saved state: read it as "ltr".
+   */
+  direction: "ltr",
   /** Gap between tiled siblings (px), 0 for none. */
   gap: 0,
   /** Inset around the tiled area (px), 0 for none. */

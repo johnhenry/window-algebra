@@ -232,6 +232,7 @@ const goodValues = (state, rand) => {
     inset: () => pick([0, 8]),
     defaultPlacement: () => ({ x: 10, y: 10, width: 300, height: 200 }),
     focusRaises: () => rand() < 0.5,
+    direction: () => pick(["ltr", "rtl"]),
     placement: () => ({ x: 5, y: 5 }),
     geometry: () => ({}),
     order: () => pick([wss, [...wss].reverse(), outs]),

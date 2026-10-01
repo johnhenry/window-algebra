@@ -17,10 +17,20 @@
  */
 import { bspIds, bspPlace, bspReconcile, bspRemove, bspSwap, bspInsert, bspParentDirection } from "../layouts/bsp.mjs";
 import { treeIds, treeReconcile, treeRemove, treeSwap, treeSplit, treeAddTab, treeInsertTab, treeParentType } from "../layouts/tree.mjs";
-import { inTiledBase, isBlocked } from "./queries.mjs";
+import { inTiledBase, isBlocked, isRtl } from "./queries.mjs";
 import { applyModifiersToOps } from "./modifiers.mjs";
 
 export const DROP_ZONES = Object.freeze(["center", "left", "right", "top", "bottom"]);
+
+/**
+ * Zones are named by where the pointer is on screen. In a right-to-left stage
+ * the layout runs the other way, so the left half of a target is the *later*
+ * side of it: this maps a screen zone to the layout's own (logical) zone.
+ */
+export const mirrorZone = (zone) => (zone === "left" ? "right" : zone === "right" ? "left" : zone);
+
+/** A zone→op map with its `left` and `right` entries swapped. */
+const mirrorOps = (ops) => (ops ? { ...ops, left: ops.right, right: ops.left } : ops);
 export const DRAG_MODES = Object.freeze(["swap-or-insert", "swap", "insert", "off"]);
 
 const RENDER = Object.freeze({ type: "render" });
@@ -162,11 +172,13 @@ export const DROPS = Object.freeze({
  * map to match the axes they actually painted (see `applyModifiersToOps`);
  * `apply` (BSP's tree edit, say) is untouched.
  */
-export const dropInterpreterFor = (drops, spec) => {
+export const dropInterpreterFor = (drops, spec, { rtl = false } = {}) => {
   const base = (spec && typeof spec === "object" && drops[spec.type]) || drops.default || DROPS.default;
   const mods = spec && typeof spec === "object" ? spec.modifiers : undefined;
-  if (!Array.isArray(mods) || mods.length === 0) return base;
-  return { ...base, ops: (s, ids, target) => applyModifiersToOps(base.ops(s, ids, target), mods) };
+  const modded = !Array.isArray(mods) || mods.length === 0 ? base : { ...base, ops: (s, ids, target) => applyModifiersToOps(base.ops(s, ids, target), mods) };
+  // `rtl`: the zones asked about are screen zones (the pointer's), so the op map is read mirrored.
+  // `apply` is untouched: it takes the layout's own zone (see `mirrorZone`).
+  return rtl ? { ...modded, ops: (s, ids, target) => mirrorOps(modded.ops(s, ids, target)) } : modded;
 };
 
 /** Generic order edit. A dragged window missing from `ids` (floating) is inserted; its "swap" becomes "before". */
@@ -246,7 +258,7 @@ export const resolveDrop = (state, { id, target, zone }, drops = DROPS, { allowF
   if (!isDroppable(state, tgt) || (!isDroppable(state, win) && !floatingIn)) return { reason: "not-tiled" };
   if (isBlocked(state, id) || isBlocked(state, target)) return { reason: "blocked" };
   const ids = tiledOrder(state, ws.id);
-  const op = dropInterpreterFor(drops, ws.layout).ops(ws.layout, ids, target)?.[zone] ?? null;
+  const op = dropInterpreterFor(drops, ws.layout, { rtl: isRtl(state) }).ops(ws.layout, ids, target)?.[zone] ?? null;
   if (!op) return { reason: "unknown-zone" };
   if (!opAllowed(mode, op)) return { reason: "zone-disabled" };
   if (op === "swap" && tgt.draggable === false && ids.includes(id)) return { reason: "not-draggable" };
@@ -279,7 +291,8 @@ export const createDropHandler = (drops = DROPS) => (state, command) => {
       if (violates(state.windows[wid].constraints, geometry[wid])) return rejected(state, command, "too-small");
     }
   }
-  const next = applyOp(state, drops, { id, target, zone, op: resolved.op });
+  // `zone` is where the pointer was; the layout's own zone is its mirror image in a right-to-left stage.
+  const next = applyOp(state, drops, { id, target, zone: isRtl(state) ? mirrorZone(zone) : zone, op: resolved.op });
   const event = { type: "window/dropped", id, target, zone, op: resolved.op, workspace: resolved.workspace };
   if (state.windows[id].mode !== "tiled") event.tiled = true;
   // Dropping a window where it already is reports the drop but changes nothing.

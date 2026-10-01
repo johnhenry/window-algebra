@@ -21,7 +21,7 @@ import {
   treeReconcile,
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
-import { isVisible, isBlocked, inTiledBase, visibleWindows, presentedWindows, urgentWindows, fullscreenWindow } from "./queries.mjs";
+import { isVisible, isBlocked, inTiledBase, visibleWindows, presentedWindows, urgentWindows, fullscreenWindow, directionOf } from "./queries.mjs";
 import { MODIFIERS, withModifiers, suppressesGaps } from "./modifiers.mjs";
 
 const activeOf = (ids, focused, spec) => {
@@ -183,6 +183,8 @@ export const derive = (state, { layouts = {}, modifiers = {}, output } = {}) => 
 
 /** Non-layout facts the renderer needs: focus and input eligibility. */
 export const presentationContext = (state) => ({
+  /** "ltr" or "rtl": `compile` marks the root `dir` and mirrors physical placements. */
+  direction: directionOf(state),
   focused: state.focus.window,
   blocked: Object.keys(state.windows).filter((id) => isBlocked(state, id)),
   titles: Object.fromEntries(Object.values(state.windows).map((win) => [win.id, win.title])),

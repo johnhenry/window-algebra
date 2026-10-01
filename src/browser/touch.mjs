@@ -61,6 +61,8 @@ export const touchTokens = (options) =>
  * @param {(event: object) => {x: number, y: number}} ctx.local pointer position relative to the root
  * @param {(target: Element) => Element|null} ctx.viewOf the wm-view element a target is in
  * @param {(id: string) => ({x: number, y: number, width: number, height: number}|null)} ctx.floatRect a pinchable window's rect, or null if it cannot be pinched
+ * @param {(rect: object) => object} [ctx.mirror] maps a rect between a window's own (inline-start) x and the
+ *   screen's, and back; the identity in a left-to-right stage
  * @param {(state: object) => string} ctx.rootWorkspace the workspace this root shows
  * @param {() => number} ctx.direction 1 for left-to-right, -1 for right-to-left
  * @param {() => boolean} ctx.busy a drag/move/splitter gesture is in progress
@@ -69,7 +71,7 @@ export const touchTokens = (options) =>
  * @param {() => string} ctx.token a fresh gesture token
  */
 export const createTouchGestures = (ctx) => {
-  const { options, root, getState, dispatch, send, local, viewOf, floatRect, rootWorkspace, direction, busy, cancelOthers, timers, token } = ctx;
+  const { options, root, getState, dispatch, send, local, viewOf, floatRect, rootWorkspace, direction, busy, cancelOthers, timers, token, mirror = (rect) => rect } = ctx;
   const pointers = new Map(); // touch pointerId -> { x, y, target, view }
   let single = null; // { pointerId, type, x0, y0, t0, x, y, tabs, press: timer, viewEl, moved }
   let multi = null; // pinch or two-finger swipe in progress
@@ -116,7 +118,8 @@ export const createTouchGestures = (ctx) => {
           id,
           token: token(),
           start: rect,
-          op: createPinch({ points: [a, b], bounds: rect, constraints: state.windows[id]?.constraints }),
+          // Pinch runs on screen coordinates; `rect` (the window's own x) is what a cancel restores.
+          op: createPinch({ points: [a, b], bounds: mirror(rect), constraints: state.windows[id]?.constraints }),
         };
         return true;
       }
@@ -223,7 +226,7 @@ export const createTouchGestures = (ctx) => {
     }
     if (!multi) return false;
     if (multi.kind === "pinch" && pointers.size >= 2) {
-      const rect = updatePinch(multi.op, pair());
+      const rect = mirror(updatePinch(multi.op, pair()));
       dispatch({ type: "window/resize", id: multi.id, ...rect, gesture: multi.token });
     } else if (multi.kind === "swipe" && pointers.size >= 2) {
       const [a, b] = pair();

@@ -6,6 +6,12 @@ export { matchRules, validRules, MATCH_FIELDS, SET_FIELDS } from "./rules.mjs";
 
 export const getWindow = (state, id) => state.windows[id];
 
+/** The stage's reading direction, "ltr" unless `config.direction` is "rtl" (it may be missing on a saved state). */
+export const directionOf = (state) => (state.config?.direction === "rtl" ? "rtl" : "ltr");
+
+/** Does this state mirror horizontal arrangements? */
+export const isRtl = (state) => directionOf(state) === "rtl";
+
 export const activeWorkspace = (state) => state.workspaces[state.activeWorkspace];
 
 /** The output that currently has input focus. */

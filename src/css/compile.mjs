@@ -157,8 +157,22 @@ const sizeStyle = (options, parentKind) => {
 
 const selfAlign = (value) => ({ start: "start", center: "center", end: "end", stretch: "stretch" })[value];
 
-/** Placement relative to the parent's kind. */
-const placeStyle = (options, parentKind) => {
+/** A CSS length with its sign flipped (a px number becomes `-n`px; a string is wrapped in calc). */
+const negate = (value) => (typeof value === "number" ? px(-value) : `calc(-1 * ${value})`);
+
+/**
+ * Physical edge names become logical offsets: `left`/`right` are the
+ * inline-start/inline-end edges, so a placement mirrors in a right-to-left
+ * stage without the algebra knowing about direction.
+ */
+const EDGE_PROP = { top: "inset-block-start", bottom: "inset-block-end", left: "inset-inline-start", right: "inset-inline-end" };
+
+/**
+ * Placement relative to the parent's kind. `rtl` negates a numeric x
+ * translation: it is measured from the inline-start edge, which is the right
+ * edge in a right-to-left stage.
+ */
+const placeStyle = (options, parentKind, rtl = false) => {
   const style = {};
   if (parentKind === "grid") {
     if (options.area !== undefined) style["grid-area"] = String(options.area);
@@ -180,11 +194,12 @@ const placeStyle = (options, parentKind) => {
   if (numericX || numericY || edges.length) {
     style.position = "absolute";
     if (numericX || numericY) {
-      if (!edges.includes("left") && !edges.includes("right")) style.left = "0";
-      if (!edges.includes("top") && !edges.includes("bottom")) style.top = "0";
-      style.translate = `${px(numericX ? options.x : 0)} ${px(numericY ? options.y : 0)}`;
+      if (!edges.includes("left") && !edges.includes("right")) style[EDGE_PROP.left] = "0";
+      if (!edges.includes("top") && !edges.includes("bottom")) style[EDGE_PROP.top] = "0";
+      const x = numericX ? (rtl ? negate(options.x) : px(options.x)) : px(0);
+      style.translate = `${x} ${px(numericY ? options.y : 0)}`;
     }
-    for (const edge of edges) style[edge] = px(options[edge]);
+    for (const edge of edges) style[EDGE_PROP[edge]] = px(options[edge]);
   }
   return style;
 };
@@ -201,6 +216,28 @@ const AREA_BY_SIDE = {
 };
 
 const OPPOSITE_SIDE = { top: "bottom", bottom: "top", left: "right", right: "left" };
+
+/** `left` and `right` swapped (the mirror image), anything else unchanged. */
+const mirrorSide = (side) => (side === "left" ? "right" : side === "right" ? "left" : side);
+
+/**
+ * The anchor options as they must be read *physically* (by CSS `position-area`
+ * and by the JS fallback) in a right-to-left stage: the horizontal side flips,
+ * and a start/end alignment along the horizontal axis (a top or bottom side)
+ * flips with it. Mirrored once here, nothing downstream needs to know about direction.
+ */
+const physicalAnchor = (options, rtl) => {
+  if (!rtl) return options;
+  const side = options.side ?? "bottom";
+  const vertical = side === "top" || side === "bottom";
+  const align = options.align === "start" ? "end" : options.align === "end" ? "start" : options.align;
+  return {
+    ...options,
+    ...(options.side !== undefined ? { side: mirrorSide(options.side) } : {}),
+    ...(options.gravity !== undefined ? { gravity: mirrorSide(options.gravity) } : {}),
+    ...(vertical && options.align !== undefined ? { align } : {}),
+  };
+};
 
 /** True for the "inside the anchor" placement mode (as opposed to attached to one of its sides). */
 const isInsideAnchor = (options) => Boolean(options.inside || (!options.side && (options.x || options.y)));
@@ -225,12 +262,16 @@ const isInsideAnchor = (options) => Boolean(options.inside || (!options.side && 
  *   fit. Both are JS-anchor-fallback-only (`src/browser/dom.mjs`); a page
  *   relying on them should render with `anchorFallback: true`.
  */
-const anchorStyle = (options) => {
-  const { to, side, align = "center", offset, x, y, inside, gravity, flip } = options;
+const anchorStyle = (options, rtl = false) => {
+  const { to, side, align = "center", offset, x, y, inside, gravity, flip } = physicalAnchor(options, rtl);
   const style = { position: "absolute", "position-anchor": anchorName(to) };
   if (isInsideAnchor(options)) {
     style["position-area"] = "center";
-    const jx = selfAlign(x) ?? (side === "left" ? "start" : side === "right" ? "end" : selfAlign(align) ?? "center");
+    // `x` is logical (start is the right edge in RTL); `side`/`align` were made physical by `physicalAnchor`.
+    // The JS fallback reads justify-self physically, so in RTL these are spelled left/right outright.
+    const physical = (value) => (rtl ? { start: "left", end: "right" }[value] ?? value : value);
+    const logicalX = (value) => (rtl ? { start: "right", end: "left" }[value] ?? value : value);
+    const jx = selfAlign(x) !== undefined ? logicalX(selfAlign(x)) : physical(side === "left" ? "start" : side === "right" ? "end" : selfAlign(align) ?? "center");
     const jy = selfAlign(y) ?? (side === "top" ? "start" : side === "bottom" ? "end" : "center");
     style["justify-self"] = jx;
     style["align-self"] = jy;
@@ -244,6 +285,7 @@ const anchorStyle = (options) => {
     if (flipAxes.has("x")) fallbacks.push("flip-inline");
     if (fallbacks.length) style["position-try-fallbacks"] = fallbacks.join(", ");
     if (offset !== undefined) {
+      // `s` is already physical (mirrored for RTL by `physicalAnchor`), so the margin on the side facing the anchor is too.
       style[`margin-${OPPOSITE_SIDE[s]}`] = px(offset);
     }
   }
@@ -331,6 +373,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
   };
   collect(tree);
 
+  const rtl = context.direction === "rtl";
   const blocked = new Set(context.blocked ?? []);
   const urgent = new Set(context.urgent ?? []);
   const modal = new Set(context.modal ?? []);
@@ -359,9 +402,9 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
     let positioned = false;
     for (const mod of mods) {
       if (mod.type === "size") Object.assign(style, sizeStyle(mod.options, parentKind));
-      if (mod.type === "place") Object.assign(style, placeStyle(mod.options, parentKind));
+      if (mod.type === "place") Object.assign(style, placeStyle(mod.options, parentKind, rtl));
       if (mod.type === "anchor") {
-        Object.assign(style, anchorStyle(mod.options));
+        Object.assign(style, anchorStyle(mod.options, rtl));
         positioned = true;
       }
     }
@@ -376,7 +419,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       // positioner semantics — including `slide`/`resize`, which CSS cannot
       // express — from these, rather than from the CSS declarations above.
       if (!isInsideAnchor(anchorMod.options)) {
-        const { side, align, offset, gravity, flip, slide, resize } = anchorMod.options;
+        const { side, align, offset, gravity, flip, slide, resize } = physicalAnchor(anchorMod.options, rtl);
         attrs["data-wm-anchor-opts"] = JSON.stringify({ side, align, offset, gravity, flip, slide, resize });
       }
     }
@@ -457,7 +500,9 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
     const element = {
       tag: `wm-${target.type}`,
       key: elementKey,
-      attrs: { ...attrs, "data-layout": target.type },
+      // The root of a right-to-left presentation carries `dir`: flex rows, grids and tab strips below it
+      // then run right to left on their own, and every offset above is already logical.
+      attrs: { ...attrs, "data-layout": target.type, ...(rtl && !parent ? { dir: "rtl" } : {}) },
       style: { ...own, ...style },
       children: [],
     };

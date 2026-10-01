@@ -5,7 +5,7 @@
  * `window/drop` command.
  */
 import { update } from "../state/update.mjs";
-import { paintOrder, isVisible, descendantsOf } from "../state/queries.mjs";
+import { paintOrder, isVisible, descendantsOf, isRtl } from "../state/queries.mjs";
 import { DROPS, DROP_ZONES, dragMode, opAllowed, dropInterpreterFor, tiledOrder, isDroppable, resolveDrop } from "../state/drops.mjs";
 
 export { DROP_ZONES };
@@ -96,7 +96,7 @@ export const dropTargetAt = (state, geometry, point, draggedId, { drops = DROPS,
   if (!target) return null;
 
   const spec = state.workspaces[state.activeWorkspace].layout;
-  const ops = dropInterpreterFor(drops, spec).ops(spec, ids, target) ?? {};
+  const ops = dropInterpreterFor(drops, spec, { rtl: isRtl(state) }).ops(spec, ids, target) ?? {};
   const pinnedTarget = state.windows[target].draggable === false && ids.includes(draggedId);
   const permitted = (zone) => opAllowed(mode, ops[zone]) && !(ops[zone] === "swap" && pinnedTarget);
   const rect = geometry[target];

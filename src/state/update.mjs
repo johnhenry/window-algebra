@@ -57,7 +57,7 @@ const validConstraints = (constraints) =>
     return false;
   });
 
-const CONFIG_KEYS = Object.freeze(["focusRaises", "gap", "inset", "defaultPlacement", "drag", "rules", "urgency", "snap"]);
+const CONFIG_KEYS = Object.freeze(["focusRaises", "gap", "inset", "defaultPlacement", "drag", "rules", "urgency", "snap", "direction"]);
 
 const setWindow = (state, id, patch) => ({
   ...state,
@@ -728,7 +728,14 @@ const handlers = {
       const { sticky: _sticky, ...rest } = win;
       next = { ...state, windows: { ...state.windows, [id]: rest } };
     }
-    const changed = result(next, [{ type: "window/sticky-changed", id, sticky }], [RENDER]);
+    const events = [{ type: "window/sticky-changed", id, sticky }];
+    // A fullscreen window made sticky is now on the screen of the workspace being looked at: it takes the
+    // screen (and focus) exactly as if it had just gone fullscreen there.
+    if (sticky && win.status === "fullscreen" && isVisible(next, id)) {
+      const taken = takeScreen(next, next.windows[id]);
+      return merge(result(taken.state, [...events, ...taken.events], [RENDER]), applyFocus(taken.state, id));
+    }
+    const changed = result(next, events, [RENDER]);
     return merge(changed, refocus(next));
   },
 
@@ -1122,6 +1129,7 @@ const handlers = {
     const { type: _type, ...patch } = command;
     if (Object.keys(patch).some((key) => !CONFIG_KEYS.includes(key))) return rejected(state, command, "invalid-config");
     if (patch.focusRaises !== undefined && typeof patch.focusRaises !== "boolean") return rejected(state, command, "invalid-config");
+    if (patch.direction !== undefined && patch.direction !== "ltr" && patch.direction !== "rtl") return rejected(state, command, "invalid-config");
     if (!optional(patch.gap, isExtent) || !optional(patch.inset, isExtent)) return rejected(state, command, "invalid-config");
     const placement = patch.defaultPlacement;
     if (placement !== undefined) {
@@ -1289,6 +1297,25 @@ function cycleFocus(state, direction) {
   return merge(outputEvent, applyFocus(switched, target.wid));
 }
 
+/**
+ * One fullscreen window per output: when `win` is (now) fullscreen and shown,
+ * every other fullscreen window shown on its output goes back to normal.
+ * Returns the new state and the `window/status-changed` events it caused.
+ */
+function takeScreen(state, win) {
+  const outputId = state.workspaces[win.workspace]?.output;
+  let next = state;
+  const events = [];
+  if (outputId !== undefined && isVisible(next, win.id)) {
+    for (const other of visibleWindows(next, outputId)) {
+      if (other.id === win.id || other.status !== "fullscreen") continue;
+      next = setWindow(next, other.id, { status: "normal" });
+      events.push({ type: "window/status-changed", id: other.id, status: "normal", previous: "fullscreen" });
+    }
+  }
+  return { state: next, events };
+}
+
 function setStatus(state, command, status) {
   const win = state.windows[command.id];
   if (!win) return rejected(state, command, "unknown-window");
@@ -1296,14 +1323,10 @@ function setStatus(state, command, status) {
   if (win.status === status) return result(state);
   let next = setWindow(state, win.id, { status });
   const events = [{ type: `window/status-changed`, id: win.id, status, previous: win.status }];
-  // One fullscreen window per output: taking the screen ends any other fullscreen window shown there.
-  const outputId = state.workspaces[win.workspace]?.output;
-  if (status === "fullscreen" && outputId !== undefined && isVisible(next, win.id)) {
-    for (const other of visibleWindows(next, outputId)) {
-      if (other.id === win.id || other.status !== "fullscreen") continue;
-      next = setWindow(next, other.id, { status: "normal" });
-      events.push({ type: "window/status-changed", id: other.id, status: "normal", previous: "fullscreen" });
-    }
+  if (status === "fullscreen") {
+    const taken = takeScreen(next, next.windows[win.id]);
+    next = taken.state;
+    events.push(...taken.events);
   }
   const changed = result(next, events, [RENDER]);
   if (status === "minimized") return merge(changed, refocus(next));

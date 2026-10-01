@@ -26,7 +26,9 @@ Tiled windows own no geometry: their slots come from the workspace order (or the
 | `tab` | `tree`: add as a tab alongside the target. |
 | `null` | The zone means nothing for this target (the drop is rejected as `unknown-zone`). |
 
-"Before/after" is position in `workspace.windows`. Only the droppable (tiled) windows are reordered; every other window keeps its slot in the list.
+"Before/after" is position in `workspace.windows`.
+
+**Right-to-left.** Zones are named by where the pointer is on the screen. With `config.direction: "rtl"` the layout runs the other way, so `left` and `right` are mirrored on the way in: the op map is read mirrored (`dropInterpreterFor(drops, spec, { rtl: true })`, used by `resolveDrop` and `dropTargetAt`) and the zone handed to an interpreter's `apply` (a BSP or tree split's side) is `mirrorZone(zone)`. Dropping on the screen-left half of a column therefore means `after` it. The `window/dropped` event reports the screen `zone`; `top`, `bottom` and `center` are unchanged. See [Layouts › Right-to-left](./layouts.md#right-to-left). Only the droppable (tiled) windows are reordered; every other window keeps its slot in the list.
 
 ## Semantics per layout
 
