@@ -31,6 +31,34 @@ const rejected = (state, command, reason) =>
 
 const without = (list, id) => list.filter((item) => item !== id);
 
+const isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
+/** A position coordinate: a finite number, or "center" (which `place` understands). */
+const isCoordinate = (value) => isFiniteNumber(value) || value === "center";
+/** A size: a finite, non-negative number. */
+const isExtent = (value) => isFiniteNumber(value) && value >= 0;
+const optional = (value, test) => value === undefined || test(value);
+
+/** Layout types whose single `ratio` (or BSP's per-split ratio) `layout/set-ratio` can set. */
+const RATIO_LAYOUTS = Object.freeze(["master-stack", "spiral", "bsp"]);
+
+const CONSTRAINT_EXTENTS = ["minWidth", "minHeight", "maxWidth", "maxHeight", "baseWidth", "baseHeight"];
+const CONSTRAINT_STEPS = ["widthIncrement", "heightIncrement"];
+const validAspectRatio = (value) =>
+  (isFiniteNumber(value) && value > 0) ||
+  (isPlainObject(value) && optional(value.min, (v) => isFiniteNumber(v) && v > 0) && optional(value.max, (v) => isFiniteNumber(v) && v > 0) && (value.min !== undefined || value.max !== undefined));
+/** Constraints are a plain object of the documented keys; `undefined`/`null` values clear a key. */
+const validConstraints = (constraints) =>
+  isPlainObject(constraints) &&
+  Object.entries(constraints).every(([key, value]) => {
+    if (value === undefined || value === null) return CONSTRAINT_EXTENTS.includes(key) || CONSTRAINT_STEPS.includes(key) || key === "aspectRatio";
+    if (CONSTRAINT_EXTENTS.includes(key)) return key.startsWith("max") ? isFiniteNumber(value) ? value >= 0 : value === Infinity : isExtent(value);
+    if (CONSTRAINT_STEPS.includes(key)) return isFiniteNumber(value) && value > 0;
+    if (key === "aspectRatio") return validAspectRatio(value);
+    return false;
+  });
+
+const CONFIG_KEYS = Object.freeze(["focusRaises", "gap", "inset", "defaultPlacement", "drag", "rules", "urgency", "snap"]);
+
 const setWindow = (state, id, patch) => ({
   ...state,
   windows: { ...state.windows, [id]: { ...state.windows[id], ...patch } },
@@ -396,9 +424,17 @@ const handlers = {
     const { id, layer } = command;
     if (!state.windows[id]) return rejected(state, command, "unknown-window");
     if (!LAYERS.includes(layer)) return rejected(state, command, "unknown-layer");
-    let next = removeFromStack(state, id);
-    next = setWindow(next, id, { layer });
-    next = { ...next, stack: { ...next.stack, [layer]: [...next.stack[layer], id] } };
+    // Descendants that shared the window's old layer travel with it (keeping their relative order), so a
+    // child is never left painted beneath its parent. A child in a different layer was placed there on purpose.
+    const old = state.windows[id].layer;
+    const rank = new Map(LAYERS.flatMap((l) => state.stack[l] ?? []).map((wid, i) => [wid, i]));
+    const moving = [id, ...descendantsOf(state, id).filter((wid) => state.windows[wid].layer === old).sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))];
+    let next = state;
+    for (const wid of moving) {
+      next = removeFromStack(next, wid);
+      next = setWindow(next, wid, { layer });
+      next = { ...next, stack: { ...next.stack, [layer]: [...next.stack[layer], wid] } };
+    }
     return result(next, [{ type: "window/layer-changed", id, layer }], [RENDER]);
   },
 
@@ -409,6 +445,7 @@ const handlers = {
   "window/move"(state, command) {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
+    if (!optional(command.x, isCoordinate) || !optional(command.y, isCoordinate)) return rejected(state, command, "invalid-geometry");
     const placement = { ...win.placement, x: command.x ?? win.placement.x, y: command.y ?? win.placement.y };
     return result(setWindow(state, win.id, { placement }), [{ type: "window/moved", id: win.id, placement }], [RENDER]);
   },
@@ -416,6 +453,9 @@ const handlers = {
   "window/resize"(state, command) {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
+    if (!optional(command.width, isExtent) || !optional(command.height, isExtent) || !optional(command.x, isCoordinate) || !optional(command.y, isCoordinate)) {
+      return rejected(state, command, "invalid-geometry");
+    }
     const sizeValue = constrainSize(
       { width: command.width ?? win.placement.width, height: command.height ?? win.placement.height },
       win.constraints,
@@ -530,6 +570,7 @@ const handlers = {
   "window/set-constraints"(state, command) {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
+    if (!validConstraints(command.constraints)) return rejected(state, command, "invalid-constraints");
     const constraints = { ...win.constraints, ...command.constraints };
     const placement = { ...win.placement, ...constrainSize(win.placement, constraints) };
     return result(setWindow(state, win.id, { constraints, placement }), [
@@ -658,7 +699,12 @@ const handlers = {
     const outputId = command.output ?? state.focusedOutput;
     if (!state.outputs[outputId]) return rejected(state, command, "unknown-output");
     const ws = createWorkspace({ id, layout: command.layout ?? state.workspaces[state.activeWorkspace].layout, output: outputId });
-    if (ws.layout.type === "bsp") ws.layout = { ...ws.layout, tree: null };
+    // A layout copied from the active workspace must not carry that workspace's windows: drop its tree and
+    // every stored size or ratio, which describe those windows. (An explicit `command.layout` is taken as given.)
+    if (command.layout === undefined && typeof ws.layout === "object") {
+      const { tree: _tree, sizes: _sizes, ratios: _ratios, toggleLayouts: _toggle, ...rest } = ws.layout;
+      ws.layout = rest.type === "bsp" ? { ...rest, tree: null } : rest;
+    } else if (ws.layout.type === "bsp") ws.layout = { ...ws.layout, tree: null };
     let next = {
       ...state,
       workspaces: { ...state.workspaces, [id]: ws },
@@ -839,8 +885,9 @@ const handlers = {
     const wsId = command.workspace ?? state.activeWorkspace;
     const ws = state.workspaces[wsId];
     if (!ws) return rejected(state, command, "unknown-workspace");
-    const ratio = Math.min(0.95, Math.max(0.05, Number(command.ratio)));
-    if (!Number.isFinite(ratio)) return rejected(state, command, "invalid-ratio");
+    if (typeof ws.layout !== "object" || !RATIO_LAYOUTS.includes(ws.layout.type)) return rejected(state, command, "not-resizable");
+    if (!isFiniteNumber(command.ratio)) return rejected(state, command, "invalid-ratio");
+    const ratio = Math.min(0.95, Math.max(0.05, command.ratio));
     const next =
       ws.layout.type === "bsp"
         ? setLayout(state, wsId, (layout) => ({
@@ -988,6 +1035,16 @@ const handlers = {
   /** Shallow patch; plain-object values (drag, defaultPlacement) merge one level deep. */
   "config/set"(state, command) {
     const { type: _type, ...patch } = command;
+    if (Object.keys(patch).some((key) => !CONFIG_KEYS.includes(key))) return rejected(state, command, "invalid-config");
+    if (patch.focusRaises !== undefined && typeof patch.focusRaises !== "boolean") return rejected(state, command, "invalid-config");
+    if (!optional(patch.gap, isExtent) || !optional(patch.inset, isExtent)) return rejected(state, command, "invalid-config");
+    const placement = patch.defaultPlacement;
+    if (placement !== undefined) {
+      if (!isPlainObject(placement)) return rejected(state, command, "invalid-config");
+      if (!Object.keys(placement).every((key) => ["x", "y", "width", "height"].includes(key))) return rejected(state, command, "invalid-config");
+      if (!optional(placement.x, isCoordinate) || !optional(placement.y, isCoordinate)) return rejected(state, command, "invalid-config");
+      if (!optional(placement.width, isExtent) || !optional(placement.height, isExtent)) return rejected(state, command, "invalid-config");
+    }
     const drag = patch.drag;
     if (drag !== undefined) {
       if (!isPlainObject(drag)) return rejected(state, command, "invalid-config");

@@ -115,7 +115,8 @@ describe("derive: state → presentation tree", () => {
     const state = make([win("a"), win("b")], { layout: { type: "coding" } });
     const tree = derive(state, { layouts: { coding: (spec, ids) => columns({}, [...ids].reverse()) } });
     assert.deepEqual(views(tree), ["b", "a"]);
-    assert.throws(() => derive(state), /no layout interpreter/);
+    // Without the interpreter registered, an unknown type falls back to columns instead of throwing.
+    assert.deepEqual(views(derive(state)), ["a", "b"]);
   });
 
   test("every derived tree validates", () => {

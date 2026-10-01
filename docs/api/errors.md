@@ -44,12 +44,14 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | `unknown-layout` | the manager: `layout/set`, `workspace/create`, `layout/toggle` with a type no interpreter knows |
 | `invalid-layout` | `layout/set`, `layout/toggle` |
 | `invalid-ratio` | `layout/set-ratio` |
+| `invalid-geometry` | `window/move`, `window/resize` |
+| `invalid-constraints` | `window/set-constraints` |
 | `invalid-path` | `layout/resize-split` |
 | `invalid-index` | `layout/resize-split` |
 | `invalid-weights` | `layout/resize-split` |
 | `missing-value` | `layout/resize-split` |
 | `missing-weights` | `layout/resize-split` (a `delta` on columns/rows before any sizes are stored) |
-| `not-resizable` | `layout/resize-split` |
+| `not-resizable` | `layout/resize-split`, `layout/set-ratio` |
 | `not-bsp` | `layout/rotate-split` |
 | `invalid-config` | `config/set` |
 | `invalid-rules` | `rules/set` |

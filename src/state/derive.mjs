@@ -127,8 +127,11 @@ export const derive = (state, { layouts = {}, modifiers = {}, output } = {}) => 
 
   const tiledIds = visible.filter((win) => inTiledBase(state, win)).map((w) => w.id);
 
-  const baseInterpreter = typeof ws.layout === "function" ? ws.layout : registry[ws.layout?.type];
-  if (!baseInterpreter) throw new TypeError(`derive(): no layout interpreter for "${ws.layout?.type}".`);
+  // A spec whose type no interpreter knows (a custom layout that is not registered here, or a hand-edited
+  // state) falls back to `columns` instead of throwing, so one bad workspace never blanks the screen.
+  // Programmer errors (an interpreter that returns a non-node) still throw. The manager rejects such
+  // a spec up front as `unknown-layout`; the pure `update` cannot know which interpreters you will pass.
+  const baseInterpreter = typeof ws.layout === "function" ? ws.layout : Object.hasOwn(registry, ws.layout?.type) ? registry[ws.layout.type] : registry.columns;
   // Layout modifiers (smart-gaps, max-windows, mirror, reflect-x, …) decorate the
   // base interpreter, xmonad-style; see `state/modifiers.mjs`.
   const layoutMods = Array.isArray(ws.layout?.modifiers) ? ws.layout.modifiers : [];

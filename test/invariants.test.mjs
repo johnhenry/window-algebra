@@ -18,9 +18,7 @@ const WALK_STEPS = 300;
  * matches one is tolerated, anything else fails the test. Each fix commit deletes its entry, and an entry that no
  * longer matches any failure fails the test too (so the list cannot rot).
  */
-const KNOWN = [
-  { finding: "8, 11: layouts derive cannot present", matches: (_t, i) => i === "derive-throws" },
-];
+const KNOWN = [];
 const hits = new Map();
 const knownFor = (type, invariant, command) => KNOWN.find((k) => k.matches(type, invariant, command));
 

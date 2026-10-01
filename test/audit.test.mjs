@@ -4,7 +4,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { createWindowManager, createState, update, derive, compile, presentationContext, isVisible, focusable, paintOrder, views } from "../src/index.mjs";
+import { columns, createWindowManager, createState, update, derive, compile, presentationContext, isVisible, focusable, paintOrder, views } from "../src/index.mjs";
 
 const run = (state, ...commands) => commands.reduce((s, c) => update(s, c).state, state);
 const mk = (state, id, extra = {}) => run(state, { type: "window/create", id, ...extra });
@@ -210,5 +210,105 @@ describe("7: undo, redo and load re-sync focus", () => {
     effects.length = 0;
     wm.undo();
     assert.deepEqual(effects, []);
+  });
+});
+
+describe("8: layout/set-ratio", () => {
+  test("a function layout is not resizable (it used to become { ratio } and make derive throw)", () => {
+    const state = run(withWindows(["a", "b"]), { type: "layout/set", layout: (spec, ids) => columns({}, ids) });
+    assert.equal(reason(state, { type: "layout/set-ratio", ratio: 0.3 }), "not-resizable");
+  });
+  test("layouts without a ratio are not resizable", () => {
+    for (const type of ["columns", "rows", "grid", "tabs", "monocle", "floating", "tree"]) {
+      const state = run(withWindows(["a", "b"]), { type: "layout/set", layout: { type } });
+      assert.equal(reason(state, { type: "layout/set-ratio", ratio: 0.3 }), "not-resizable", type);
+    }
+  });
+  test("master-stack, spiral and bsp still take a ratio", () => {
+    for (const type of ["master-stack", "spiral", "bsp"]) {
+      const state = run(withWindows(["a", "b"]), { type: "layout/set", layout: { type } });
+      const out = update(state, { type: "layout/set-ratio", ratio: 0.3 });
+      assert.equal(out.events[0].type, "layout/ratio-changed", type);
+    }
+  });
+  test("the ratio must be a finite number", () => {
+    const state = withWindows(["a", "b"]);
+    for (const ratio of [undefined, null, "0.5", NaN, Infinity, {}, [0.5]]) assert.equal(reason(state, { type: "layout/set-ratio", ratio }), "invalid-ratio");
+  });
+});
+
+describe("9: geometry, config and constraints are validated", () => {
+  const state = withWindows(["a"]);
+  test("window/move and window/resize reject non-finite, non-numeric and negative values", () => {
+    for (const bad of [NaN, Infinity, "10", null, {}]) {
+      assert.equal(reason(state, { type: "window/move", id: "a", x: bad }), "invalid-geometry");
+      assert.equal(reason(state, { type: "window/move", id: "a", y: bad }), "invalid-geometry");
+      assert.equal(reason(state, { type: "window/resize", id: "a", width: bad }), "invalid-geometry");
+      assert.equal(reason(state, { type: "window/resize", id: "a", height: bad }), "invalid-geometry");
+    }
+    assert.equal(reason(state, { type: "window/resize", id: "a", width: -1 }), "invalid-geometry");
+    assert.equal(reason(state, { type: "window/resize", id: "a", x: "left" }), "invalid-geometry");
+  });
+  test('"center" is a legal coordinate and omitted fields are fine', () => {
+    const moved = run(state, { type: "window/move", id: "a", x: "center", y: 5 });
+    assert.deepEqual([moved.windows.a.placement.x, moved.windows.a.placement.y], ["center", 5]);
+    assert.equal(run(state, { type: "window/resize", id: "a", width: 200 }).windows.a.placement.width, 200);
+    assert.equal(run(state, { type: "window/resize", id: "a", x: -50, y: -20 }).windows.a.placement.x, -50);
+  });
+  test("config/set rejects a negative gap, unknown keys and a bad defaultPlacement", () => {
+    for (const patch of [{ gap: -4 }, { gap: NaN }, { inset: "8" }, { bogus: 1 }, { focusRaises: "yes" }, { defaultPlacement: 5 }, { defaultPlacement: { width: -1 } }, { defaultPlacement: { x: NaN } }, { defaultPlacement: { depth: 1 } }]) {
+      assert.equal(reason(state, { type: "config/set", ...patch }), "invalid-config", JSON.stringify(patch));
+    }
+    const ok = run(state, { type: "config/set", gap: 8, defaultPlacement: { x: "center", width: 300 } });
+    assert.equal(ok.config.gap, 8);
+    assert.deepEqual(ok.config.defaultPlacement, { x: "center", y: 40, width: 300, height: 320 });
+  });
+  test("window/set-constraints rejects anything but the documented keys and values", () => {
+    for (const constraints of [undefined, null, 5, "x", [], { minWidth: -1 }, { minWidth: "100" }, { maxWidth: NaN }, { widthIncrement: 0 }, { aspectRatio: -1 }, { aspectRatio: {} }, { aspectRatio: "wide" }, { bogus: 1 }]) {
+      assert.equal(reason(state, { type: "window/set-constraints", id: "a", constraints }), "invalid-constraints", JSON.stringify(constraints));
+    }
+    const ok = run(state, { type: "window/set-constraints", id: "a", constraints: { minWidth: 100, maxWidth: Infinity, aspectRatio: { min: 1, max: 2 }, widthIncrement: 10 } });
+    assert.equal(ok.windows.a.constraints.minWidth, 100);
+  });
+});
+
+describe("10: window/set-layer moves descendants along", () => {
+  test("a child that shared the parent's layer is not left beneath it", () => {
+    const state = run(withWindows(["a", "b"]), { type: "window/create", id: "dlg", parent: "a", role: "dialog", layer: "normal" }, { type: "window/set-layer", id: "a", layer: "top" });
+    assert.equal(state.windows.dlg.layer, "top");
+    const order = paintOrder(state);
+    assert.ok(order.indexOf("a") < order.indexOf("dlg"), `a before dlg in ${order}`);
+  });
+  test("a child that was put on another layer stays there", () => {
+    const state = run(withWindows(["a"]), { type: "window/create", id: "dlg", parent: "a", role: "dialog" }, { type: "window/set-layer", id: "dlg", layer: "popover" }, { type: "window/set-layer", id: "a", layer: "top" });
+    assert.equal(state.windows.dlg.layer, "popover");
+  });
+});
+
+describe("11: unknown layouts and copied trees", () => {
+  test("derive falls back to columns for a layout type nothing interprets", () => {
+    const state = run(withWindows(["a", "b"]), { type: "layout/set", layout: { type: "no-such-layout" } });
+    assert.deepEqual(views(derive(state)), ["a", "b"]);
+    present(state);
+  });
+  test("the manager still rejects an unknown layout type up front", () => {
+    const wm = createWindowManager();
+    const events = [];
+    wm.subscribe((_s, evs) => events.push(...evs));
+    wm.dispatch({ type: "layout/set", layout: { type: "no-such-layout" } });
+    assert.ok(events.some((e) => e.type === "command/rejected" && e.reason === "unknown-layout"));
+  });
+  test("workspace/create does not copy the active workspace's tree, sizes or ratios", () => {
+    for (const layout of [{ type: "tree" }, { type: "bsp" }, { type: "columns", sizes: { "": [1, 2] } }, { type: "spiral", ratios: [0.3] }]) {
+      let state = run(withWindows(["a", "b", "c"]), { type: "layout/set", layout });
+      state = run(state, { type: "layout/resize-split", path: "", weights: [1, 2, 3] });
+      state = run(state, { type: "workspace/create", id: "two", activate: true });
+      const copied = state.workspaces.two.layout;
+      assert.equal(copied.type, layout.type);
+      assert.ok(!copied.tree || JSON.stringify(copied.tree).indexOf('"a"') < 0, `${layout.type}: no foreign ids`);
+      assert.equal(copied.sizes, undefined, layout.type);
+      assert.equal(copied.ratios, undefined, layout.type);
+      present(state);
+    }
   });
 });

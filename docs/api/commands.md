@@ -201,7 +201,7 @@ Moves the window to the bottom of its layer. Descendants are not moved.
 { type: "window/set-layer", id, layer }
 ```
 
-Moves the window to the top of another layer (or of its own).
+Moves the window to the top of another layer (or of its own). Its descendants (dialogs, sheets, popovers) that are in the window's old layer move with it, keeping their relative order, so a child is never left painted beneath its parent; a descendant deliberately on another layer stays put.
 
 - **Events:** `window/layer-changed { id, layer }`.
 - **Effects:** `render`.
@@ -215,11 +215,11 @@ Moves the window to the top of another layer (or of its own).
 { type: "window/move", id, x?, y? }
 ```
 
-Stores the **requested** position, whatever the mode. `derive` uses it only while the window is floating. Omitted coordinates keep their current values. Constraints are not applied (a move changes no size).
+Stores the **requested** position, whatever the mode. `derive` uses it only while the window is floating. Omitted coordinates keep their current values. `x` and `y` must each be a finite number or `"center"`. Constraints are not applied (a move changes no size).
 
 - **Events:** `window/moved { id, placement }`.
 - **Effects:** `render`.
-- **Rejections:** `unknown-window`.
+- **Rejections:** `unknown-window`, `invalid-geometry` (a non-finite or non-number coordinate).
 
 The manager coalesces a run of absolute moves (both `x` and `y` given) sharing a `gesture` token into one log entry. See [The manager › Gestures](./manager.md#gestures).
 
@@ -229,11 +229,11 @@ The manager coalesces a run of absolute moves (both `x` and `y` given) sharing a
 { type: "window/resize", id, width?, height?, x?, y? }
 ```
 
-Stores a requested size (and optionally position) after `constrainSize(size, win.constraints)`: min/max clamp, aspect ratio and size increments. Omitted fields keep their values.
+Stores a requested size (and optionally position) after `constrainSize(size, win.constraints)`: min/max clamp, aspect ratio and size increments. Omitted fields keep their values. `width` and `height` must be finite numbers ≥ 0; `x` and `y` finite numbers or `"center"`.
 
 - **Events:** `window/resized { id, placement }` (the constrained placement).
 - **Effects:** `render`.
-- **Rejections:** `unknown-window`.
+- **Rejections:** `unknown-window`, `invalid-geometry`.
 
 ### `window/set-mode`
 
@@ -277,9 +277,11 @@ The drag-to-float gesture as one command (one undo step). It turns a droppable t
 
 Merges `constraints` into the window's constraints (keys not given are kept) and re-clamps its placement's size with `constrainSize`. Tiled windows get CSS `min-*`/`max-*` and, for an exact `aspectRatio`, CSS `aspect-ratio`.
 
+`constraints` must be a plain object of the documented keys: `minWidth`, `minHeight`, `baseWidth`, `baseHeight` (finite numbers ≥ 0), `maxWidth`, `maxHeight` (a number ≥ 0 or `Infinity`), `widthIncrement`, `heightIncrement` (finite numbers > 0), and `aspectRatio` (a number > 0, or `{ min?, max? }` with at least one). `undefined`/`null` clears a key. Unknown keys are rejected.
+
 - **Events:** `window/constrained { id, constraints }` (the merged constraints).
 - **Effects:** `render`.
-- **Rejections:** `unknown-window`.
+- **Rejections:** `unknown-window`, `invalid-constraints`.
 
 ## Status
 
@@ -532,7 +534,7 @@ Either way it becomes `lastScratchpad`.
 { type: "workspace/create", id, layout?, output?, activate? }
 ```
 
-Creates an empty workspace on `output` (default: the focused output), appended to `workspaceOrder` and the output's `workspaces`. `layout` defaults to a copy of the active workspace's layout; a copied `bsp` spec gets `tree: null`. With `activate: true` it is then activated.
+Creates an empty workspace on `output` (default: the focused output), appended to `workspaceOrder` and the output's `workspaces`. `layout` defaults to a copy of the active workspace's layout **without** anything that describes that workspace's windows: `tree`, `sizes`, `ratios` (and a copied `bsp` spec gets `tree: null`), so no foreign window id leaks into the new workspace. With `activate: true` it is then activated.
 
 - **Events:** `workspace/created { id, output }`, then (with `activate`) the `workspace/activate` events.
 - **Effects:** `render`, plus `focus` with `activate`.
@@ -624,7 +626,7 @@ Every layout command takes an optional `workspace` (default: the active workspac
 { type: "layout/set", layout, workspace? }
 ```
 
-Replaces a workspace's layout spec. A `bsp` spec without a `tree` is seeded from the workspace's current tiled order, and so is a `tree` spec whose `tree` is `undefined`. A spec is valid if it is a function, or an object with a string `type` and, if present, a valid `modifiers` list (an array of objects with string `type`).
+Replaces a workspace's layout spec. A `bsp` spec without a `tree` is seeded from the workspace's current tiled order, and so is a `tree` spec whose `tree` is `undefined`. A spec is valid if it is a function, or an object with a string `type` and, if present, a valid `modifiers` list (an array of objects with string `type`). The pure `update` cannot know which custom interpreters you will pass to `derive`, so it accepts any string `type`; `derive` falls back to `columns` for a type it has no interpreter for, and the manager rejects it up front (`unknown-layout`).
 
 - **Events:** `layout/changed { workspace, layout }` (the seeded spec).
 - **Effects:** `render`.
@@ -658,11 +660,11 @@ A single window becomes a bare leaf and no windows becomes `null`. Modifiers and
 { type: "layout/set-ratio", ratio, workspace?, id? }
 ```
 
-Sets a ratio, clamped to `[0.05, 0.95]`. On a `bsp` workspace it sets the ratio of the split **directly containing** leaf `id` (default: the focused window); if that leaf has no split parent the tree is unchanged. On any other layout it sets `layout.ratio` (read by `master-stack` and `spiral`; harmless elsewhere).
+Sets a ratio, clamped to `[0.05, 0.95]`. On a `bsp` workspace it sets the ratio of the split **directly containing** leaf `id` (default: the focused window); if that leaf has no split parent the tree is unchanged. On `master-stack` and `spiral` it sets `layout.ratio`. Any other layout (a function spec, `columns`, `rows`, `grid`, `tabs`, `monocle`, `floating`, `tree`, custom types) is rejected.
 
 - **Events:** `layout/ratio-changed { workspace, ratio }` (the clamped ratio).
 - **Effects:** `render`.
-- **Rejections:** `unknown-workspace`, `invalid-ratio` (`Number(ratio)` is not finite).
+- **Rejections:** `unknown-workspace`, `not-resizable` (not `master-stack`, `spiral` or `bsp`), `invalid-ratio` (`ratio` is not a finite number; strings are not coerced).
 
 ### `layout/rotate-split`
 
@@ -727,7 +729,9 @@ Shallow-patches `state.config` with every field of the command except `type`. A 
 - `urgency`: a plain object; `clearOnFocus` a boolean.
 - `snap`: a plain object; `edges` a boolean; `threshold` and `magnet` numbers ≥ 0; `zones` in `"halves-quarters"`/`"halves"`/`"quarters"`/`"off"`.
 
-Other keys (`gap`, `inset`, `focusRaises`, `defaultPlacement`, custom keys) are not validated.
+- `gap`, `inset`: finite numbers ≥ 0. `focusRaises`: a boolean.
+- `defaultPlacement`: a plain object with only `x`, `y` (finite number or `"center"`) and `width`, `height` (finite numbers ≥ 0).
+- Any other key is rejected: `config` has a fixed set of keys (`focusRaises`, `gap`, `inset`, `defaultPlacement`, `drag`, `rules`, `urgency`, `snap`).
 
 - **Events:** `config/changed { patch }` (the patch as given, without `type`).
 - **Effects:** `render`.
