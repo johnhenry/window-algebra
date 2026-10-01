@@ -222,6 +222,11 @@ export interface AttachSyncOptions {
   schedule?: Scheduler;
   onSync?: (info: SyncInfo) => void;
   onError?: (error: Error) => void;
+  /**
+   * Where `pagehide` / `pageshow` fire (default `globalThis` when it is an event target). On `pagehide` the tab
+   * announces `bye` so peers stop counting it; on a back/forward-cache `pageshow` it says hello again. `false` opts out.
+   */
+  lifecycle?: EventTarget | false;
 }
 export interface Sync {
   readonly id: string;

@@ -86,9 +86,12 @@ export const fromSnapshot = (snapshot, local) => {
  *   command is broadcast synchronously.
  * @param {(info: { direction: "in"|"out", clock: number, from: string, applied?: boolean }) => void} [options.onSync]
  * @param {(error: Error) => void} [options.onError] a snapshot that could not be posted or applied
+ * @param {EventTarget|false} [options.lifecycle] where `pagehide` / `pageshow` fire (default `globalThis` when it is an
+ *   event target, i.e. in a window). On `pagehide` the tab announces `bye` so peers stop counting it; on a `pageshow`
+ *   that restores the page from the back/forward cache it announces itself again. `false` leaves that to you.
  * @returns {{ id: string, clock: number, peers(): string[], flush(): void, detach(): void }}
  */
-export const attachSync = ({ wm, channel = SYNC_CHANNEL, id = randomId(), schedule = createFrameScheduler(), onSync, onError } = {}) => {
+export const attachSync = ({ wm, channel = SYNC_CHANNEL, id = randomId(), schedule = createFrameScheduler(), onSync, onError, lifecycle = globalThis } = {}) => {
   if (!wm) throw new TypeError("attachSync: `wm` is required");
   const ownsChannel = typeof channel === "string";
   const port = ownsChannel ? new globalThis.BroadcastChannel(channel) : channel;
@@ -187,6 +190,20 @@ export const attachSync = ({ wm, channel = SYNC_CHANNEL, id = randomId(), schedu
   else port.onmessage = onMessage;
   post({ kind: "hello", clock });
 
+  // A tab that is closed never calls detach(), and its peers would count it for ever. The channel stays open
+  // across pagehide: the page may come back from the back/forward cache, and then it says hello again.
+  const pageEvents = lifecycle && typeof lifecycle.addEventListener === "function" ? lifecycle : null;
+  const onPageHide = () => {
+    if (!live) return;
+    send();
+    post({ kind: "bye" });
+  };
+  const onPageShow = (event) => {
+    if (live && event?.persisted) post({ kind: "hello", clock });
+  };
+  pageEvents?.addEventListener("pagehide", onPageHide);
+  pageEvents?.addEventListener("pageshow", onPageShow);
+
   return {
     id,
     get clock() {
@@ -199,6 +216,8 @@ export const attachSync = ({ wm, channel = SYNC_CHANNEL, id = randomId(), schedu
       send();
       live = false;
       unsubscribe();
+      pageEvents?.removeEventListener("pagehide", onPageHide);
+      pageEvents?.removeEventListener("pageshow", onPageShow);
       post({ kind: "bye" });
       if (typeof port.removeEventListener === "function") port.removeEventListener("message", onMessage);
       else if (port.onmessage === onMessage) port.onmessage = null;

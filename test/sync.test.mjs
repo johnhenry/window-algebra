@@ -302,6 +302,44 @@ describe("attachSync: state snapshots over a BroadcastChannel", () => {
     assert.deepEqual(b.wm.getState().windows, {});
   });
 
+  test("a tab that is closed (pagehide) says bye without detach(); a bfcache restore says hello again", () => {
+    // regression: peers() counted a closed tab for ever, because only detach() announced bye (found by the workbench app)
+    const lifecycle = new EventTarget();
+    const { hub, a, b } = tabs(["a", "b"]);
+    const wm = createWindowManager();
+    const chan = new hub.BroadcastChannel("wa");
+    const closing = attachSync({ wm, channel: chan, id: "c", schedule: immediateScheduler, lifecycle });
+    hub.deliver();
+    assert.deepEqual(a.sync.peers().sort(), ["b", "c"]);
+    assert.deepEqual(b.sync.peers().sort(), ["a", "c"]);
+    lifecycle.dispatchEvent(new Event("pagehide"));
+    hub.deliver();
+    assert.deepEqual(a.sync.peers(), ["b"], "the closed tab is gone from its peers' list");
+    assert.deepEqual(b.sync.peers(), ["a"]);
+    // a page that is not restored from the cache (persisted false) stays quiet; one that is says hello again
+    lifecycle.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: false }));
+    hub.deliver();
+    assert.deepEqual(a.sync.peers(), ["b"]);
+    lifecycle.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    hub.deliver();
+    assert.deepEqual(a.sync.peers().sort(), ["b", "c"]);
+    // detach removes the listeners: a later pagehide announces nothing
+    closing.detach();
+    hub.deliver();
+    assert.deepEqual(a.sync.peers(), ["b"]);
+    lifecycle.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    hub.deliver();
+    assert.deepEqual(a.sync.peers(), ["b"]);
+    // lifecycle: false opts out
+    const quiet = new EventTarget();
+    const other = attachSync({ wm: createWindowManager(), channel: new hub.BroadcastChannel("wa"), id: "d", schedule: immediateScheduler, lifecycle: false });
+    hub.deliver();
+    quiet.dispatchEvent(new Event("pagehide"));
+    hub.deliver();
+    assert.deepEqual(a.sync.peers().sort(), ["b", "d"]);
+    other.detach();
+  });
+
   test("detach stops listening, announces bye, and closes a channel it created", () => {
     const hub = createBroadcastHub();
     const saved = globalThis.BroadcastChannel;
