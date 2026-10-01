@@ -234,7 +234,10 @@ export const paletteEntries = (state, { query = "", exclude = [], catalog = {} }
       entries.push({ ...base, score: titleHit.score * 2, ranges: titleHit.ranges });
       continue;
     }
-    const hit = fuzzyMatch(query, `${type} ${spec.group} ${spec.keywords ?? ""}`);
+    // Keywords first: a query is read left to right, so "new window" has to find the keyword "new" and then the
+    // word "window" (in the type or group) behind it. With the keywords last, "Open window" (keywords "new add")
+    // never matched "new window" while "Pop window out" did, by accident.
+    const hit = fuzzyMatch(query, `${spec.keywords ?? ""} ${spec.group} ${type}`);
     if (hit) entries.push({ ...base, score: hit.score, ranges: [] });
   }
   return entries.sort((a, b) => b.score - a.score || a.order - b.order);

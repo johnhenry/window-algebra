@@ -136,6 +136,10 @@ describe("fuzzy matching", () => {
     const top = (query) => paletteEntries(state, { query })[0]?.type;
     assert.equal(top("close win"), "window/close");
     assert.equal(top("new ws"), "workspace/create");
+    // regression: a keyword followed by a word of the type/group ("new window" for "Open window", keywords "new add")
+    // used to match nothing, while "Pop window out" matched it by accident (found building the workbench app)
+    assert.equal(top("new window"), "window/create");
+    assert.equal(top("add window"), "window/create");
     const byKeyword = paletteEntries(state, { query: "undock" }).map((e) => e.type);
     assert.ok(byKeyword.includes("window/detach") && byKeyword.includes("window/toggle-floating"));
     assert.deepEqual(paletteEntries(state, { query: "zzzzqq" }), []);
