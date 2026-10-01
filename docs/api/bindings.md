@@ -38,7 +38,7 @@ function Desktop() {
 
 ### `useWindowManager(options?)`
 
-Creates a manager **once** with `createWindowManager(options)` (later `options` are ignored) and subscribes the component with `useSyncExternalStore`, so it re-renders on every dispatch. Returns `{ wm, state }`; `wm` is stable across renders.
+Creates a manager **once** with `createWindowManager({ schedule: createFrameScheduler(), ...options })` (later `options` are ignored; pass your own `schedule`, e.g. `immediateScheduler`, to override the frame coalescing) and subscribes the component with `useSyncExternalStore`, so it re-renders on every dispatch. Returns `{ wm, state }`; `wm` is stable across renders.
 
 ### `useWindowState(wm, selector = (state) => state)`
 
@@ -46,13 +46,14 @@ Subscribes to a slice of state. The component re-renders only when `selector(sta
 
 ### `<WindowManagerStage>`
 
-Mounts a `createDomRenderer` plus `attachInput` pair into a host element for the component's lifetime. It commits `wm.present().render` immediately and on every dispatch, and tears everything down on unmount. It re-attaches only when `wm` changes.
+Mounts a `createDomRenderer` plus `attachInput` pair into a host element for the component's lifetime. It commits `wm.present().render` immediately and after dispatches, **coalesced to one commit per frame** (`createFrameScheduler()`, or your `schedule` prop), and tears everything down on unmount (a commit still queued is dropped). It re-attaches only when `wm` changes.
 
 | Prop | Description |
 | --- | --- |
 | `wm` | Required. The manager to render. |
 | `renderSurface(id)` | Returns a React node for a window's content. When given **with** `createPortal`, each view's content is a React portal into a container `div[data-wa-portal="<id>"]` inside that view, so window content is an ordinary React tree (state, effects and context intact) while the WM owns layout and chrome. |
 | `createPortal` | react-dom's `createPortal`. It is required for `renderSurface`. |
+| `schedule(task)` | When commits run. Default `createFrameScheduler()`; `immediateScheduler` commits synchronously (tests, server-style rendering). |
 | `anchorFallback` | Forwarded to `createDomRenderer`. |
 | `input` | An object merged into `attachInput`'s options (`{ wm, root }` are supplied; add `announce`, `keyboard`, `modifier`, …). |
 | `as` | The host tag, default `"div"`. |
@@ -103,7 +104,8 @@ attachStage(host, {
   anchorFallback,  // forwarded to createDomRenderer
   surfaceFor,      // forwarded to createDomRenderer
   input,           // merged into attachInput's options
+  schedule,        // (task) => void; default createFrameScheduler(). immediateScheduler commits synchronously
 }) → { wm, renderer, detach() }
 ```
 
-It commits once, re-commits on every dispatch, and `detach()` unsubscribes, detaches input and destroys the renderer.
+It commits once, then re-commits after dispatches, coalesced to one commit per frame (a bare `requestAnimationFrame`; outside a browser it falls back to a 16 ms timer, so pass `schedule: immediateScheduler` in tests). `detach()` unsubscribes, detaches input and destroys the renderer.

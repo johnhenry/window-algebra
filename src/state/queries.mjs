@@ -95,8 +95,31 @@ export const isScratchpadHidden = (state, id) => state.windows[id]?.scratchpad =
 /** Windows marked sticky (visible on every workspace). */
 export const stickyWindows = (state) => Object.values(state.windows).filter((win) => win.sticky);
 
-/** Direct children of a window (dialogs, popovers, ...). */
-export const childrenOf = (state, id) => Object.values(state.windows).filter((win) => win.parent === id);
+const NO_CHILDREN = Object.freeze([]);
+const childIndexes = new WeakMap();
+/**
+ * parent id → direct children, in `Object.values(state.windows)` order. Built once per `state.windows`
+ * object (states are immutable, so a changed window set is a new object) and shared by every query
+ * that walks the window tree, so `derive`, `presentationContext` and the update policies stay linear
+ * in the number of windows instead of rescanning them for every parent.
+ */
+const childIndex = (state) => {
+  let index = childIndexes.get(state.windows);
+  if (!index) {
+    index = new Map();
+    for (const win of Object.values(state.windows)) {
+      if (win.parent == null) continue;
+      const list = index.get(win.parent);
+      if (list) list.push(win);
+      else index.set(win.parent, [win]);
+    }
+    childIndexes.set(state.windows, index);
+  }
+  return index;
+};
+
+/** Direct children of a window. The returned list is shared: do not mutate it. */
+export const childrenOf = (state, id) => childIndex(state).get(id) ?? NO_CHILDREN;
 
 /** The deepest open modal descendant of a window, following the modal graph. */
 export const modalTarget = (state, id) => {

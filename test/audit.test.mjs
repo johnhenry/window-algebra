@@ -438,3 +438,28 @@ describe("found by the fuzz test while adding the 12 commands", () => {
     assert.deepEqual(views(derive(state)).sort(), ["a", "dlg"]);
   });
 });
+
+describe("15: derive and presentationContext do not rescan the window set per window", () => {
+  test("the number of whole-window-set scans does not grow with the number of windows", () => {
+    const scans = (n) => {
+      let state = createState();
+      for (let i = 0; i < n; i++) {
+        state = mk(state, `w${i}`);
+        state = mk(state, `d${i}`, { parent: `w${i}`, role: "dialog", modal: i % 2 === 0, mode: "floating" });
+      }
+      let count = 0;
+      const counted = { ...state, windows: new Proxy(state.windows, { ownKeys(target) { count++; return Reflect.ownKeys(target); } }) };
+      derive(counted);
+      presentationContext(counted);
+      return count;
+    };
+    const small = scans(10);
+    const large = scans(100);
+    assert.equal(large, small, `scans grew from ${small} to ${large}`);
+    assert.ok(large < 40, `${large} scans`);
+  });
+  test("childrenOf and the modal graph still answer correctly", () => {
+    const state = run(withWindows(["a"]), { type: "window/create", id: "d", parent: "a", role: "dialog", modal: true }, { type: "window/create", id: "d2", parent: "d", role: "dialog", modal: true });
+    assert.deepEqual(presentationContext(state).blocked.sort(), ["a", "d"]);
+  });
+});

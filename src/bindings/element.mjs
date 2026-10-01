@@ -14,6 +14,7 @@
 import { createWindowManager } from "../manager.mjs";
 import { createDomRenderer } from "../browser/dom.mjs";
 import { attachInput } from "../browser/input.mjs";
+import { createFrameScheduler } from "../browser/scheduler.mjs";
 
 /**
  * @param {Element} host mount point (usually the custom element itself)
@@ -23,19 +24,23 @@ import { attachInput } from "../browser/input.mjs";
  * @param {boolean} [options.anchorFallback] forwarded to `createDomRenderer`
  * @param {(id: string) => object} [options.surfaceFor] forwarded to `createDomRenderer`
  * @param {object} [options.input] extra options merged into `attachInput`
+ * @param {(task: () => void) => void} [options.schedule] when commits run after a state change; default
+ *   `createFrameScheduler()` (many commands, one commit per frame). Pass `immediateScheduler` to commit synchronously.
  * @returns {{ wm: object, renderer: object, detach(): void }}
  */
 export const attachStage = (host, options = {}) => {
-  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input } = options;
+  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, schedule = createFrameScheduler() } = options;
   const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor });
-  const commit = () => renderer.commit(wm.present().render);
+  let live = true;
+  const commit = () => live && renderer.commit(wm.present().render);
   commit();
-  const unsubscribe = wm.subscribe(commit);
+  const unsubscribe = wm.subscribe(() => schedule(commit));
   const detachInput = attachInput({ root: host, wm, ...input });
   return {
     wm,
     renderer,
     detach() {
+      live = false; // a commit still queued for the next frame must not touch the torn-down renderer
       unsubscribe();
       detachInput();
       renderer.destroy?.();

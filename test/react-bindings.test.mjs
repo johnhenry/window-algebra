@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createReactBindings } from "../src/bindings/react.mjs";
+import { immediateScheduler } from "../src/browser/scheduler.mjs";
 import { createFakeDocument } from "./helpers/fake-dom.mjs";
 import { createFakeReact } from "./helpers/fake-react.mjs";
 
@@ -126,7 +127,7 @@ describe("createReactBindings: WindowManagerStage", () => {
     let wm;
     const App = () => {
       ({ wm } = useWindowManager());
-      return react.createElement(WindowManagerStage, { wm });
+      return react.createElement(WindowManagerStage, { wm, schedule: immediateScheduler });
     };
     react.render(App, {}, { container: root });
     wm.create({ id: "a" });
@@ -142,7 +143,7 @@ describe("createReactBindings: WindowManagerStage", () => {
     let wm;
     const App = () => {
       ({ wm } = useWindowManager());
-      return react.createElement(WindowManagerStage, { wm });
+      return react.createElement(WindowManagerStage, { wm, schedule: immediateScheduler });
     };
     const handle = react.render(App, {}, { container: root });
     wm.create({ id: "a" });
@@ -166,6 +167,7 @@ describe("createReactBindings: WindowManagerStage", () => {
       ({ wm } = useWindowManager());
       return react.createElement(WindowManagerStage, {
         wm,
+        schedule: immediateScheduler,
         renderSurface: (id) => react.createElement("section", { "data-surface": id }),
         createPortal: react.createPortal,
       });
@@ -194,12 +196,41 @@ describe("createReactBindings: WindowManagerStage", () => {
     let wm;
     const App = () => {
       ({ wm } = useWindowManager());
-      return react.createElement(WindowManagerStage, { wm });
+      return react.createElement(WindowManagerStage, { wm, schedule: immediateScheduler });
     };
     react.render(App, {}, { container: root });
     wm.create({ id: "a" });
     const host = doc.body.querySelectorAll("[data-wm-root]")[0];
     assert.equal(host.querySelectorAll("[data-wa-portal]").length, 0);
     assert.equal(host.querySelectorAll("wm-view").length, 1);
+  });
+});
+
+describe("createReactBindings: frame-coalesced commits by default (audit 15)", () => {
+  test("WindowManagerStage commits once per frame unless given a schedule", () => {
+    const frames = [];
+    const saved = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (task) => frames.push(task);
+    try {
+      const { doc, react, bindings } = setup();
+      const root = doc.createElement("div");
+      doc.body.append(root);
+      const { useWindowManager, WindowManagerStage } = bindings;
+      let wm;
+      const App = () => {
+        ({ wm } = useWindowManager());
+        return react.createElement(WindowManagerStage, { wm });
+      };
+      react.render(App, {}, { container: root });
+      wm.create({ id: "a" });
+      wm.create({ id: "b" });
+      const host = doc.body.querySelectorAll("[data-wm-root]")[0];
+      assert.equal(host.querySelectorAll("wm-view").length, 0);
+      assert.equal(frames.length, 1);
+      frames.shift()();
+      assert.equal(host.querySelectorAll("wm-view").length, 2);
+    } finally {
+      globalThis.requestAnimationFrame = saved;
+    }
   });
 });

@@ -19,6 +19,7 @@
  *   instead of imperative DOM the WM owns outright.
  */
 import { createWindowManager } from "../manager.mjs";
+import { createFrameScheduler } from "../browser/scheduler.mjs";
 import { createDomRenderer } from "../browser/dom.mjs";
 import { attachInput } from "../browser/input.mjs";
 
@@ -28,7 +29,8 @@ export const createReactBindings = (React) => {
   /** Creates a window manager once and subscribes this component to it. */
   const useWindowManager = (options) => {
     const ref = useRef(null);
-    if (!ref.current) ref.current = createWindowManager(options);
+    // Frame-coalesced renders unless the caller chose a scheduler: many commands, one commit per frame.
+    if (!ref.current) ref.current = createWindowManager({ schedule: createFrameScheduler(), ...options });
     const wm = ref.current;
     const state = useSyncExternalStore(wm.subscribe, wm.getState);
     return { wm, state };
@@ -68,13 +70,16 @@ export const createReactBindings = (React) => {
    *   window content can be ordinary React components (state, effects,
    *   context, all intact) while the WM still owns layout and chrome.
    * - `createPortal`: react-dom's `createPortal`, required for the above.
+   * - `schedule?(task)`: when commits run after a state change; default
+   *   `createFrameScheduler()` (one commit per frame). `immediateScheduler`
+   *   commits synchronously.
    * - `anchorFallback?`, `input?` (object merged into `attachInput`'s
    *   options), `as?` (host tag, default "div"): passed through.
    * - Everything else (`className`, `style`, `id`, ...) lands on the host
    *   element as ordinary props.
    */
   const WindowManagerStage = (props) => {
-    const { wm, renderSurface, createPortal, anchorFallback, input, as = "div", ...rest } = props;
+    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, as = "div", ...rest } = props;
     const hostRef = useRef(null);
     const [portals, setPortals] = useState(() => new Map());
 
@@ -111,10 +116,13 @@ export const createReactBindings = (React) => {
 
       const renderer = createDomRenderer({ root, document: root.ownerDocument, anchorFallback, surfaceFor });
       const detach = attachInput({ root, wm, ...input });
-      const commit = () => renderer.commit(wm.present().render);
+      let live = true;
+      const frame = schedule ?? createFrameScheduler();
+      const commit = () => live && renderer.commit(wm.present().render);
       commit();
-      const unsubscribe = wm.subscribe(commit);
+      const unsubscribe = wm.subscribe(() => frame(commit));
       return () => {
+        live = false; // a commit still queued for the next frame must not touch the torn-down renderer
         unsubscribe();
         detach();
         renderer.destroy?.();

@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { attachStage, defineWindowAlgebraElement } from "../src/bindings/element.mjs";
 import { createWindowManager } from "../src/manager.mjs";
+import { immediateScheduler } from "../src/browser/scheduler.mjs";
 import { createFakeDocument, FakeElement } from "./helpers/fake-dom.mjs";
 
 describe("attachStage", () => {
@@ -10,7 +11,7 @@ describe("attachStage", () => {
     const host = doc.createElement("wa-stage");
     doc.body.append(host);
 
-    const stage = attachStage(host);
+    const stage = attachStage(host, { schedule: immediateScheduler });
     assert.ok(stage.wm);
     assert.ok(host.hasAttribute("data-wm-root"));
 
@@ -32,7 +33,7 @@ describe("attachStage", () => {
     const wm = createWindowManager();
     wm.create({ id: "pre-existing" });
 
-    const stage = attachStage(host, { wm });
+    const stage = attachStage(host, { wm, schedule: immediateScheduler });
     assert.equal(stage.wm, wm);
     assert.equal(host.querySelectorAll("wm-view").length, 1);
     stage.detach();
@@ -42,7 +43,7 @@ describe("attachStage", () => {
     const doc = createFakeDocument();
     const host = doc.createElement("wa-stage");
     doc.body.append(host);
-    const stage = attachStage(host);
+    const stage = attachStage(host, { schedule: immediateScheduler });
     stage.wm.create({ id: "a" });
 
     const closer = doc.createElement("button");
@@ -60,6 +61,7 @@ describe("attachStage", () => {
     const mounts = [];
     const content = doc.createElement("section");
     const stage = attachStage(host, {
+      schedule: immediateScheduler,
       surfaceFor: (id) => ({
         mount(target) {
           mounts.push(["mount", id]);
@@ -127,6 +129,7 @@ describe("defineWindowAlgebraElement", () => {
     doc.body.append(el);
     assert.equal(el.wm, null);
 
+    el.configure({ schedule: immediateScheduler });
     el.connectedCallback();
     assert.ok(el.wm);
     el.wm.create({ id: "a" });
@@ -173,5 +176,52 @@ describe("defineWindowAlgebraElement", () => {
     assert.equal(el.querySelectorAll("wm-view").length, 2);
 
     el.disconnectedCallback();
+  });
+});
+
+describe("attachStage: frame-coalesced commits by default (audit 15)", () => {
+  const withFrames = (fn) => {
+    const frames = [];
+    const saved = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (task) => frames.push(task);
+    try {
+      return fn(frames);
+    } finally {
+      globalThis.requestAnimationFrame = saved;
+    }
+  };
+
+  test("many commands in a frame make one DOM commit; the view appears on the next frame", () => {
+    withFrames((frames) => {
+      const doc = createFakeDocument();
+      const host = doc.createElement("wa-stage");
+      doc.body.append(host);
+      const stage = attachStage(host);
+      let commits = 0;
+      const commit = stage.renderer.commit;
+      stage.renderer.commit = (...args) => (commits++, commit(...args));
+      stage.wm.create({ id: "a" });
+      stage.wm.create({ id: "b" });
+      stage.wm.create({ id: "c" });
+      assert.equal(host.querySelectorAll("wm-view").length, 0, "nothing committed yet");
+      assert.equal(frames.length, 1, "one frame requested for three commands");
+      frames.shift()();
+      assert.equal(commits, 1);
+      assert.equal(host.querySelectorAll("wm-view").length, 3);
+      stage.detach();
+    });
+  });
+
+  test("a commit still queued when the stage detaches is dropped", () => {
+    withFrames((frames) => {
+      const doc = createFakeDocument();
+      const host = doc.createElement("wa-stage");
+      doc.body.append(host);
+      const stage = attachStage(host);
+      stage.wm.create({ id: "a" });
+      stage.detach();
+      assert.doesNotThrow(() => frames.shift()());
+      assert.equal(host.querySelectorAll("wm-view").length, 0);
+    });
   });
 });

@@ -24,7 +24,10 @@ import { LAYERS } from "./create.mjs";
 import { isVisible, isBlocked, inTiledBase, visibleWindows, presentedWindows, urgentWindows, fullscreenWindow } from "./queries.mjs";
 import { MODIFIERS, withModifiers, suppressesGaps } from "./modifiers.mjs";
 
-const activeOf = (ids, focused, spec) => (ids.includes(spec.active) ? spec.active : ids.includes(focused) ? focused : ids[0]);
+const activeOf = (ids, focused, spec) => {
+  const present = new Set(ids);
+  return present.has(spec.active) ? spec.active : present.has(focused) ? focused : ids[0];
+};
 
 /**
  * Built-in layout interpreters: `(spec, ids, context) → tree`.
@@ -151,8 +154,10 @@ export const derive = (state, { layouts = {}, modifiers = {}, output } = {}) => 
     if (typeof c.aspectRatio === "number" && Number.isFinite(c.aspectRatio) && c.aspectRatio > 0) picked.aspectRatio = c.aspectRatio;
     return Object.keys(picked).length ? picked : null;
   };
-  if (tiledIds.some(constrained)) {
-    base = mapViews(base, (node) => (tiledIds.includes(node.id) && constrained(node.id) ? size(constrained(node.id), node) : node));
+  const tiledSet = new Set(tiledIds);
+  const constraintsOf = new Map(tiledIds.map((id) => [id, constrained(id)]));
+  if ([...constraintsOf.values()].some(Boolean)) {
+    base = mapViews(base, (node) => (tiledSet.has(node.id) && constraintsOf.get(node.id) ? size(constraintsOf.get(node.id), node) : node));
   }
 
   const { gap: gapSize, inset: insetSize } = state.config;
@@ -165,8 +170,7 @@ export const derive = (state, { layouts = {}, modifiers = {}, output } = {}) => 
 
   // Everything not tiled is layered by the stacking model: the background layer
   // beneath the tiled base, every other layer above it (see `paintOrder`).
-  const tiled = new Set(tiledIds);
-  const upper = visible.filter((win) => !tiled.has(win.id));
+  const upper = visible.filter((win) => !tiledSet.has(win.id));
   const rank = new Map(LAYERS.flatMap((layer) => state.stack[layer] ?? []).map((id, i) => [id, i]));
   upper.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   let notificationIndex = 0;
