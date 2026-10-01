@@ -44,17 +44,17 @@ Replacing an operating-system window manager or compositor, and multi-user colla
 
 ## Releases
 
-Bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge, then `gh release create v<version>`. The release event triggers `.github/workflows/publish.yml`, which runs the tests and examples, skips if the version is already on npm, and publishes with `--provenance --access public`. It needs a scope-capable `NPM_TOKEN` secret, and `repository.url` must match the publishing repo for provenance.
+Bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge, then `gh release create v<version>`. The release event triggers `.github/workflows/publish.yml`, which runs the full gate (tests, examples, types and the three-engine browser suite), skips if the version is already on npm, and publishes with `--provenance --access public`. It needs a scope-capable `NPM_TOKEN` secret, and `repository.url` must match the publishing repo for provenance.
 
 ### Publish workflow
 
 `.github/workflows/publish.yml` calls `johnhenry/workflows/.github/workflows/npm-publish.yml@v1` with `secrets: inherit` and `id-token: write` on the caller job. Triggers: `release: published`, a redundant `push: tags: ["v*"]` (a release created soon after a push can drop the release event; the `npm view` guard makes a double fire a no-op), and `workflow_dispatch`. The gate runs inside the reusable workflow: `npx playwright install --with-deps`, `npm test`, `npm run examples`, `npm run test:types`, `npm run test:browser` (all three engines plus axe). The reusable workflow then runs the `npm view <name>@<version>` guard (a 404 for a never-published package is non-zero, which means "publish") and `npm publish --provenance --access public`.
 
-### First release checklist (nothing has been published yet; `0.0.0` is a placeholder)
+### First release checklist (nothing has been published yet; the first release is `0.0.0`)
 
 1. `npm view @johnhenry/window-algebra` returns 404 today; that is expected. Confirm the `@johnhenry` npm scope is the maintainer's and that the `NPM_TOKEN` repo secret exists and can create a new public scoped package (`gh api repos/johnhenry/window-algebra/actions/secrets`).
-2. In a PR: bump `version` in `package.json` (not `0.0.0`), move the `CHANGELOG.md` entry from Unreleased to the version with a date, merge.
+2. No bump: the first release is `0.0.0` itself (family convention: a new `@johnhenry/*` address starts at 0.0.0), and `CHANGELOG.md` already has its dated `## 0.0.0` entry. Add anything merged since to that entry and make sure `main` is green.
 3. Run the whole loop above, then `npm pack --dry-run` and `npm publish --dry-run` (no token needed; the 57-file list must hold `src/` including every `.d.mts`, plus `README.md`, `LICENSE`, `package.json`; no `demo/`, `test/`, `e2e/`, `docs/`, `examples/`, `.env`).
 4. `repository.url` must stay `git+https://github.com/johnhenry/window-algebra.git` (provenance compares it to the publishing repo); `homepage` is `https://opensource.johnhenry.me/window-algebra/`, which must be live (docs section on the opensource site) before announcing.
-5. `gh release create v<version>`. Both the release and the `v*` tag trigger the publish; a same-second second run may show a red `403 cannot publish over` on the losing trigger. That is expected; confirm with an anonymous `npm view @johnhenry/window-algebra version`.
+5. `gh release create v0.0.0`. Both the release and the `v*` tag trigger the publish; a same-second second run may show a red `403 cannot publish over` on the losing trigger. That is expected; confirm with an anonymous `npm view @johnhenry/window-algebra version`.
 6. Afterwards: check the provenance badge on npmjs.com, and install the tarball into a scratch project to import each `exports` entry and its types.
