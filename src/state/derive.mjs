@@ -21,7 +21,7 @@ import {
   treeReconcile,
 } from "../layouts/index.mjs";
 import { LAYERS } from "./create.mjs";
-import { isVisible, isBlocked, inTiledBase, visibleWindows, presentedWindows, urgentWindows } from "./queries.mjs";
+import { isVisible, isBlocked, inTiledBase, visibleWindows, presentedWindows, urgentWindows, fullscreenWindow } from "./queries.mjs";
 import { MODIFIERS, withModifiers, suppressesGaps } from "./modifiers.mjs";
 
 const activeOf = (ids, focused, spec) => (ids.includes(spec.active) ? spec.active : ids.includes(focused) ? focused : ids[0]);
@@ -111,7 +111,7 @@ export const derive = (state, { layouts = {}, modifiers = {}, output } = {}) => 
   // A fullscreen window is presented alone, except that its own descendants
   // (a confirm dialog, a menu) stay above it: otherwise a modal child would
   // block the fullscreen window while being invisible itself.
-  const fullscreen = visible.find((win) => win.status === "fullscreen");
+  const fullscreen = fullscreenWindow(state, outputId);
   if (fullscreen) {
     const rank = new Map(LAYERS.flatMap((layer) => state.stack[layer] ?? []).map((id, i) => [id, i]));
     const family = presentedWindows(state, outputId)

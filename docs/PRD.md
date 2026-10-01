@@ -82,7 +82,7 @@ sway-style outputs: `state.outputs` (id → `{ workspaces, activeWorkspace }`) p
 | Area | Requirement |
 | --- | --- |
 | State | Plain JSON. Windows, workspaces, focus with history, and per-layer stacking. |
-| Commands | 51 built-in commands (`COMMANDS`; each is documented in `docs/api/commands.md`). Bad commands are rejected, never thrown. Extensions are supported. |
+| Commands | 58 built-in commands (`COMMANDS`; each is documented in `docs/api/commands.md`). Bad commands are rejected, never thrown. Extensions are supported. |
 | Policy | Modal-graph focus redirection, optional focus-raises, cascading close, refocus from history, EWMH/X11-style urgency hints (`window/set-urgent`, `focus/urgent`, `config.urgency.clearOnFocus`). |
 | Layouts | master-stack, columns, rows, grid (auto-fit/fixed), spiral, monocle, tabs, floating, BSP (stateful), docking tree (stateful, n-ary row/column/tabs; `layout/to-tree` converts any other layout into one), and custom interpreters. |
 | Layout modifiers | xmonad-style, serializable (`spec.modifiers: [{ type, ... }]`): `smart-gaps`, `no-gaps`, `mirror`, `reflect-x`, `reflect-y`, `max-windows(n)` (overflow shares a hidden stack slot), applied via a `MODIFIERS` registry parallel to `LAYOUTS` and the `withModifiers(interpreter, mods)` combinator. `layout/toggle { a, b }` flips a workspace between two stored layouts (xmonad `ToggleLayouts`). Drop interpreters remap their zones to match `mirror`/`reflect-x`/`reflect-y` (`applyModifiersToOps`). |

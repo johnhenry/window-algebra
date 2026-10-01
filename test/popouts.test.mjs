@@ -126,11 +126,12 @@ describe("attachPopouts", () => {
     assert.equal(popouts.isPoppedOut("b"), false);
   });
 
-  test("pop-in with nothing tracked (never popped out via this helper) still dispatches window/pop-in", () => {
+  test("pop-in with nothing tracked (never popped out via this helper) is a no-op", () => {
     const { wm } = setup();
     const popouts = attachPopouts({ wm, renderer: undefined, open: () => createFakeWindow() });
     const out = popouts.popIn("a"); // "a" was never popped out
-    assert.equal(out.events[0].reason, "not-popped-out");
+    assert.deepEqual(out.events, [], "a no-op, like window/restore on a normal window");
+    assert.equal(wm.state.windows.a.status, "normal");
   });
 
   test("closing the popup window itself pops the window back in", () => {

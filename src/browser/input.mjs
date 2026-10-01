@@ -267,7 +267,7 @@ export const attachInput = (options) => {
             ? `${t(event.id)} swapped with ${t(event.target)}.`
             : `${t(event.id)} moved ${event.op === "after" ? "after" : "before"} ${t(event.target)}.`;
       case "window/swapped":
-        return `${t(event.a)} swapped with ${t(event.b)}.`;
+        return `${t(event.id)} swapped with ${t(event.target)}.`;
       case "window/reordered":
         return `${t(event.id)} moved ${event.position} ${t(event.target)}.`;
       case "window/detached":

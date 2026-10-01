@@ -246,11 +246,13 @@ export const createWindowManager = ({
     maximize: command("window/maximize"),
     fullscreen: command("window/fullscreen"),
     restore: command("window/restore"),
+    toggleMaximize: command("window/toggle-maximize"),
+    toggleFullscreen: command("window/toggle-fullscreen"),
     /** GoldenLayout/Dockview-style pop-out; see `attachPopouts` for the actual browser window. */
     popOut: command("window/pop-out"),
     popIn: command("window/pop-in"),
     promote: command("window/promote"),
-    swap: (a, b) => dispatch({ type: "window/swap", a, b }),
+    swap: (id, target) => dispatch({ type: "window/swap", id, target }),
     /** Drop a tiled window onto another: zone "center" | "left" | "right" | "top" | "bottom". */
     drop: (id, target, zone, rest = {}) => dispatch({ ...rest, type: "window/drop", id, target, zone }),
     swapNext: (id) => dispatch({ type: "window/swap-next", id }),
@@ -263,7 +265,8 @@ export const createWindowManager = ({
     moveToWorkspace: (id, workspace) => dispatch({ type: "window/move-to-workspace", id, workspace }),
     toScratchpad: command("window/to-scratchpad"),
     toggleScratchpad: (id) => dispatch({ type: "scratchpad/toggle", ...(id ? { id } : {}) }),
-    setSticky: (id, sticky) => dispatch({ type: "window/set-sticky", id, sticky }),
+    setSticky: (id, sticky = true) => dispatch({ type: "window/set-sticky", id, sticky }),
+    toggleSticky: command("window/toggle-sticky"),
     createWorkspace: (id, options = {}) => dispatch({ ...options, type: "workspace/create", id }),
     activateWorkspace: command("workspace/activate"),
     /** Create a new output (sway-style display/stage); see `output/create`. */

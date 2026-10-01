@@ -310,7 +310,7 @@ const swapAdjacent = (direction) => (state, command) => {
   const ids = neighbourOrder(state, subject.win.workspace);
   if (ids.length < 2) return result(state);
   const other = ids[(ids.indexOf(subject.id) + direction + ids.length) % ids.length];
-  return result(swapWindows(state, subject.id, other), [{ type: "window/swapped", a: subject.id, b: other }], [RENDER]);
+  return result(swapWindows(state, subject.id, other), [{ type: "window/swapped", id: subject.id, target: other }], [RENDER]);
 };
 
 const moveRelative = (position) => (drops) => (state, command) => {

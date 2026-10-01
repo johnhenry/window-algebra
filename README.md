@@ -167,17 +167,17 @@ const out = update(state, { type: "window/create", id: "editor" });
 // out.effects → [{ type: "render" }, { type: "focus", id: "editor" }]
 ```
 
-The 51 built-in commands (`COMMANDS`), each documented with payload, events, effects and rejections in [Commands](docs/api/commands.md):
+The 58 built-in commands (`COMMANDS`), each documented with payload, events, effects and rejections in [Commands](docs/api/commands.md):
 
-- **Windows:** `window/create`, `window/close` (cascades to child windows), `window/focus`, `window/blur`, `focus/next`, `focus/previous`, `window/raise`, `window/lower`, `window/set-layer`, `window/move`, `window/resize`, `window/set-mode`, `window/toggle-floating`, `window/minimize`, `window/maximize`, `window/fullscreen`, `window/restore`, `window/pop-out`, `window/pop-in`, `window/set-title`, `window/set-constraints`, `window/swap`, `window/promote`, `window/move-to-workspace`, `window/set-urgent`, `focus/urgent`
+- **Windows:** `window/create`, `window/close` (cascades to child windows), `window/focus`, `window/blur`, `focus/next`, `focus/previous`, `window/raise`, `window/lower`, `window/set-layer`, `window/move`, `window/resize`, `window/set-mode`, `window/toggle-floating`, `window/minimize`, `window/maximize`, `window/fullscreen`, `window/restore`, `window/toggle-maximize`, `window/toggle-fullscreen`, `window/pop-out`, `window/pop-in`, `window/set-title`, `window/set-constraints`, `window/swap`, `window/promote`, `window/move-to-workspace`, `window/set-urgent`, `focus/urgent`
 - **Drag and drop:** `window/drop`, `window/detach`, `window/swap-next`, `window/swap-previous`, `window/move-before`, `window/move-after`, `window/set-draggable`
-- **Scratchpad and sticky:** `window/to-scratchpad`, `scratchpad/toggle`, `window/set-sticky`
-- **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`
-- **Outputs:** `output/create`, `output/remove`, `output/focus`, `workspace/move-to-output`
+- **Scratchpad and sticky:** `window/to-scratchpad`, `scratchpad/toggle`, `window/from-scratchpad`, `window/set-sticky`, `window/toggle-sticky`
+- **Workspaces:** `workspace/create`, `workspace/activate`, `workspace/remove`, `workspace/rename`, `workspace/reorder`
+- **Outputs:** `output/create`, `output/remove`, `output/focus`, `output/reorder`, `workspace/move-to-output`
 - **Layout:** `layout/set`, `layout/set-ratio`, `layout/rotate-split`, `layout/resize-split`, `layout/toggle`, `layout/to-tree`
 - **Config and rules:** `config/set`, `rules/set`
 
-Add your own with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`. The 44 event types are catalogued in [Events](docs/api/events.md), and the read-only queries (`isVisible`, `focusable`, `paintOrder`, `modalTarget`, …) in [Queries](docs/api/queries.md).
+Add your own with `update(state, command, { "my/command": handler })`, or pass `extensions` to `createWindowManager`. The 47 event types are catalogued in [Events](docs/api/events.md), and the read-only queries (`isVisible`, `focusable`, `paintOrder`, `modalTarget`, …) in [Queries](docs/api/queries.md).
 
 `createWindowManager` wraps all of this imperatively: `wm.dispatch`, `wm.create`/`focus`/`close`/…, `subscribe`, undo/redo, a command log where `replay(wm.origin, wm.log)` always equals `wm.getState()`, `serialize`/`load` with [migration](docs/api/versioning.md), and one renderer per output. See [The manager](docs/api/manager.md).
 
@@ -239,8 +239,8 @@ See [Framework bindings](docs/api/bindings.md).
 | Page | |
 | --- | --- |
 | [State](docs/api/state.md) | state shape, records, constants, every `config` key and default |
-| [Commands](docs/api/commands.md) | all 51 commands: payloads, events, effects, rejections |
-| [Events](docs/api/events.md) | all 44 event types and the two effects |
+| [Commands](docs/api/commands.md) | all 58 commands: payloads, events, effects, rejections |
+| [Events](docs/api/events.md) | all 47 event types and the two effects |
 | [Queries](docs/api/queries.md) | visibility, focus, stacking, rules, `presentationContext` |
 | [Layout algebra](docs/api/algebra.md) | primitives, options, validation, transforms |
 | [Layouts and modifiers](docs/api/layouts.md) | `derive`, every layout spec, BSP and docking-tree helpers, split sizing, modifiers |
@@ -277,7 +277,7 @@ A layout **modifier** (`smart-gaps`, `mirror`, …) is the other extension point
 ## Honest limitations
 
 - **Several browser features are progressive, and the fallbacks differ.** CSS anchor positioning covers `flip` and an opposite-side `gravity`, but it has no equivalent for `slide`/`resize`, which work only under the JS fallback (`anchorFallback: true`, automatic where `CSS.supports("anchor-name: …")` is false). Without `Element.prototype.moveBefore`, a view moving between containers is re-inserted, and an iframe inside it reloads. Without View Transitions, `animate` is a no-op (by design, as it is under `prefers-reduced-motion`).
-- **Pop-outs depend on the popup window.** `window.open` is subject to pop-up blockers: call `popOut` from a user gesture. A blocked popup is reported as a `popup-blocked` rejection, not an exception. Most browsers reload an iframe adopted into another document, so iframe state resets on the way out. A popped-out window is never the WM's focused window (focus is only given to windows on the stage), so focusing its popup clears the WM focus. A pop-in that doesn't go through `attachPopouts` (`window/restore`, undo) remounts the surface fresh instead of carrying the DOM back.
+- **Pop-outs depend on the popup window.** `window.open` is subject to pop-up blockers: call `popOut` from a user gesture. A blocked popup is reported as a `popup-blocked` rejection, not an exception. Most browsers reload an iframe adopted into another document, so iframe state resets on the way out. A popped-out window is never the WM's focused window (focus is only given to windows on the stage), so focusing its popup clears the WM focus. A pop-in that doesn't go through `attachPopouts` (`window/restore`, undo) remounts the surface fresh instead of carrying the DOM back. Undoing a pop-out closes the popup; redoing it (or loading a saved state with a popped-out window) cannot reopen one without a user gesture, so `attachPopouts` pops the window back in instead of leaving it invisible.
 - **The pure core has no pixels.** Tiled sizes are CSS's decision, so `config.drag.tooSmall: "reject"` is only enforced when a `geometry` estimate is supplied (the input adapter measures its ghost), size increments are advisory for tiled windows, and grid tracks are not resizable. `derive` and the renderer only see the layout; content that changes size without a commit needs `renderer.reposition()` for JS-positioned anchors, whose `ResizeObserver` watches only the stage root.
 - **Some surfaces and observers are lazy.** A `lazySurface` builds on first mount and is never re-asked while its view stays rendered, so swapping a registry entry does not replace a mounted surface. `canvasSurface` repaints on resize only where `ResizeObserver` exists (it paints once otherwise). `<wa-stage>` creates a fresh manager on each connect or `configure()` unless you pass your own `wm`.
 

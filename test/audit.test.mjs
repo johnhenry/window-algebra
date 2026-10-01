@@ -4,7 +4,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { columns, createWindowManager, createState, update, derive, compile, presentationContext, isVisible, focusable, paintOrder, views } from "../src/index.mjs";
+import { columns, createWindowManager, createState, update, derive, compile, presentationContext, presentedWindows, isVisible, focusable, paintOrder, views } from "../src/index.mjs";
 
 const run = (state, ...commands) => commands.reduce((s, c) => update(s, c).state, state);
 const mk = (state, id, extra = {}) => run(state, { type: "window/create", id, ...extra });
@@ -120,12 +120,12 @@ describe("1, 6: focus is only ever given to a window that is shown", () => {
 describe("3: window/swap on hidden windows", () => {
   test("two hidden scratchpad windows are rejected, not thrown", () => {
     const state = run(withWindows(["a", "b"]), { type: "window/to-scratchpad", id: "a" }, { type: "window/to-scratchpad", id: "b" });
-    assert.equal(reason(state, { type: "window/swap", a: "a", b: "b" }), "not-on-workspace");
-    assert.equal(reason(state, { type: "window/swap", a: "a", b: "a" }), "not-on-workspace");
+    assert.equal(reason(state, { type: "window/swap", id: "a", target: "b" }), "not-on-workspace");
+    assert.equal(reason(state, { type: "window/swap", id: "a", target: "a" }), "not-on-workspace");
   });
   test("swapping a window with itself is a no-op", () => {
     const state = withWindows(["a", "b"]);
-    const out = update(state, { type: "window/swap", a: "a", b: "a" });
+    const out = update(state, { type: "window/swap", id: "a", target: "a" });
     assert.equal(out.state, state);
     assert.deepEqual(out.events, []);
   });
@@ -310,5 +310,131 @@ describe("11: unknown layouts and copied trees", () => {
       assert.equal(copied.ratios, undefined, layout.type);
       present(state);
     }
+  });
+});
+
+describe("12: command-set consistency", () => {
+  test("toggle-maximize, toggle-fullscreen and toggle-sticky flip their state", () => {
+    let state = withWindows(["a", "b"]);
+    state = run(state, { type: "window/toggle-maximize", id: "a" });
+    assert.equal(state.windows.a.status, "maximized");
+    state = run(state, { type: "window/toggle-maximize", id: "a" });
+    assert.equal(state.windows.a.status, "normal");
+    state = run(state, { type: "window/toggle-fullscreen", id: "a" });
+    assert.equal(state.windows.a.status, "fullscreen");
+    state = run(state, { type: "window/toggle-fullscreen", id: "a" });
+    assert.equal(state.windows.a.status, "normal");
+    state = run(state, { type: "window/toggle-sticky", id: "a" });
+    assert.equal(state.windows.a.sticky, true);
+    state = run(state, { type: "window/toggle-sticky", id: "a" });
+    assert.equal(state.windows.a.sticky, undefined);
+    for (const type of ["window/toggle-maximize", "window/toggle-fullscreen", "window/toggle-sticky"]) assert.equal(reason(state, { type, id: "zz" }), "unknown-window");
+  });
+
+  test("set-urgent and set-sticky agree: a missing boolean means true, a non-boolean is rejected", () => {
+    const state = withWindows(["a"]);
+    assert.equal(run(state, { type: "window/set-sticky", id: "a" }).windows.a.sticky, true);
+    assert.deepEqual(run(state, { type: "window/set-urgent", id: "a" }).urgent, ["a"]);
+    assert.equal(reason(state, { type: "window/set-sticky", id: "a", sticky: "yes" }), "invalid-sticky");
+    assert.equal(reason(state, { type: "window/set-urgent", id: "a", urgent: "yes" }), "invalid-urgent");
+  });
+
+  test("workspace/rename updates every reference", () => {
+    let state = run(withWindows(["a", "b"], { workspaces: ["main", "two"] }), { type: "window/create", id: "z", workspace: "two" }, { type: "workspace/rename", id: "main", to: "home" });
+    assert.equal(state.activeWorkspace, "home");
+    assert.equal(state.windows.a.workspace, "home");
+    assert.equal(state.workspaces.home.id, "home");
+    assert.equal(state.workspaces.main, undefined);
+    assert.deepEqual(state.workspaceOrder, ["home", "two"]);
+    assert.deepEqual(state.outputs.primary.workspaces, ["home", "two"]);
+    assert.equal(state.outputs.primary.activeWorkspace, "home");
+    present(state);
+    assert.equal(reason(state, { type: "workspace/rename", id: "home", to: "two" }), "duplicate-id");
+    assert.equal(reason(state, { type: "workspace/rename", id: "home", to: "" }), "missing-id");
+    assert.equal(reason(state, { type: "workspace/rename", id: "nope", to: "x" }), "unknown-workspace");
+    assert.equal(update(state, { type: "workspace/rename", id: "home", to: "home" }).state, state);
+  });
+
+  test("workspace/reorder and output/reorder", () => {
+    let state = createState({ workspaces: ["a", "b", "c"] });
+    state = run(state, { type: "workspace/reorder", id: "c", index: 0 });
+    assert.deepEqual(state.outputs.primary.workspaces, ["c", "a", "b"]);
+    assert.deepEqual(state.workspaceOrder, ["c", "a", "b"]);
+    assert.deepEqual(run(state, { type: "workspace/reorder", id: "c", index: 99 }).workspaceOrder, ["a", "b", "c"]);
+    assert.equal(reason(state, { type: "workspace/reorder", id: "c", index: -1 }), "invalid-index");
+    assert.equal(reason(state, { type: "workspace/reorder", id: "zz", index: 0 }), "unknown-workspace");
+    state = run(state, { type: "output/create", id: "right", workspaces: ["r1"] }, { type: "output/reorder", id: "right", index: 0 });
+    assert.deepEqual(state.outputOrder, ["right", "primary"]);
+    assert.equal(reason(state, { type: "output/reorder", id: "nope", index: 0 }), "unknown-output");
+    assert.equal(reason(state, { type: "output/reorder", id: "right", index: 1.5 }), "invalid-index");
+  });
+
+  test("window/from-scratchpad: hidden windows land on the active workspace, shown ones just stop being scratchpad windows", () => {
+    let state = run(withWindows(["a", "b"]), { type: "window/to-scratchpad", id: "b" });
+    const hidden = update(state, { type: "window/from-scratchpad", id: "b" });
+    assert.equal(hidden.state.windows.b.scratchpad, undefined);
+    assert.equal(hidden.state.windows.b.workspace, "main");
+    assert.equal(hidden.state.focus.window, "b");
+    assert.equal(hidden.events[0].type, "scratchpad/removed");
+    state = run(state, { type: "scratchpad/toggle", id: "b" });
+    const shown = update(state, { type: "window/from-scratchpad", id: "b" });
+    assert.equal(shown.state.windows.b.scratchpad, undefined);
+    assert.equal(shown.state.lastScratchpad, null);
+    assert.equal(reason(shown.state, { type: "window/from-scratchpad", id: "b" }), "not-scratchpad");
+  });
+
+  test("hiding a window names the same event whichever command hid it", () => {
+    let state = withWindows(["a"]);
+    assert.equal(update(state, { type: "window/to-scratchpad", id: "a" }).events[0].type, "scratchpad/hidden");
+    state = run(state, { type: "window/to-scratchpad", id: "a" }, { type: "scratchpad/toggle", id: "a" });
+    assert.equal(update(state, { type: "scratchpad/toggle", id: "a" }).events[0].type, "scratchpad/hidden");
+  });
+
+  test("window/swap names its windows id and target, like window/drop", () => {
+    const state = run(withWindows(["a", "b"]), { type: "window/swap", id: "a", target: "b" });
+    assert.deepEqual(update(withWindows(["a", "b"]), { type: "window/swap", id: "a", target: "b" }).events, [{ type: "window/swapped", id: "a", target: "b" }]);
+    assert.deepEqual(state.workspaces.main.windows, ["b", "a"]);
+  });
+
+  test("window/pop-in on a window that is not popped out is a no-op, like window/restore", () => {
+    const state = withWindows(["a"]);
+    assert.equal(update(state, { type: "window/pop-in", id: "a" }).state, state);
+    assert.equal(update(state, { type: "window/restore", id: "a" }).state, state);
+    const maximized = run(state, { type: "window/maximize", id: "a" });
+    assert.equal(update(maximized, { type: "window/pop-in", id: "a" }).state, maximized, "pop-in only undoes a pop-out");
+  });
+
+  test("an extension handler that throws, or returns junk, becomes a handler-threw rejection", () => {
+    const state = withWindows(["a"]);
+    const out = update(state, { type: "my/boom", id: "a" }, { "my/boom": () => { throw new Error("nope"); } });
+    assert.equal(out.state, state);
+    assert.deepEqual(out.events, [{ type: "command/rejected", command: "my/boom", id: "a", reason: "handler-threw" }]);
+    assert.equal(update(state, { type: "my/junk" }, { "my/junk": () => null }).events[0].reason, "handler-threw");
+    assert.equal(update(state, { type: "my/ok" }, { "my/ok": (s) => ({ state: s }) }).events.length, 0);
+  });
+});
+
+describe("found by the fuzz test while adding the 12 commands", () => {
+  test("window/create rejects a falsy non-null parent such as NaN", () => {
+    assert.equal(reason(withWindows(["a"]), { type: "window/create", id: "x", parent: NaN }), "unknown-parent");
+  });
+  test("fullscreening a window ends any other fullscreen window on its output", () => {
+    const state = run(withWindows(["a", "b"]), { type: "window/fullscreen", id: "a" }, { type: "window/fullscreen", id: "b" });
+    assert.equal(state.windows.a.status, "normal");
+    assert.equal(state.windows.b.status, "fullscreen");
+    assert.equal(state.focus.window, "b");
+  });
+  test("when a workspace switch brings two fullscreen windows into view, the one covering focus is presented", () => {
+    let state = run(withWindows(["a", "s"], { workspaces: ["main", "two"] }), { type: "window/set-sticky", id: "s" }, { type: "window/fullscreen", id: "s" });
+    state = run(state, { type: "window/create", id: "z", workspace: "two" });
+    state = { ...state, windows: { ...state.windows, z: { ...state.windows.z, status: "fullscreen" } } };
+    state = run(state, { type: "workspace/activate", id: "two" });
+    assert.equal(views(derive(state)).length, 1);
+    assert.ok(presentedWindows(state).some((w) => w.id === state.focus.window) || state.focus.window === null);
+  });
+  test("a modal child of a sticky window stays visible wherever its parent is", () => {
+    let state = run(withWindows(["a"], { workspaces: ["main", "two"] }), { type: "window/create", id: "dlg", parent: "a", role: "dialog", modal: true }, { type: "window/set-sticky", id: "a" }, { type: "workspace/activate", id: "two" });
+    assert.ok(isVisible(state, "dlg"));
+    assert.deepEqual(views(derive(state)).sort(), ["a", "dlg"]);
   });
 });

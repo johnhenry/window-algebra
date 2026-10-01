@@ -386,7 +386,7 @@ describe("window/swap-next, window/swap-previous, window/move-before, window/mov
     const s = make({ type: "row", children: ["a", "b", "c"] });
     const out = update(s, { type: "window/swap-next", id: "a" });
     const event = out.events.find((e) => e.type === "window/swapped");
-    assert.deepEqual(event, { type: "window/swapped", a: "a", b: "b" });
+    assert.deepEqual(event, { type: "window/swapped", id: "a", target: "b" });
     assert.deepEqual(out.state.workspaces.main.windows, ["b", "a", "c"]);
     // The tree itself must reflect the swap, not just workspace order.
     assert.deepEqual(treeOf(out), { type: "row", children: ["b", "a", "c"] });
@@ -395,7 +395,7 @@ describe("window/swap-next, window/swap-previous, window/move-before, window/mov
   test("swap-previous on a tree-docked row swaps the other way", () => {
     const s = make({ type: "row", children: ["a", "b", "c"] });
     const out = update(s, { type: "window/swap-previous", id: "b" });
-    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", a: "b", b: "a" });
+    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", id: "b", target: "a" });
     assert.deepEqual(treeOf(out), { type: "row", children: ["b", "a", "c"] });
   });
 
@@ -403,14 +403,14 @@ describe("window/swap-next, window/swap-previous, window/move-before, window/mov
     const s = make({ type: "row", children: ["a", { type: "column", children: ["b", "c"] }] });
     // neighbourOrder follows the tree's leaf order: a, b, c
     const out = update(s, { type: "window/swap-next", id: "a" });
-    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", a: "a", b: "b" });
+    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", id: "a", target: "b" });
     assert.deepEqual(treeOf(out), { type: "row", children: ["b", { type: "column", children: ["a", "c"] }] });
   });
 
   test("swap-next wraps around and is a no-op event-wise when nothing moves visually only if tree already matches", () => {
     const s = make({ type: "row", children: ["a", "b", "c"] });
     const out = update(s, { type: "window/swap-next", id: "c" }); // wraps to a
-    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", a: "c", b: "a" });
+    assert.deepEqual(out.events.find((e) => e.type === "window/swapped"), { type: "window/swapped", id: "c", target: "a" });
     assert.deepEqual(treeOf(out), { type: "row", children: ["c", "b", "a"] });
   });
 

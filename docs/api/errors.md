@@ -26,12 +26,13 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 
 | Reason | Commands (or source) |
 | --- | --- |
+| `handler-threw` | `update`: an extension handler threw, or returned a value that is not `{ state, ... }` |
 | `invalid-command` | `update`: a non-object command, or one without a string `type` |
 | `unknown-command` | `update`: no handler for `type` |
-| `invalid-id` | `update`: a name field (`id`, `a`, `b`, `target`, `parent`, `workspace`, `output`, `fallback`) that is an `Object.prototype` key such as `__proto__` or `constructor` |
-| `missing-id` | `window/create`, `workspace/create`, `output/create` |
-| `duplicate-id` | `window/create`, `workspace/create`, `output/create` |
-| `unknown-parent` | `window/create` |
+| `invalid-id` | `update`: a name field (`id`, `target`, `to`, `parent`, `workspace`, `output`, `fallback`) that is an `Object.prototype` key such as `__proto__` or `constructor` |
+| `missing-id` | `window/create`, `workspace/create`, `workspace/rename` (`to`), `output/create` |
+| `duplicate-id` | `window/create`, `workspace/create`, `workspace/rename`, `output/create` |
+| `unknown-parent` | `window/create` (any parent that is not an existing window, including `NaN` or `""`) |
 | `unknown-window` | nearly every `window/*` command; `scratchpad/toggle`; `focus` subjects of `swap-next`/`move-before`/…; `attachPopouts` |
 | `unknown-workspace` | `window/create` (after rules), `window/move-to-workspace`, `workspace/activate`, `workspace/remove`, `workspace/move-to-output`, every `layout/*` command except `rotate-split` |
 | `unknown-output` | `workspace/create`, `workspace/move-to-output`, `output/remove`, `output/focus` |
@@ -47,7 +48,7 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | `invalid-geometry` | `window/move`, `window/resize` |
 | `invalid-constraints` | `window/set-constraints` |
 | `invalid-path` | `layout/resize-split` |
-| `invalid-index` | `layout/resize-split` |
+| `invalid-index` | `layout/resize-split`, `workspace/reorder`, `output/reorder` |
 | `invalid-weights` | `layout/resize-split` |
 | `missing-value` | `layout/resize-split` |
 | `missing-weights` | `layout/resize-split` (a `delta` on columns/rows before any sizes are stored) |
@@ -59,8 +60,7 @@ The library draws one line. **Runtime input is rejected with a value; programmer
 | `invalid-sticky` | `window/set-sticky` |
 | `no-urgent-window` | `focus/urgent` |
 | `empty-scratchpad` | `scratchpad/toggle` |
-| `not-scratchpad` | `scratchpad/toggle` |
-| `not-popped-out` | `window/pop-in` |
+| `not-scratchpad` | `scratchpad/toggle`, `window/from-scratchpad` |
 | `not-on-workspace` | `window/promote`, `window/swap`, `window/focus`, `focus/urgent` (a window hidden in the scratchpad, or a child of one) |
 | `popped-out` | `window/focus` (a window that is popped out, or a child of one) |
 | `not-visible` | `window/focus` (the target would still not be shown after the focus policy ran) |

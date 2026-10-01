@@ -15,7 +15,7 @@
 
 ## Event catalogue
 
-The table lists every event type (44), grouped by subject. "Emitted by" names commands; *focus policy* and *refocus* are the shared steps described in [Commands › Shared behaviour](./commands.md#shared-behaviour), and can follow many commands.
+The table lists every event type (47), grouped by subject. "Emitted by" names commands; *focus policy* and *refocus* are the shared steps described in [Commands › Shared behaviour](./commands.md#shared-behaviour), and can follow many commands.
 
 ### Rejections
 
@@ -40,24 +40,24 @@ The table lists every event type (44), grouped by subject. "Emitted by" names co
 | `window/resized` | `id`, `placement` (after constraints) | `window/resize` |
 | `window/mode-changed` | `id`, `mode` | `window/set-mode`, `window/toggle-floating` |
 | `window/detached` | `id`, `placement` | `window/detach` |
-| `window/status-changed` | `id`, `status`, `previous` | `window/minimize`, `window/maximize`, `window/fullscreen`, `window/restore`, `window/pop-out`, `window/pop-in` |
+| `window/status-changed` | `id`, `status`, `previous` | `window/minimize`, `window/maximize`, `window/fullscreen`, `window/restore`, `window/toggle-maximize`, `window/toggle-fullscreen`, `window/pop-out`, `window/pop-in`; also once per other fullscreen window that `window/fullscreen` restores, and for the fullscreen window an explicit focus elsewhere ends |
 | `window/retitled` | `id`, `title` (as given in the command) | `window/set-title` |
 | `window/constrained` | `id`, `constraints` (merged) | `window/set-constraints` |
-| `window/swapped` | `a`, `b` | `window/swap`, `window/promote`, `window/swap-next`, `window/swap-previous` |
+| `window/swapped` | `id`, `target` | `window/swap`, `window/promote`, `window/swap-next`, `window/swap-previous` |
 | `window/dropped` | `id`, `target`, `zone`, `op`, `workspace`, `tiled?` (`true` when a floating window joined the layout) | `window/drop` |
 | `window/reordered` | `id`, `target`, `position` (`"before"`/`"after"`) | `window/move-before`, `window/move-after` |
 | `window/draggable-changed` | `id`, `draggable` | `window/set-draggable` |
-| `window/sticky-changed` | `id`, `sticky` | `window/set-sticky` |
+| `window/sticky-changed` | `id`, `sticky` | `window/set-sticky`, `window/toggle-sticky` |
 | `window/urgent-changed` | `id`, `urgent` | `window/set-urgent`; the focus policy (`urgent: false`) when clearing on focus |
 | `window/workspace-changed` | `id`, `workspace` | `window/move-to-workspace` (not emitted for the silent moves inside `workspace/remove`) |
-| `window/scratchpad` | `id` | `window/to-scratchpad` |
 
 ### Scratchpad
 
 | Event | Fields | Emitted by |
 | --- | --- | --- |
 | `scratchpad/shown` | `id` | `scratchpad/toggle` (showing) |
-| `scratchpad/hidden` | `id` | `scratchpad/toggle` (hiding) |
+| `scratchpad/hidden` | `id` | `window/to-scratchpad`, `scratchpad/toggle` (hiding) |
+| `scratchpad/removed` | `id` | `window/from-scratchpad` |
 
 ### Workspaces and outputs
 
@@ -66,9 +66,12 @@ The table lists every event type (44), grouped by subject. "Emitted by" names co
 | `workspace/created` | `id`, `output` | `workspace/create` |
 | `workspace/activated` | `id`, `previous` | `workspace/activate`; the focus policy when focusing a window on another workspace |
 | `workspace/removed` | `id`, `fallback` | `workspace/remove` |
+| `workspace/renamed` | `id`, `to` | `workspace/rename` |
+| `workspace/reordered` | `id`, `index` | `workspace/reorder` |
 | `workspace/moved-to-output` | `id`, `output`, `from` | `workspace/move-to-output` |
 | `output/created` | `id`, `workspaces` | `output/create` |
 | `output/removed` | `id`, `fallback`, `workspaces` (moved ids) | `output/remove` |
+| `output/reordered` | `id`, `index` | `output/reorder` |
 | `output/focused` | `id`, `previous` | `output/focus`; `workspace/activate`; the focus policy and `focus/next`/`focus/previous` when crossing outputs |
 
 ### Layout and configuration
@@ -89,8 +92,8 @@ These never come from `update`. The manager sends them to subscribers with `comm
 
 | Event | Fields | Emitted by |
 | --- | --- | --- |
-| `history/changed` | none | `wm.undo()` / `wm.redo()`, when the state actually changed |
-| `state/loaded` | none | `wm.load()` on success |
+| `history/changed` | none | `wm.undo()` / `wm.redo()`, when the state actually changed. Followed by the `window/focused` / `window/blurred` event (and a `focus` effect to `onEffect`) when the restored state has a different focus |
+| `state/loaded` | none | `wm.load()` on success (and the same focus events as above) |
 | `state/load-rejected` | `reason` (`"invalid-json"`, `"invalid-state"`, `"future-version"`, `"no-migration-path"`), `version?` | `wm.load()` on failure; the state is left untouched |
 
 ## Ordering

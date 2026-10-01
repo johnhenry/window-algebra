@@ -15,7 +15,7 @@ import { LAYERS, ROLES, STATUSES, createWindowRecord, createWorkspace, createOut
 import { constrainSize } from "../geometry/rect.mjs";
 import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile } from "../layouts/bsp.mjs";
 import { treeFrom, treeFromBsp, treeNodeAt, treeSetSizesAt } from "../layouts/tree.mjs";
-import { modalTarget, descendantsOf, focusable, isVisible, isBlocked, isDescendantOf, fullscreenWindow } from "./queries.mjs";
+import { modalTarget, descendantsOf, focusable, isVisible, isBlocked, isDescendantOf, isSticky, fullscreenWindow, visibleWindows } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
 import { migrate } from "./migrate.mjs";
@@ -172,7 +172,7 @@ const focusOrNull = (state, requested, { exitFullscreen = false } = {}) => {
   }
   // A sticky window is visible on every workspace already, so focusing it
   // never needs to switch which workspace is active.
-  if (win.workspace !== next.activeWorkspace && !win.sticky) {
+  if (win.workspace !== next.activeWorkspace && !isSticky(next, win)) {
     events.push({ type: "workspace/activated", id: win.workspace, previous: next.activeWorkspace });
     next = {
       ...next,
@@ -189,8 +189,8 @@ const focusOrNull = (state, requested, { exitFullscreen = false } = {}) => {
     events.push({ type: "window/restored", id: w.id });
   }
   // A fullscreen window covers everything but its own descendants.
-  const covering = fullscreenWindow(next, outputId ?? next.focusedOutput);
-  if (covering && covering.id !== target && !isDescendantOf(next, target, covering.id)) {
+  for (let covering = fullscreenWindow(next, outputId ?? next.focusedOutput); covering; covering = fullscreenWindow(next, outputId ?? next.focusedOutput)) {
+    if (covering.id === target || isDescendantOf(next, target, covering.id)) break;
     if (!exitFullscreen) return null;
     next = setWindow(next, covering.id, { status: "normal" });
     events.push({ type: "window/status-changed", id: covering.id, status: "normal", previous: "fullscreen" });
@@ -306,8 +306,8 @@ const handlers = {
     const { id } = command;
     if (typeof id !== "string" || !id) return rejected(state, command, "missing-id");
     if (state.windows[id]) return rejected(state, command, "duplicate-id");
-    if (command.parent && !state.windows[command.parent]) return rejected(state, command, "unknown-parent");
-    if (command.parent && state.windows[command.parent].workspace === null) return rejected(state, command, "hidden-parent");
+    if (command.parent != null && !state.windows[command.parent]) return rejected(state, command, "unknown-parent");
+    if (command.parent != null && state.windows[command.parent].workspace === null) return rejected(state, command, "hidden-parent");
     if (command.role !== undefined && !ROLES.includes(command.role)) return rejected(state, command, "unknown-role");
     if (command.layer !== undefined && !LAYERS.includes(command.layer)) return rejected(state, command, "unknown-layer");
     if (command.mode !== undefined && !MODES.includes(command.mode)) return rejected(state, command, "unknown-mode");
@@ -523,6 +523,24 @@ const handlers = {
   "window/restore"(state, command) {
     return setStatus(state, command, "normal");
   },
+  /** Maximize, or restore a window that is already maximized. */
+  "window/toggle-maximize"(state, command) {
+    const win = state.windows[command.id];
+    if (!win) return rejected(state, command, "unknown-window");
+    return setStatus(state, command, win.status === "maximized" ? "normal" : "maximized");
+  },
+  /** Fullscreen, or restore a window that is already fullscreen. */
+  "window/toggle-fullscreen"(state, command) {
+    const win = state.windows[command.id];
+    if (!win) return rejected(state, command, "unknown-window");
+    return setStatus(state, command, win.status === "fullscreen" ? "normal" : "fullscreen");
+  },
+  /** Flip `sticky` (see `window/set-sticky`). */
+  "window/toggle-sticky"(state, command) {
+    const win = state.windows[command.id];
+    if (!win) return rejected(state, command, "unknown-window");
+    return handlers["window/set-sticky"](state, { ...command, sticky: !win.sticky });
+  },
 
   /**
    * GoldenLayout/Dockview-style pop-out: leave the layout for a separate
@@ -547,15 +565,15 @@ const handlers = {
   },
 
   /**
-   * Reverse of `window/pop-out`. Unlike the other status setters, a window
-   * that is not currently popped out is rejected rather than treated as a
-   * no-op: the browser shell relies on this to tell whether its own
-   * `popIn()` call (or the popup being closed) is undoing a real pop-out.
+   * Reverse of `window/pop-out`. Like `window/restore` and every other status
+   * setter, a window that is not popped out is a no-op (it used to be
+   * rejected with `not-popped-out`). Unlike `window/restore` it only ever
+   * undoes a pop-out: a minimized or maximized window is left alone.
    */
   "window/pop-in"(state, command) {
     const win = state.windows[command.id];
     if (!win) return rejected(state, command, "unknown-window");
-    if (win.status !== "popped-out") return rejected(state, command, "not-popped-out");
+    if (win.status !== "popped-out") return result(state);
     const next = setWindow(state, win.id, { status: "normal" });
     return result(next, [{ type: "window/status-changed", id: win.id, status: "normal", previous: "popped-out" }], [RENDER]);
   },
@@ -580,15 +598,15 @@ const handlers = {
 
   /** Swap two windows' positions in the workspace order (and BSP tree). */
   "window/swap"(state, command) {
-    const { a, b } = command;
-    const wa = state.windows[a];
-    const wb = state.windows[b];
+    const { id, target } = command;
+    const wa = state.windows[id];
+    const wb = state.windows[target];
     if (!wa || !wb) return rejected(state, command, "unknown-window");
     if (wa.workspace === null || wb.workspace === null) return rejected(state, command, "not-on-workspace");
     if (wa.workspace !== wb.workspace) return rejected(state, command, "different-workspaces");
-    if (a === b) return result(state);
-    const next = swapWindows(state, a, b);
-    return result(next, [{ type: "window/swapped", a, b }], [RENDER]);
+    if (id === target) return result(state);
+    const next = swapWindows(state, id, target);
+    return result(next, [{ type: "window/swapped", id, target }], [RENDER]);
   },
 
   /** Move a window to the front of the workspace order (the master position). */
@@ -600,7 +618,7 @@ const handlers = {
     if (!ws) return rejected(state, command, "not-on-workspace");
     const tiled = ws.windows.filter((id) => isTiled(state.windows[id]));
     if (tiled[0] === win.id || !isTiled(win)) return result(state);
-    return handlers["window/swap"](state, { type: "window/swap", a: win.id, b: tiled[0] });
+    return handlers["window/swap"](state, { type: "window/swap", id: win.id, target: tiled[0] });
   },
 
   "window/move-to-workspace"(state, command) {
@@ -636,7 +654,7 @@ const handlers = {
     next = bspDrop(next, from, id);
     next = setWindow(next, id, { scratchpad: true, mode: "floating", workspace: null });
     next = { ...next, lastScratchpad: id };
-    const hidden = result(next, [{ type: "window/scratchpad", id }], [RENDER]);
+    const hidden = result(next, [{ type: "scratchpad/hidden", id }], [RENDER]);
     return merge(hidden, refocus(next));
   },
 
@@ -672,13 +690,35 @@ const handlers = {
   },
 
   /**
+   * The inverse of `window/to-scratchpad`: the window stops being a scratchpad
+   * window. A hidden one is placed on the active workspace and focused (it
+   * keeps its floating mode); a shown one just loses the flag. Rejected with
+   * `not-scratchpad` for a window that is not one.
+   */
+  "window/from-scratchpad"(state, command) {
+    const { id } = command;
+    const win = state.windows[id];
+    if (!win) return rejected(state, command, "unknown-window");
+    if (!win.scratchpad) return rejected(state, command, "not-scratchpad");
+    const events = [{ type: "scratchpad/removed", id }];
+    if (win.workspace === null) {
+      const next = moveFamilyTo(state, win, state.activeWorkspace);
+      return merge(result(next, events, [RENDER]), applyFocus(next, id, { exitFullscreen: true }));
+    }
+    const { scratchpad: _scratchpad, ...rest } = win;
+    const next = { ...state, windows: { ...state.windows, [id]: rest }, lastScratchpad: state.lastScratchpad === id ? null : state.lastScratchpad };
+    return result(next, events, [RENDER]);
+  },
+
+  /**
    * EWMH-style sticky: visible on every workspace, keeping its stacking.
    * Only the exception (`sticky: true`) is stored.
    */
   "window/set-sticky"(state, command) {
-    const { id, sticky } = command;
+    const { id } = command;
     const win = state.windows[id];
     if (!win) return rejected(state, command, "unknown-window");
+    const sticky = command.sticky === undefined ? true : command.sticky;
     if (typeof sticky !== "boolean") return rejected(state, command, "invalid-sticky");
     if (Boolean(win.sticky) === sticky) return result(state);
     let next;
@@ -716,6 +756,51 @@ const handlers = {
     };
     const created = result(next, [{ type: "workspace/created", id, output: outputId }], [RENDER]);
     return command.activate ? merge(created, handlers["workspace/activate"](next, { type: "workspace/activate", id })) : created;
+  },
+
+  /**
+   * Change a workspace's id to `to`, updating every reference to it: its
+   * windows, `workspaceOrder`, its output's list and active workspace, and
+   * `activeWorkspace`. (`config.rules` that name the old id in `set.workspace`
+   * are left as written.)
+   */
+  "workspace/rename"(state, command) {
+    const { id, to } = command;
+    const ws = state.workspaces[id];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    if (typeof to !== "string" || !to) return rejected(state, command, "missing-id");
+    if (to === id) return result(state);
+    if (state.workspaces[to]) return rejected(state, command, "duplicate-id");
+    const swap = (wid) => (wid === id ? to : wid);
+    const workspaces = Object.fromEntries(Object.entries(state.workspaces).map(([wid, w]) => [swap(wid), wid === id ? { ...w, id: to } : w]));
+    const windows = Object.fromEntries(Object.entries(state.windows).map(([wid, win]) => [wid, win.workspace === id ? { ...win, workspace: to } : win]));
+    const outputs = Object.fromEntries(
+      Object.entries(state.outputs).map(([oid, out]) => [oid, { ...out, workspaces: out.workspaces.map(swap), activeWorkspace: swap(out.activeWorkspace) }]),
+    );
+    const next = { ...state, workspaces, windows, outputs, workspaceOrder: state.workspaceOrder.map(swap), activeWorkspace: swap(state.activeWorkspace) };
+    return result(next, [{ type: "workspace/renamed", id, to }], [RENDER]);
+  },
+
+  /**
+   * Move a workspace to position `index` (0-based, clamped) among its output's
+   * workspaces. `workspaceOrder` follows: the output's workspaces keep
+   * occupying the same slots of it, in their new order.
+   */
+  "workspace/reorder"(state, command) {
+    const { id, index } = command;
+    const ws = state.workspaces[id];
+    if (!ws) return rejected(state, command, "unknown-workspace");
+    if (!Number.isInteger(index) || index < 0) return rejected(state, command, "invalid-index");
+    const output = state.outputs[ws.output];
+    const target = Math.min(index, output.workspaces.length - 1);
+    if (output.workspaces.indexOf(id) === target) return result(state);
+    const list = without(output.workspaces, id);
+    list.splice(target, 0, id);
+    const mine = new Set(output.workspaces);
+    const queue = [...list];
+    const workspaceOrder = state.workspaceOrder.map((wid) => (mine.has(wid) ? queue.shift() : wid));
+    const next = { ...state, workspaceOrder, outputs: { ...state.outputs, [ws.output]: { ...output, workspaces: list } } };
+    return result(next, [{ type: "workspace/reordered", id, index: target }], [RENDER]);
   },
 
   /** Activate a workspace, switching (and focusing) its output too if it belongs to another one. */
@@ -1141,6 +1226,18 @@ const handlers = {
     return merge(removed, refocus(next));
   },
 
+  /** Move an output to position `index` (0-based, clamped) in `outputOrder`, which focus cycling follows. */
+  "output/reorder"(state, command) {
+    const { id, index } = command;
+    if (!state.outputs[id]) return rejected(state, command, "unknown-output");
+    if (!Number.isInteger(index) || index < 0) return rejected(state, command, "invalid-index");
+    const target = Math.min(index, state.outputOrder.length - 1);
+    if (state.outputOrder.indexOf(id) === target) return result(state);
+    const outputOrder = without(state.outputOrder, id);
+    outputOrder.splice(target, 0, id);
+    return result({ ...state, outputOrder }, [{ type: "output/reordered", id, index: target }], [RENDER]);
+  },
+
   /**
    * Focus another output: the source of `workspace/activated`'s cross-output
    * counterpart. Keyboard focus follows to a focusable window on the newly
@@ -1197,8 +1294,18 @@ function setStatus(state, command, status) {
   if (!win) return rejected(state, command, "unknown-window");
   if (!STATUSES.includes(status)) return rejected(state, command, "unknown-status");
   if (win.status === status) return result(state);
-  const next = setWindow(state, win.id, { status });
-  const changed = result(next, [{ type: `window/status-changed`, id: win.id, status, previous: win.status }], [RENDER]);
+  let next = setWindow(state, win.id, { status });
+  const events = [{ type: `window/status-changed`, id: win.id, status, previous: win.status }];
+  // One fullscreen window per output: taking the screen ends any other fullscreen window shown there.
+  const outputId = state.workspaces[win.workspace]?.output;
+  if (status === "fullscreen" && outputId !== undefined && isVisible(next, win.id)) {
+    for (const other of visibleWindows(next, outputId)) {
+      if (other.id === win.id || other.status !== "fullscreen") continue;
+      next = setWindow(next, other.id, { status: "normal" });
+      events.push({ type: "window/status-changed", id: other.id, status: "normal", previous: "fullscreen" });
+    }
+  }
+  const changed = result(next, events, [RENDER]);
   if (status === "minimized") return merge(changed, refocus(next));
   // Taking over the screen takes focus with it (only when the window is on screen to begin with).
   if ((status === "fullscreen" || status === "maximized") && isVisible(next, win.id)) return merge(changed, applyFocus(next, win.id));
@@ -1211,7 +1318,7 @@ function setStatus(state, command, status) {
  * plain `state.windows[id]` lookup find an inherited non-window, so those
  * names are refused up front.
  */
-const NAME_FIELDS = ["id", "a", "b", "target", "parent", "workspace", "output", "fallback"];
+const NAME_FIELDS = ["id", "target", "to", "parent", "workspace", "output", "fallback"];
 const hasReservedName = (command) => NAME_FIELDS.some((field) => typeof command[field] === "string" && command[field] in Object.prototype);
 
 /** Names of all built-in commands. */
@@ -1228,6 +1335,15 @@ export const update = (state, command, extensions) => {
   const handler = extensions?.[command.type] ?? handlers[command.type];
   if (!handler) return rejected(state, command, "unknown-command");
   if (hasReservedName(command)) return rejected(state, command, "invalid-id");
+  if (handler === extensions?.[command.type]) {
+    // An extension handler is user code: a throw (or a result that is not `{ state, ... }`) becomes a rejection.
+    try {
+      const out = handler(state, command);
+      return result(out.state, out.events ?? [], dedupeEffects(out.effects ?? []));
+    } catch {
+      return rejected(state, command, "handler-threw");
+    }
+  }
   const out = handler(state, command);
   return result(out.state, out.events ?? [], dedupeEffects(out.effects ?? []));
 };

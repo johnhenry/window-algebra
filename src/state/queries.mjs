@@ -31,6 +31,16 @@ export const windowsIn = (state, workspaceId = state.activeWorkspace) =>
   (state.workspaces[workspaceId]?.windows ?? []).map((id) => state.windows[id]).filter(Boolean);
 
 /**
+ * Is a window sticky, itself or through an ancestor? A dialog or popover of a
+ * sticky window is shown wherever its parent is, so a modal child can never be
+ * stranded on a workspace the (blocked) parent is no longer shown on.
+ */
+export const isSticky = (state, win) => {
+  for (let w = win; w; w = w.parent ? state.windows[w.parent] : undefined) if (w.sticky) return true;
+  return false;
+};
+
+/**
  * A window is visible when its workspace is the *active workspace of that
  * workspace's own output* — which output currently has focus is irrelevant,
  * since every output renders its own active workspace regardless. Sticky
@@ -47,7 +57,7 @@ export const isVisible = (state, id) => {
   const ws = state.workspaces[win.workspace];
   if (!ws) return false;
   const active = state.outputs?.[ws.output]?.activeWorkspace ?? state.activeWorkspace;
-  if (win.workspace !== active && !win.sticky) return false;
+  if (win.workspace !== active && !isSticky(state, win)) return false;
   return win.parent ? isVisible(state, win.parent) : true;
 };
 
@@ -62,7 +72,7 @@ export const visibleWindows = (state, outputId = state.focusedOutput) => {
   const local = windowsIn(state, activeWs).filter((win) => isVisible(state, win.id));
   const stickyElsewhere = Object.values(state.windows).filter(
     (win) =>
-      win.sticky &&
+      isSticky(state, win) &&
       win.workspace !== activeWs &&
       state.workspaces[win.workspace]?.output === outputId &&
       isVisible(state, win.id),
@@ -117,8 +127,17 @@ export const isDescendantOf = (state, id, ancestor) => {
  * The visible window that is fullscreen on an output, if any. While one is,
  * only it and its descendants are presented (see `presentedWindows`).
  */
-export const fullscreenWindow = (state, outputId = state.focusedOutput) =>
-  visibleWindows(state, outputId).find((win) => win.status === "fullscreen");
+export const fullscreenWindow = (state, outputId = state.focusedOutput) => {
+  const fullscreen = visibleWindows(state, outputId).filter((win) => win.status === "fullscreen");
+  if (fullscreen.length < 2) return fullscreen[0];
+  // `window/fullscreen` keeps one per output, but a workspace switch can still bring two into view (a sticky one
+  // and one on the newly active workspace). The one covering the focused window wins, else the topmost.
+  const focused = state.focus.window;
+  const covering = fullscreen.find((win) => win.id === focused || isDescendantOf(state, focused, win.id));
+  if (covering) return covering;
+  const rank = new Map(stackingOrder(state).map((id, i) => [id, i]));
+  return fullscreen.reduce((top, win) => ((rank.get(win.id) ?? 0) >= (rank.get(top.id) ?? 0) ? win : top));
+};
 
 /**
  * The visible windows of an output that are actually presented: all of them,
@@ -127,7 +146,7 @@ export const fullscreenWindow = (state, outputId = state.focusedOutput) =>
  */
 export const presentedWindows = (state, outputId = state.focusedOutput) => {
   const visible = visibleWindows(state, outputId);
-  const fullscreen = visible.find((win) => win.status === "fullscreen");
+  const fullscreen = fullscreenWindow(state, outputId);
   if (!fullscreen) return visible;
   return visible.filter((win) => win.id === fullscreen.id || isDescendantOf(state, win.id, fullscreen.id));
 };
@@ -153,7 +172,7 @@ export const inTiledBase = (state, win) =>
   win.workspace !== null &&
   // Sticky windows are always presented as floating overlays, regardless of
   // mode: the tiled base is inherently workspace-local, sticky is not.
-  !win.sticky &&
+  !isSticky(state, win) &&
   state.workspaces[win.workspace]?.layout?.type !== "floating" &&
   win.role === "window" &&
   win.mode === "tiled" &&
@@ -168,7 +187,7 @@ export const inTiledBase = (state, win) =>
  */
 export const paintOrder = (state, outputId = state.focusedOutput) => {
   const visible = presentedWindows(state, outputId);
-  const fullscreen = visible.find((win) => win.status === "fullscreen");
+  const fullscreen = fullscreenWindow(state, outputId);
   const rank = new Map(stackingOrder(state).map((id, i) => [id, i]));
   if (fullscreen) {
     const rest = visible.filter((win) => win.id !== fullscreen.id).sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));

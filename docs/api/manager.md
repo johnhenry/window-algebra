@@ -80,9 +80,10 @@ Each is a thin `dispatch` of one command, and returns what `dispatch` returns.
 | `setMode(id, mode)` | `window/set-mode` |
 | `toggleFloating(id, rest?)` | `window/toggle-floating` |
 | `minimize(id)`, `maximize(id)`, `fullscreen(id)`, `restore(id)` | status commands |
+| `toggleMaximize(id)`, `toggleFullscreen(id)` | `window/toggle-maximize`, `window/toggle-fullscreen` |
 | `popOut(id)`, `popIn(id)` | `window/pop-out`, `window/pop-in` (state only; use [`attachPopouts`](./browser.md#attachpopouts) for the real popup) |
 | `promote(id, rest?)` | `window/promote` |
-| `swap(a, b)` | `window/swap` |
+| `swap(id, target)` | `window/swap` |
 | `drop(id, target, zone, rest?)` | `window/drop` (`rest` may carry `geometry`, `gesture`) |
 | `swapNext(id)`, `swapPrevious(id)` | `window/swap-next`, `window/swap-previous` |
 | `moveBefore(id, target?)`, `moveAfter(id, target?)` | `window/move-before`, `window/move-after` |
@@ -91,7 +92,8 @@ Each is a thin `dispatch` of one command, and returns what `dispatch` returns.
 | `moveToWorkspace(id, workspace)` | `window/move-to-workspace` (dispatch it yourself for `follow: true`) |
 | `toScratchpad(id)` | `window/to-scratchpad` |
 | `toggleScratchpad(id?)` | `scratchpad/toggle` |
-| `setSticky(id, sticky)` | `window/set-sticky` |
+| `setSticky(id, sticky = true)` | `window/set-sticky` |
+| `toggleSticky(id)` | `window/toggle-sticky` |
 | `createWorkspace(id, options?)` | `workspace/create` (`options`: `layout`, `output`, `activate`) |
 | `activateWorkspace(id)` | `workspace/activate` |
 | `createOutput(id, options?)` | `output/create` (`options`: `workspaces`, `focus`) |
@@ -104,13 +106,13 @@ Each is a thin `dispatch` of one command, and returns what `dispatch` returns.
 | `toggleLayout(a?, b?, workspace?)` | `layout/toggle` |
 | `setRules(rules)` | `rules/set` |
 
-There is no convenience method for `window/set-layer`, `window/set-title`, `window/set-constraints`, `window/detach`, `workspace/remove`, `layout/to-tree`, `layout/rotate-split` or `config/set`. Use `dispatch`.
+There is no convenience method for `window/set-layer`, `window/set-title`, `window/set-constraints`, `window/detach`, `workspace/remove`, `workspace/rename`, `workspace/reorder`, `output/reorder`, `window/from-scratchpad`, `layout/to-tree`, `layout/rotate-split` or `config/set`. Use `dispatch`.
 
 ## History, log and replay
 
 | Member | Description |
 | --- | --- |
-| `undo()`, `redo()` | Step through history (requires the `history` option) and return the new state. When the state changes they render and notify `history/changed`. |
+| `undo()`, `redo()` | Step through history (requires the `history` option) and return the new state. When the state changes they render and notify `history/changed`, followed by `window/focused`/`window/blurred` (and a `focus` effect) if the restored state has a different focused window, so keyboard focus follows. |
 | `canUndo`, `canRedo` (getters) | Whether a step is available. |
 | `log` (getter) | The commands applied since `origin`, excluding undone ones. A gesture contributes its coalesced commands. |
 | `origin` (getter) | The state `log` replays from: the initial state, or the last successfully `load()`ed one. |

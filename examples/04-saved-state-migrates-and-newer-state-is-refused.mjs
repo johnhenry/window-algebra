@@ -16,7 +16,8 @@ const events = [];
 restored.subscribe((_state, evs) => events.push(...evs));
 restored.load(saved);
 assert.deepEqual(restored.getState(), wm.getState());
-assert.deepEqual(events.map((e) => e.type), ["state/loaded"]);
+// Loading moves focus from nothing to the saved focus, and says so like any command would.
+assert.deepEqual(events.map((e) => e.type), ["state/loaded", "window/focused"]);
 
 // --- A version-0 state (no `version` field, no outputs, no config.drag) upgrades step by step.
 const current = createState();

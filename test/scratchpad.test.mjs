@@ -29,7 +29,7 @@ describe("scratchpad", () => {
   test("window/to-scratchpad hides a window off its workspace", () => {
     const state = withWindows(["a", "b"]);
     const out = update(state, { type: "window/to-scratchpad", id: "a" });
-    assert.deepEqual(out.events, [{ type: "window/scratchpad", id: "a" }]);
+    assert.deepEqual(out.events, [{ type: "scratchpad/hidden", id: "a" }]);
     assert.equal(out.state.windows.a.scratchpad, true);
     assert.equal(out.state.windows.a.workspace, null);
     assert.equal(out.state.workspaces.main.windows.includes("a"), false);
@@ -70,7 +70,7 @@ describe("scratchpad", () => {
     assert.equal(out.state.focus.window, "a");
     assert.deepEqual(
       out.events.map((e) => e.type),
-      ["window/scratchpad", "window/focused"],
+      ["scratchpad/hidden", "window/focused"],
     );
   });
 

@@ -11,11 +11,11 @@ A command is a plain object that expresses intent: `{ type: "window/focus", id: 
 - [Window lifecycle and focus](#window-lifecycle-and-focus): [`window/create`](#windowcreate), [`window/close`](#windowclose), [`window/focus`](#windowfocus), [`window/blur`](#windowblur), [`focus/next`](#focusnext), [`focus/previous`](#focusprevious), [`focus/urgent`](#focusurgent), [`window/set-urgent`](#windowset-urgent)
 - [Stacking](#stacking): [`window/raise`](#windowraise), [`window/lower`](#windowlower), [`window/set-layer`](#windowset-layer)
 - [Geometry and mode](#geometry-and-mode): [`window/move`](#windowmove), [`window/resize`](#windowresize), [`window/set-mode`](#windowset-mode), [`window/detach`](#windowdetach), [`window/toggle-floating`](#windowtoggle-floating), [`window/set-constraints`](#windowset-constraints)
-- [Status](#status): [`window/minimize`](#windowminimize), [`window/maximize`](#windowmaximize), [`window/fullscreen`](#windowfullscreen), [`window/restore`](#windowrestore), [`window/pop-out`](#windowpop-out), [`window/pop-in`](#windowpop-in)
-- [Properties](#properties): [`window/set-title`](#windowset-title), [`window/set-draggable`](#windowset-draggable), [`window/set-sticky`](#windowset-sticky)
+- [Status](#status): [`window/minimize`](#windowminimize), [`window/maximize`](#windowmaximize), [`window/fullscreen`](#windowfullscreen), [`window/restore`](#windowrestore), [`window/toggle-maximize`](#windowtoggle-maximize), [`window/toggle-fullscreen`](#windowtoggle-fullscreen), [`window/pop-out`](#windowpop-out), [`window/pop-in`](#windowpop-in)
+- [Properties](#properties): [`window/set-title`](#windowset-title), [`window/set-draggable`](#windowset-draggable), [`window/set-sticky`](#windowset-sticky), [`window/toggle-sticky`](#windowtoggle-sticky)
 - [Order within a layout](#order-within-a-layout): [`window/swap`](#windowswap), [`window/promote`](#windowpromote), [`window/drop`](#windowdrop), [`window/swap-next`](#windowswap-next), [`window/swap-previous`](#windowswap-previous), [`window/move-before`](#windowmove-before), [`window/move-after`](#windowmove-after)
-- [Workspaces and the scratchpad](#workspaces-and-the-scratchpad): [`window/move-to-workspace`](#windowmove-to-workspace), [`window/to-scratchpad`](#windowto-scratchpad), [`scratchpad/toggle`](#scratchpadtoggle), [`workspace/create`](#workspacecreate), [`workspace/activate`](#workspaceactivate), [`workspace/remove`](#workspaceremove), [`workspace/move-to-output`](#workspacemove-to-output)
-- [Outputs](#outputs): [`output/create`](#outputcreate), [`output/remove`](#outputremove), [`output/focus`](#outputfocus)
+- [Workspaces and the scratchpad](#workspaces-and-the-scratchpad): [`window/move-to-workspace`](#windowmove-to-workspace), [`window/to-scratchpad`](#windowto-scratchpad), [`scratchpad/toggle`](#scratchpadtoggle), [`window/from-scratchpad`](#windowfrom-scratchpad), [`workspace/create`](#workspacecreate), [`workspace/activate`](#workspaceactivate), [`workspace/remove`](#workspaceremove), [`workspace/rename`](#workspacerename), [`workspace/reorder`](#workspacereorder), [`workspace/move-to-output`](#workspacemove-to-output)
+- [Outputs](#outputs): [`output/create`](#outputcreate), [`output/remove`](#outputremove), [`output/focus`](#outputfocus), [`output/reorder`](#outputreorder)
 - [Layout](#layout): [`layout/set`](#layoutset), [`layout/to-tree`](#layoutto-tree), [`layout/set-ratio`](#layoutset-ratio), [`layout/rotate-split`](#layoutrotate-split), [`layout/resize-split`](#layoutresize-split), [`layout/toggle`](#layouttoggle)
 - [Configuration and rules](#configuration-and-rules): [`config/set`](#configset), [`rules/set`](#rulesset)
 - [Custom commands](#custom-commands)
@@ -28,21 +28,21 @@ import { update, reduce, replay, COMMANDS } from "@johnhenry/window-algebra";
 update(state, command, extensions?) → { state, events, effects }
 reduce(state, command, extensions?) → state          // update(...).state
 replay(state, commands, extensions?) → state         // migrate(state), then reduce each command
-COMMANDS                                              // frozen array of the 51 built-in command types
+COMMANDS                                              // frozen array of the 58 built-in command types
 ```
 
 - `state`: the next state. When nothing changed it is **the same reference** as the input.
 - `events`: an array of event objects recording what happened, in order. See [Events](./events.md).
 - `effects`: an array of effect values for the effectful shell. There are only two types, `{ type: "render" }` and `{ type: "focus", id }` (`id` may be `null`). Effects are de-duplicated by `type`, keeping the **last** occurrence, so a command that focuses twice yields one `focus` effect naming the final target.
-- `extensions`: optional `{ [type]: (state, command) => ({ state, events?, effects? }) }`. An extension handler **overrides** a built-in of the same type. Missing `events`/`effects` default to `[]`.
-- A `null`/non-object command, or one without a string `type`, is rejected as `invalid-command`. An unknown `type` is rejected as `unknown-command`. A command whose `id`, `a`, `b`, `target`, `parent`, `workspace`, `output` or `fallback` is an `Object.prototype` key (`__proto__`, `constructor`, `toString`, ...) is rejected as `invalid-id`, so those names can never be window, workspace or output ids.
+- `extensions`: optional `{ [type]: (state, command) => ({ state, events?, effects? }) }`. An extension handler **overrides** a built-in of the same type. Missing `events`/`effects` default to `[]`. A handler that throws (or returns something that is not `{ state, ... }`) makes the command a `handler-threw` rejection instead of propagating the exception.
+- A `null`/non-object command, or one without a string `type`, is rejected as `invalid-command`. An unknown `type` is rejected as `unknown-command`. A command whose `id`, `target`, `to`, `parent`, `workspace`, `output` or `fallback` is an `Object.prototype` key (`__proto__`, `constructor`, `toString`, ...) is rejected as `invalid-id`, so those names can never be window, workspace or output ids.
 - `replay` migrates its starting state first (see [Versioning](./versioning.md)). If migration fails, it replays from the state as given.
 
-`COMMANDS` is `Object.keys` of the built-in handler table, 51 entries, in the order the sections below follow.
+`COMMANDS` is `Object.keys` of the built-in handler table, 58 entries, in the order the sections below follow.
 
 ## Shared behaviour
 
-**Rejections.** A refused command returns the input state unchanged, one event `{ type: "command/rejected", command: <type>, id: <command.id>, reason }` and no effects. The `id` field is copied from the command even for commands whose subject is not `id` (for `window/swap` it is `undefined`). Every reason is listed per command below and collected in [Errors](./errors.md).
+**Rejections.** A refused command returns the input state unchanged, one event `{ type: "command/rejected", command: <type>, id: <command.id>, reason }` and no effects. The `id` field is copied from the command even for commands whose subject is not `id`. Every reason is listed per command below and collected in [Errors](./errors.md).
 
 **Focus policy (`applyFocus`).** It is used by every command that focuses a window: `window/create`, `window/focus`, `focus/*`, `scratchpad/toggle`, `window/move-to-workspace { follow }`, `output/focus`, and refocus. In order:
 
@@ -167,7 +167,7 @@ Marks or clears a window's urgency hint (EWMH/X11 style). A newly urgent window 
 
 - **Events:** `window/urgent-changed { id, urgent }`.
 - **Effects:** `render`.
-- **Rejections:** `unknown-window`, `invalid-urgent` (`urgent` given but not a boolean).
+- **Rejections:** `unknown-window`, `invalid-urgent` (`urgent` given but not a boolean). A missing `urgent` means `true`, as a missing `sticky` does for `window/set-sticky`.
 
 ## Stacking
 
@@ -317,7 +317,7 @@ Sets `status: "maximized"`. The window leaves the tiled base (if it was in it) a
 { type: "window/fullscreen", id }
 ```
 
-Sets `status: "fullscreen"`. While a visible window is fullscreen, `derive` presents it and its **descendants** (its own dialogs, sheets and popovers, which stay above it) and nothing else, and `paintOrder` is the window followed by those descendants. So fullscreening a parent with an open modal dialog does not strand the dialog: it stays painted and focused. As with `window/maximize`, a window that is currently shown also takes focus; one on another workspace does not.
+Sets `status: "fullscreen"`. While a visible window is fullscreen, `derive` presents it and its **descendants** (its own dialogs, sheets and popovers, which stay above it) and nothing else, and `paintOrder` is the window followed by those descendants. So fullscreening a parent with an open modal dialog does not strand the dialog: it stays painted and focused. As with `window/maximize`, a window that is currently shown also takes focus; one on another workspace does not. There is at most one fullscreen window per output: fullscreening a window restores any other fullscreen window shown on its output (one `window/status-changed` event each). If a workspace switch still brings two into view, the one covering the focused window is presented, else the topmost.
 
 - **Events:** `window/status-changed { id, status: "fullscreen", previous }`, then the focus events.
 - **Effects:** `render`, plus `focus`.
@@ -334,6 +334,22 @@ Sets `status: "normal"` from any other status, including `"popped-out"`. When a 
 - **Events:** `window/status-changed { id, status: "normal", previous }`.
 - **Effects:** `render`.
 - **Rejections:** `unknown-window`.
+
+### `window/toggle-maximize`
+
+```js
+{ type: "window/toggle-maximize", id }
+```
+
+`window/maximize`, or `window/restore` when the window is already maximized. Same events, effects and rejections as those.
+
+### `window/toggle-fullscreen`
+
+```js
+{ type: "window/toggle-fullscreen", id }
+```
+
+`window/fullscreen`, or `window/restore` when the window is already fullscreen. Same events, effects and rejections as those.
 
 ### `window/pop-out`
 
@@ -353,11 +369,11 @@ Sets `status: "popped-out"`, so the window leaves the layout to live in a separa
 { type: "window/pop-in", id }
 ```
 
-Reverses `window/pop-out` (`status: "normal"`). Unlike the other status setters, a window that is not popped out is **rejected**, not treated as a no-op. The browser helper relies on that to tell whether it is undoing a real pop-out.
+Reverses `window/pop-out` (`status: "normal"`). Like `window/restore` and the other status setters, a window that is not popped out is a **no-op** (it used to be rejected as `not-popped-out`). Unlike `window/restore` it only ever undoes a pop-out: a minimized or maximized window is left alone.
 
 - **Events:** `window/status-changed { id, status: "normal", previous: "popped-out" }`.
 - **Effects:** `render`.
-- **Rejections:** `unknown-window`, `not-popped-out`.
+- **Rejections:** `unknown-window`.
 
 ## Properties
 
@@ -388,26 +404,34 @@ Pins (`draggable: false`) or unpins (anything else, including omitted) a window.
 ### `window/set-sticky`
 
 ```js
-{ type: "window/set-sticky", id, sticky: boolean }
+{ type: "window/set-sticky", id, sticky? = true }
 ```
 
-EWMH-style sticky: the window is visible on every workspace of its own output. It is never part of a tiled base (it is always presented as a floating overlay, even with `mode: "tiled"`), it keeps its place in `state.stack`, and focusing it never switches workspace. Only `sticky: true` is stored. It is a no-op when unchanged. Then [refocus](#shared-behaviour): unsticking the focused window while its home workspace is inactive moves focus off it.
+EWMH-style sticky: the window is visible on every workspace of its own output. It is never part of a tiled base (it is always presented as a floating overlay, even with `mode: "tiled"`), it keeps its place in `state.stack`, and focusing it never switches workspace. Only `sticky: true` is stored. A missing `sticky` means `true` (as for `window/set-urgent`). Stickiness is inherited by descendants: a dialog or popover of a sticky window is shown wherever its parent is. It is a no-op when unchanged. Then [refocus](#shared-behaviour): unsticking the focused window while its home workspace is inactive moves focus off it.
 
 - **Events:** `window/sticky-changed { id, sticky }`, then the refocus events.
 - **Effects:** `render`, plus `focus` from refocus.
-- **Rejections:** `unknown-window`, `invalid-sticky` (not a boolean).
+- **Rejections:** `unknown-window`, `invalid-sticky` (`sticky` given but not a boolean).
+
+### `window/toggle-sticky`
+
+```js
+{ type: "window/toggle-sticky", id }
+```
+
+Flips the window's own `sticky` flag. Same events, effects and rejections as `window/set-sticky`.
 
 ## Order within a layout
 
 ### `window/swap`
 
 ```js
-{ type: "window/swap", a, b }
+{ type: "window/swap", id, target }
 ```
 
 Exchanges two windows' positions in their workspace's `windows` order, and in the stored tree for `bsp` and docking `tree` workspaces. Any two windows on the same workspace can be swapped; no droppability checks apply. Swapping a window with itself is a no-op.
 
-- **Events:** `window/swapped { a, b }`.
+- **Events:** `window/swapped { id, target }`.
 - **Effects:** `render`.
 - **Rejections:** `unknown-window` (either missing), `not-on-workspace` (either is hidden in the scratchpad), `different-workspaces`.
 
@@ -507,7 +531,7 @@ Moves a window **and its descendants** to another workspace (appended to its `wi
 
 i3-style scratchpad. It hides the window off every workspace: `workspace: null`, removed from its workspace and BSP tree, forced to `mode: "floating"`, marked `scratchpad: true`, and recorded as `lastScratchpad`. Then [refocus](#shared-behaviour). It is a no-op when the window is already hidden. Children stay on their workspace but become invisible, because visibility requires a visible parent; `scratchpad/toggle` brings them along when it shows the window again. A window that has a parent cannot be sent to the scratchpad on its own.
 
-- **Events:** `window/scratchpad { id }`, then the refocus events.
+- **Events:** `scratchpad/hidden { id }` (the same event `scratchpad/toggle` emits when it hides), then the refocus events.
 - **Effects:** `render`, plus `focus` from refocus.
 - **Rejections:** `unknown-window`, `has-parent`.
 
@@ -527,6 +551,18 @@ Either way it becomes `lastScratchpad`.
 - **Events:** `scratchpad/shown { id }` then the focus events, or `scratchpad/hidden { id }` then the refocus events.
 - **Effects:** `render`, `focus`.
 - **Rejections:** `empty-scratchpad` (no `id` and no `lastScratchpad`), `unknown-window`, `not-scratchpad` (the window was never sent to the scratchpad, or was pulled out of it).
+
+### `window/from-scratchpad`
+
+```js
+{ type: "window/from-scratchpad", id }
+```
+
+The inverse of `window/to-scratchpad`: the window stops being a scratchpad window (the `scratchpad` flag is cleared, and `lastScratchpad` too if it was this window). A **hidden** one is placed on the active workspace (with its descendants), keeps its floating mode, and is focused (ending a fullscreen window beneath it, if any). A **shown** one simply loses the flag and stays where it is.
+
+- **Events:** `scratchpad/removed { id }`, then (for a hidden window) the focus events.
+- **Effects:** `render`, plus `focus` for a hidden window.
+- **Rejections:** `unknown-window`, `not-scratchpad`.
 
 ### `workspace/create`
 
@@ -563,6 +599,30 @@ Removes a workspace. Its top-level windows (and so their descendants) move to `f
 - **Events:** `workspace/removed { id, fallback }`, then the refocus events. The window moves are silent: no `window/workspace-changed`.
 - **Effects:** `render`, plus `focus`.
 - **Rejections:** `unknown-workspace` (the workspace, or an invalid or identical `fallback`), `last-workspace` (the only workspace anywhere), `last-workspace-on-output` (the only workspace on its output).
+
+### `workspace/rename`
+
+```js
+{ type: "workspace/rename", id, to }
+```
+
+Changes a workspace's id and every reference to it: the `workspaces` map and the record's own `id`, its windows' `workspace`, `workspaceOrder`, its output's `workspaces` and `activeWorkspace`, and `activeWorkspace`. `config.rules` whose `set.workspace` names the old id are left as written. Renaming to the same id is a no-op.
+
+- **Events:** `workspace/renamed { id, to }`.
+- **Effects:** `render`.
+- **Rejections:** `unknown-workspace`, `missing-id` (`to` is not a non-empty string), `duplicate-id` (`to` exists).
+
+### `workspace/reorder`
+
+```js
+{ type: "workspace/reorder", id, index }
+```
+
+Moves a workspace to `index` (a non-negative integer, clamped to the last position) among its output's `workspaces`. `workspaceOrder` follows: the output's workspaces keep the slots of it they occupied, in their new order, and other outputs' workspaces do not move. A move to the current position is a no-op.
+
+- **Events:** `workspace/reordered { id, index }` (the clamped index).
+- **Effects:** `render`.
+- **Rejections:** `unknown-workspace`, `invalid-index`.
 
 ### `workspace/move-to-output`
 
@@ -615,6 +675,18 @@ Gives input focus to another output (`activeWorkspace` follows). Keyboard focus 
 - **Events:** `output/focused { id, previous }`, then either the focus-policy events or `window/blurred { id }`.
 - **Effects:** `render`, `focus` (when focus moved or cleared).
 - **Rejections:** `unknown-output`.
+
+### `output/reorder`
+
+```js
+{ type: "output/reorder", id, index }
+```
+
+Moves an output to `index` (a non-negative integer, clamped) in `outputOrder`, which focus cycling (`focus/next`, `focus/previous`) follows. A move to the current position is a no-op.
+
+- **Events:** `output/reordered { id, index }`.
+- **Effects:** `render`.
+- **Rejections:** `unknown-output`, `invalid-index`.
 
 ## Layout
 

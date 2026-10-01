@@ -188,12 +188,14 @@ describe("windows", () => {
     assert.deepEqual(blocked.events, [{ type: "command/rejected", command: "window/pop-out", id: "a", reason: "blocked" }]);
   });
 
-  test("pop-in: rejects unknown-window and a window that is not popped out", () => {
+  test("pop-in: rejects unknown-window; a window that is not popped out is a no-op (like window/restore)", () => {
     const state = withWindows(["a"]);
     const missing = update(state, { type: "window/pop-in", id: "zz" });
     assert.deepEqual(missing.events, [{ type: "command/rejected", command: "window/pop-in", id: "zz", reason: "unknown-window" }]);
     const notPopped = update(state, { type: "window/pop-in", id: "a" });
-    assert.deepEqual(notPopped.events, [{ type: "command/rejected", command: "window/pop-in", id: "a", reason: "not-popped-out" }]);
+    assert.deepEqual(notPopped.events, []);
+    assert.equal(notPopped.state, state);
+    assert.equal(update(state, { type: "window/restore", id: "a" }).state, state, "consistent with restore");
   });
 
   test("popped-out windows are excluded from tiled drops, like minimized ones", () => {
@@ -220,7 +222,7 @@ describe("windows", () => {
 
   test("swap and promote reorder the workspace", () => {
     let state = withWindows(["a", "b", "c"]);
-    state = reduce(state, { type: "window/swap", a: "a", b: "c" });
+    state = reduce(state, { type: "window/swap", id: "a", target: "c" });
     assert.deepEqual(state.workspaces.main.windows, ["c", "b", "a"]);
     state = reduce(state, { type: "window/promote", id: "b" });
     assert.deepEqual(state.workspaces.main.windows, ["b", "c", "a"]);
