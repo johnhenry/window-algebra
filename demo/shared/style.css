@@ -352,7 +352,7 @@ wm-tabs button[aria-selected="true"] { background: var(--surface); color: var(--
 [data-mode="floating"] > .wa-win > .wa-bar:active { cursor: grabbing; }
 wm-view[data-focused] > .wa-win > .wa-win.bare { grid-template-rows: minmax(0, 1fr); }
 .wa-bar { background: var(--accent-soft); }
-.wa-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--wa-color, var(--faint)); }
+.wa-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--win-color, var(--faint)); }
 /* When the bar runs out of room, the title gives way (ellipsis), then the size
    readout disappears; the dot and the controls never shrink or get pushed out. */
 .wa-bar { min-width: 0; overflow: hidden; }
@@ -411,8 +411,8 @@ wm-view[data-mode="floating"] .wa-grip[data-wm-handle="resize-se"]::after {
   place-content: center;
   text-align: center;
   gap: 2px;
-  color: var(--wa-color);
-  background: color-mix(in oklab, var(--wa-color) 10%, var(--surface));
+  color: var(--win-color);
+  background: color-mix(in oklab, var(--win-color) 10%, var(--surface));
   font-weight: 650;
 }
 .swatch small { color: var(--muted); font-weight: 400; font: 11px var(--mono); }
@@ -458,16 +458,7 @@ table.data td.num { font-family: var(--mono); text-align: right; white-space: no
 }
 
 /* ------------------------------------------------------------------ tiled drag & drop (attachInput) */
-/* The adapter's ghost and zone highlight read these custom properties. */
-[data-wm-root] {
-  --wm-ghost-line: var(--accent);
-  --wm-ghost-fill: color-mix(in oklab, var(--accent) 9%, transparent);
-  --wm-ghost-fill-strong: color-mix(in oklab, var(--accent) 24%, transparent);
-  --wm-zone-line: var(--accent);
-  --wm-zone-fill: color-mix(in oklab, var(--accent) 16%, transparent);
-  --wm-ghost-bad: var(--danger);
-  --wm-ghost-radius: 8px;
-}
+/* The ghost, zone highlight and focus ring read the library's --wa-* tokens (see demo/theming.html); the defaults follow data-theme. */
 wm-view[data-wm-drag-source] { opacity: 0.5; }
 wm-view[data-wm-draggable="false"] > .wa-win > .wa-bar { cursor: not-allowed; }
 wm-view[data-wm-draggable="false"] > .wa-win > .wa-bar .wa-title::after { content: " · pinned"; font-weight: 400; color: var(--faint); }

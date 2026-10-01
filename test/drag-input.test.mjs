@@ -531,7 +531,8 @@ describe("tab strip reordering", () => {
     t.move(40, 10);
     t.move(170, 10); // right half of c (120..180)
     const line = t.overlay().querySelector("[data-wm-drop-line]");
-    assert.equal(line.style.getPropertyValue("left"), "178.5px");
+    assert.equal(line.style.getPropertyValue("left"), "180px");
+    assert.equal(line.style.getPropertyValue("translate"), "-50% 0", "centred on the edge whatever the (tokenised) line width");
     assert.ok(t.tabs.a.hasAttribute("data-wm-drag-source"));
     t.up(170, 10);
     assert.deepEqual(t.drops(), [{ type: "window/drop", id: "a", target: "c", zone: "right" }]);

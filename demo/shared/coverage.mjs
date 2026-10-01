@@ -194,6 +194,11 @@ export const CHECKLIST = [
     ["focus-trap", "Tab is trapped inside the focused window while it is modal (wraps at the ends)"],
     ["reduced-motion", "chrome transitions gated by @media (prefers-reduced-motion: no-preference)"],
   ]),
+  ...items("Theming", [
+    ["theme-tokens", "THEME_TOKENS / THEME_CSS: the --wa-* custom properties (colours, radii, spacing, focus ring, splitter, title bar, shadows), light and dark defaults, prefers-contrast: more"],
+    ["theme-override", "override any token on :root (or an ancestor of one stage); defaults have zero specificity"],
+    ["rules-css", "RULES_CSS / BASE_CSS = THEME_CSS + the rules: no literal colour, length or shadow"],
+  ]),
   ...items("Touch and pen", [
     ["touch-option", "attachInput({ touch }): opt-in; sets data-wm-touch, which BASE_CSS maps to the touch-action each gesture needs"],
     ["touch-pinch", "pinch: two touches on a floating window resize it (one gesture, honours constraints); createPinch / updatePinch"],
@@ -381,6 +386,16 @@ export const PAGES = [
       "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
+    ],
+  },
+  {
+    href: "./theming.html",
+    short: "Theming",
+    title: "Theming tokens",
+    blurb: "Every colour, radius, spacing, focus ring, splitter, title bar and shadow in the library's CSS is a --wa-* token. Switch scheme, simulate high contrast, override tokens live.",
+    covers: [
+      "theme-tokens", "theme-override", "rules-css", "BASE_CSS", "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry",
+      "lazySurface", "layout/set", "window/focus", "splitter-render", "tab-buttons", "drag-preview",
     ],
   },
   {

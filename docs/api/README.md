@@ -16,6 +16,7 @@ For the rationale, prior art and open questions, see the design document, [`docs
 | [Layouts and modifiers](./layouts.md) | `derive`, `LAYOUTS` and every layout type's spec options, the derived-layout functions (`masterStack`, `spiral`, `dock`, …), the BSP and docking-tree helpers, split sizing (`layout/resize-split` paths), and layout modifiers (`MODIFIERS`, `withModifiers`, …). |
 | [Drag and drop](./drops.md) | Drop semantics per layout, `DROPS`, drop interpreters (`orderDrops`, `createDropHandler`, `dropInterpreterFor`), the drag-mode helpers, and the pure pointer helpers (`dropZoneAt`, `dropTargetAt`, `previewDrop`, `zoneRect`). |
 | [compile and CSS](./compile.md) | `compile`, the render-tree shape, element keys, every attribute and CSS mapping, `toHTML`, `styleText`, `tracks`, `px`, `anchorName`, `tabId`/`panelId`, `SPLITTER_SIZE`, `BASE_CSS` and its custom properties. |
+| [Theming](./theming.md) | The `--wa-*` custom properties (colours, radii, spacing, focus ring, splitter, title bar, shadows, ghost), their light, dark and `prefers-contrast: more` defaults, `THEME_TOKENS`, `THEME_CSS`. |
 | [Geometry and interaction](./geometry.md) | The `geometry` namespace (rects, `constrainSize`, `sizeToCells`, …), `positionPopup`, move/resize/ratio gesture math (including `createPinch`, `updatePinch`, `swipeOf`), and snap zones and magnetism. |
 | [The manager](./manager.md) | `createWindowManager`: options, every method and getter, gestures, the command log, `load`/`serialize`, multiple renderers. |
 | [Browser adapters](./browser.md) | `createDomRenderer` (reconciliation, measurement, the anchor fallback, animation, `release`/`adopt`), `attachInput` (options, markup contract, attributes it sets, keyboard), surfaces, schedulers, and `attachPopouts`. |
@@ -35,7 +36,7 @@ For the rationale, prior art and open questions, see the design document, [`docs
 | `@johnhenry/window-algebra/algebra` | `src/algebra/nodes.mjs` | Just the primitives, guards, `validate`, `fromJSON` and the kind lists. |
 | `@johnhenry/window-algebra/transforms` | `src/algebra/transforms.mjs` | Just the tree transforms. |
 | `@johnhenry/window-algebra/layouts` | `src/layouts/index.mjs` | The derived-layout functions and every BSP and docking-tree helper (including `isTreeContainer`). |
-| `@johnhenry/window-algebra/css` | `src/css/compile.mjs` | `compile`, `toHTML`, `styleText`, `tracks`, `px`, `anchorName`, `tabId`, `panelId`, `SPLITTER_SIZE`, `BASE_CSS`. |
+| `@johnhenry/window-algebra/css` | `src/css/compile.mjs` | `compile`, `toHTML`, `styleText`, `tracks`, `px`, `anchorName`, `tabId`, `panelId`, `SPLITTER_SIZE`, `BASE_CSS`, `RULES_CSS`, `THEME_CSS`, `THEME_TOKENS`. |
 | `@johnhenry/window-algebra/react` | `src/bindings/react.mjs` | `createReactBindings`. React is passed in, not imported. |
 | `@johnhenry/window-algebra/element` | `src/bindings/element.mjs` | `defineWindowAlgebraElement`, `attachStage`. |
 | `@johnhenry/window-algebra/package.json` | `package.json` | The manifest. |

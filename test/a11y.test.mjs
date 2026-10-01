@@ -295,7 +295,7 @@ describe("BASE_CSS accessibility (audit 13)", () => {
   test("focus is never hidden: a strong :focus-visible ring replaces `outline: none`", async () => {
     const { BASE_CSS } = await import("../src/css/compile.mjs");
     assert.ok(!/focus-visible[^{]*\{\s*outline:\s*none/.test(BASE_CSS), "no outline: none on :focus-visible");
-    assert.match(BASE_CSS, /\[data-wm-splitter\]:focus-visible[^{]*\{[^}]*outline: 3px solid/);
+    assert.match(BASE_CSS, /\[data-wm-splitter\]:focus-visible[^{]*\{[^}]*outline: var\(--wa-focus-ring-width\) solid/);
     assert.match(BASE_CSS, /wm-tabs > button:focus-visible/);
   });
   test("prefers-reduced-motion switches transitions and animations off", async () => {

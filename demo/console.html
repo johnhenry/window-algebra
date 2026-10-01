@@ -39,7 +39,7 @@
       .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; }
       #preview { height: 220px; border-radius: 8px; margin: 10px 12px; border: 1px solid var(--line); }
       #preview wm-view { font-size: 11px; }
-      #preview .mini-body { height: 100%; display: grid; place-content: center; text-align: center; font: 600 12px var(--mono); color: var(--wa-color); background: color-mix(in oklab, var(--wa-color) 10%, var(--surface)); padding: 4px; }
+      #preview .mini-body { height: 100%; display: grid; place-content: center; text-align: center; font: 600 12px var(--mono); color: var(--win-color); background: color-mix(in oklab, var(--win-color) 10%, var(--surface)); padding: 4px; }
       #preview .mini-body small { display: block; font-weight: 400; color: var(--muted); }
       .timeline { padding: 8px 12px 12px; display: grid; gap: 6px; }
       .timeline input[type="range"] { width: 100%; }
@@ -208,7 +208,7 @@
         root: $("#preview"),
         surfaceFor: (id) =>
           lazySurface((target) => {
-            target.style.setProperty("--wa-color", colorOf(id));
+            target.style.setProperty("--win-color", colorOf(id));
             const body = h("div", { class: "mini-body", "data-wm-handle": "move" }, id, h("small", { "data-meta": "" }, ""));
             target.append(body);
             return () => body.remove();

@@ -144,7 +144,7 @@ export const windowSurface = ({ id, title = id, color = nextSwatch(), body, acti
   let mounts = 0;
   return lazySurface((target) => {
     mounts++;
-    target.style.setProperty("--wa-color", color);
+    target.style.setProperty("--win-color", color);
     target.tabIndex = -1;
     const commandFor = { min: "window/minimize", max: "window/maximize", float: "window/toggle-floating", close: "window/close" };
     // "popout" has no data-wm-command: it needs the actual browser window

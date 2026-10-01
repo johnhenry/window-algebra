@@ -88,7 +88,7 @@ export * from "./state/queries.mjs";
 export { createHistory, record, undo, redo, canUndo, canRedo } from "./state/history.mjs";
 
 // CSS compilation (pure)
-export { compile, toHTML, styleText, tracks, px, anchorName, BASE_CSS, SPLITTER_SIZE, tabId, panelId } from "./css/compile.mjs";
+export { compile, toHTML, styleText, tracks, px, anchorName, BASE_CSS, RULES_CSS, THEME_CSS, THEME_TOKENS, SPLITTER_SIZE, tabId, panelId } from "./css/compile.mjs";
 
 // Imperative facade
 export { createWindowManager } from "./manager.mjs";

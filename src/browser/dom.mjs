@@ -43,7 +43,7 @@ const identSafe = (id) => String(id).replace(/[^a-zA-Z0-9_-]/g, "-") || "x";
  *   Transitions API when the browser supports it: `document.startViewTransition` wraps the reconcile, each primary
  *   view gets a unique `view-transition-name`, and `prefers-reduced-motion: reduce` or an unsupported browser make
  *   it a no-op (commits apply immediately, same as `animate` unset). `duration`/`easing` set
- *   `--wm-transition-duration`/`--wm-transition-easing`, which `BASE_CSS` reads. Pass `{ immediate: true }` to
+ *   `--wa-transition-duration`/`--wa-transition-easing`, which `BASE_CSS` reads. Pass `{ immediate: true }` to
  *   `commit()` to force a given commit to skip the transition (drag gestures; see `manager.mjs`); an animation
  *   already in flight makes later commits immediate too, so rapid commits coalesce instead of stacking transitions.
  */
@@ -80,9 +80,9 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
     if (!animateConfig) return;
     const docEl = doc.documentElement ?? doc.body;
     if (animateConfig.duration != null) {
-      docEl?.style?.setProperty("--wm-transition-duration", typeof animateConfig.duration === "number" ? `${animateConfig.duration}ms` : animateConfig.duration);
+      docEl?.style?.setProperty("--wa-transition-duration", typeof animateConfig.duration === "number" ? `${animateConfig.duration}ms` : animateConfig.duration);
     }
-    if (animateConfig.easing != null) docEl?.style?.setProperty("--wm-transition-easing", animateConfig.easing);
+    if (animateConfig.easing != null) docEl?.style?.setProperty("--wa-transition-easing", animateConfig.easing);
   };
   configureAnimate(animate);
 

@@ -38,11 +38,11 @@
       /* Container-query responsive card inside each window */
       .card { height: 100%; display: grid; grid-template-columns: 1fr; grid-template-rows: auto 1fr; gap: 8px; padding: 10px; font-size: 12.5px; }
       .card .head { display: flex; align-items: center; gap: 8px; }
-      .card .icon { width: 28px; height: 28px; border-radius: 8px; background: var(--wa-color); flex: none; }
+      .card .icon { width: 28px; height: 28px; border-radius: 8px; background: var(--win-color); flex: none; }
       .card .bp { font: 600 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--surface-3); color: var(--muted); }
       .card .bp::after { content: "wide ≥ 420px"; }
       .card .chart { display: flex; align-items: flex-end; gap: 4px; min-height: 0; max-height: 220px; align-self: end; height: 100%; }
-      .card .chart i { flex: 1; background: color-mix(in oklab, var(--wa-color) 60%, transparent); border-radius: 3px 3px 0 0; }
+      .card .chart i { flex: 1; background: color-mix(in oklab, var(--win-color) 60%, transparent); border-radius: 3px 3px 0 0; }
       .card .stats { display: none; }
       .card .size { font: 11px var(--mono); color: var(--faint); }
       @container wm-view (width >= 420px) {
@@ -59,7 +59,7 @@
       }
       @container wm-view (height < 120px) { .card .chart { display: none; } }
       .pill { padding: 6px 10px; font-size: 12px; font-weight: 600; height: 100%; display: flex; align-items: center; gap: 6px; }
-      .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--wa-color); }
+      .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--win-color); }
       @media (max-width: 1000px) {
         main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(520px, 72dvh) auto; }
         aside { border-left: 0; border-top: 1px solid var(--line); }

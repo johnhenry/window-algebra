@@ -155,17 +155,6 @@ Style: `flex: 0 0 <SPLITTER_SIZE>px; align-self: stretch; cursor: col-resize | r
 
 ## `BASE_CSS` and custom properties
 
-`BASE_CSS` is an optional stylesheet string. Inject it once (`<style>` or `adoptedStyleSheets`). It sets host sizing (`[data-wm-root]` and its root `wm-overlay` fill the host), the blocked/inert tint, the selected-tab weight, the urgent outline, drag cursors, the ghost label, pinned and denied affordances, workspace-target highlighting, `touch-action: none` on `[data-wm-handle]` (with `pan-x` on tab strips, so window content keeps scrolling), splitter visuals, a visible focus ring (a 3px `:focus-visible` outline on views, tabs, splitters and handles; focus is never hidden), and View Transition timing. Under `prefers-reduced-motion: reduce` the view transitions are off and so are CSS transitions and animations on the library's elements (the DOM renderer also skips `startViewTransition`).
+`BASE_CSS` is an optional stylesheet string: `THEME_CSS` (the default theme, see [Theming](./theming.md)) followed by `RULES_CSS` (the rules). Inject it once (`<style>` or `adoptedStyleSheets`). The rules set host sizing (`[data-wm-root]` and its root `wm-overlay` fill the host, with the stage background and font), floating windows' shadow and radius, the blocked/inert tint, the tab strip's title-bar look and the selected-tab weight, the urgent outline, drag cursors, the ghost label, pinned and denied affordances, workspace-target highlighting, `touch-action: none` on `[data-wm-handle]` (with `pan-x` on tab strips, so window content keeps scrolling; `data-wm-touch` tokens switch on the [touch](./browser.md#touch-and-pen) rules), splitter visuals, a visible focus ring (a `:focus-visible` outline on views, tabs, splitters and handles; focus is never hidden), and View Transition timing. Under `prefers-reduced-motion: reduce` the view transitions are off and so are CSS transitions and animations on the library's elements (the DOM renderer also skips `startViewTransition`). Logical properties (`inline-size`, `inset-inline-start`, `border-start-start-radius`, ...) are used throughout so the rules mirror in right-to-left.
 
-Theme it with these custom properties (defaults in parentheses):
-
-| Property | Used for |
-| --- | --- |
-| `--wm-urgent-line` (`rgb(234 88 12)`) | urgent outline on views and tabs |
-| `--wm-focus-ring` (`#1d4ed8`), `--wm-focus-ring-halo` (`#fff`) | the `:focus-visible` ring on views, tabs, splitters and handles, and the 1px halo around it |
-| `--wm-ghost-line` (`rgb(59 130 246)`), `--wm-ghost-fill`, `--wm-ghost-fill-strong`, `--wm-ghost-radius` (`6px`) | the drag-preview ghost outlines (the dragged window uses `-fill-strong`) |
-| `--wm-ghost-label-fg` (`#fff`) | ghost label text |
-| `--wm-ghost-bad` (`rgb(220 38 38 / 0.9)`) | slots that would violate constraints; denied drags |
-| `--wm-zone-fill`, `--wm-zone-line` | the drop-zone highlight, tab insertion line, workspace-target outline |
-| `--wm-splitter-fill` (transparent), `--wm-splitter-line`, `--wm-splitter-fill-active` | splitter at rest, its hairline, hover/focus/drag |
-| `--wm-transition-duration` (`0.25s`), `--wm-transition-easing` (`ease`) | View Transition animations (set by the renderer's `animate` option) |
+Every colour, radius, spacing, shadow and outline width in those rules is a `--wa-*` custom property; the full table, with light, dark and high-contrast defaults, is on the [Theming](./theming.md) page. Exports: `BASE_CSS`, `RULES_CSS`, `THEME_CSS`, `THEME_TOKENS`.

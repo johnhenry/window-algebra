@@ -159,13 +159,13 @@ describe("DOM renderer: animate", () => {
 
   test("duration/easing set custom properties on the document element", () => {
     const { doc } = setup({ animate: { duration: 400, easing: "ease-out" } });
-    assert.equal(doc.documentElement.style.getPropertyValue("--wm-transition-duration"), "400ms");
-    assert.equal(doc.documentElement.style.getPropertyValue("--wm-transition-easing"), "ease-out");
+    assert.equal(doc.documentElement.style.getPropertyValue("--wa-transition-duration"), "400ms");
+    assert.equal(doc.documentElement.style.getPropertyValue("--wa-transition-easing"), "ease-out");
   });
 
   test("a string duration is passed through untouched", () => {
     const { doc } = setup({ animate: { duration: "0.5s" } });
-    assert.equal(doc.documentElement.style.getPropertyValue("--wm-transition-duration"), "0.5s");
+    assert.equal(doc.documentElement.style.getPropertyValue("--wa-transition-duration"), "0.5s");
   });
 
   test("moveBefore state preservation still holds inside an animated commit", () => {

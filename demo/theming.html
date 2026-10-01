@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Theming tokens</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 8px; padding: 8px; min-height: 0; }
+      #stage { border-radius: var(--wa-radius-md); border: var(--wa-border-width) solid var(--wa-color-border); min-height: 360px; }
+      aside { overflow: auto; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13px; }
+      aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 12px 0 6px; }
+      aside label { display: grid; grid-template-columns: 110px 1fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+      aside output { font: 12px var(--mono); color: var(--muted); min-width: 4ch; text-align: end; }
+      .row { display: flex; gap: 6px; flex-wrap: wrap; }
+      #tokens { font: 11.5px var(--mono); width: 100%; border-collapse: collapse; }
+      #tokens td { padding: 2px 4px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+      #tokens td:first-child { color: var(--muted); white-space: nowrap; }
+      #tokens i { display: inline-block; inline-size: 10px; block-size: 10px; border-radius: 2px; margin-inline-end: 4px; border: 1px solid var(--line); vertical-align: -1px; }
+      /* Window content styled only with the library's tokens: this is what a themed app looks like. */
+      .win { display: grid; grid-template-rows: auto 1fr; block-size: 100%; background: var(--wa-color-surface); color: var(--wa-color-fg); font: var(--wa-font-size)/1.4 var(--wa-font); }
+      .win header { display: flex; align-items: center; gap: var(--wa-space-sm); padding: var(--wa-titlebar-padding); background: var(--wa-titlebar-bg); color: var(--wa-titlebar-fg); border-block-end: var(--wa-border-width) solid var(--wa-titlebar-border); cursor: grab; user-select: none; }
+      wm-view[data-focused] .win header { background: var(--wa-titlebar-active-bg); font-weight: var(--wa-titlebar-font-weight); }
+      .win header strong { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .win .body { padding: var(--wa-space-md); overflow: auto; }
+      .win .body p { margin: 0 0 var(--wa-space-sm); color: var(--wa-color-fg-muted); }
+      .win button { font: inherit; color: var(--wa-color-fg); background: var(--wa-color-surface-raised); border: var(--wa-border-width) solid var(--wa-color-border); border-radius: var(--wa-radius-sm); padding: var(--wa-space-xs) var(--wa-space-sm); cursor: pointer; }
+      .win .primary { background: var(--wa-color-accent); color: var(--wa-color-accent-fg); border-color: var(--wa-color-accent); }
+      .win .danger { color: var(--wa-color-danger); }
+      .win .pill { display: inline-block; padding: 0 var(--wa-space-sm); border-radius: var(--wa-radius-pill); background: var(--wa-color-accent-soft); color: var(--wa-color-accent); font-size: var(--wa-font-size-sm); }
+      @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar" aria-label="Theme">
+      <label class="inline">Scheme
+        <select id="scheme">
+          <option value="">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <label class="inline"><input type="checkbox" id="hc" /> High contrast (simulated)</label>
+      <select id="layout" aria-label="Layout">
+        <option value="columns">columns</option>
+        <option value="tabs">tabs</option>
+        <option value="master-stack">master-stack</option>
+      </select>
+      <span class="sep"></span>
+      <button class="btn small" id="reset">Reset overrides</button>
+    </nav>
+    <main>
+      <div id="stage" class="stage" aria-label="Themed stage"></div>
+      <aside aria-label="Token overrides">
+        <h2>Override</h2>
+        <label>Accent <input type="color" id="accent" value="#1d4ed8" /> <output id="accent-out"></output></label>
+        <label>Surface <input type="color" id="surface" value="#ffffff" /> <output></output></label>
+        <label>Radius <input type="range" id="radius" min="0" max="24" value="8" /> <output id="radius-out">8px</output></label>
+        <label>Spacing <input type="range" id="space" min="4" max="24" value="12" /> <output id="space-out">12px</output></label>
+        <label>Focus ring <input type="range" id="ring" min="1" max="8" value="3" /> <output id="ring-out">3px</output></label>
+        <label>Splitter <input type="range" id="split" min="1" max="6" value="1" /> <output id="split-out">1px</output></label>
+        <h2>Presets</h2>
+        <div class="row">
+          <button class="btn small" data-preset="sunset">Sunset</button>
+          <button class="btn small" data-preset="paper">Paper</button>
+          <button class="btn small" data-preset="terminal">Terminal</button>
+        </div>
+        <h2>Overrides in effect</h2>
+        <pre id="css" aria-live="polite" style="font: 11.5px var(--mono); white-space: pre-wrap; margin: 0">:root { }</pre>
+        <h2>Tokens (computed)</h2>
+        <table id="tokens"></table>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { createWindowManager, createState, THEME_TOKENS } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler, lazySurface } from "../src/browser/index.mjs";
+      import { initPage } from "./shared/kit.mjs";
+
+      initPage({ current: "./theming.html", title: "Theming tokens" });
+
+      const root = document.getElementById("stage");
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root, surfaceFor: surfaces });
+      const wm = createWindowManager({
+        state: createState({ layout: { type: "columns" }, config: { gap: 6, inset: 6 } }),
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 100,
+      });
+      attachInput({ root, wm, keyboard: true, touch: true });
+
+      const surface = (id, title, text) =>
+        lazySurface((target) => {
+          target.tabIndex = -1;
+          target.innerHTML = `<div class="win"><header data-wm-handle="move"><strong></strong><button type="button" data-wm-command="window/close" aria-label="Close">×</button></header>
+            <div class="body"><p></p><div class="row"><button type="button" class="primary">Primary</button><button type="button">Secondary</button><button type="button" class="danger">Danger</button><span class="pill">pill</span></div></div></div>
+            <div data-wm-handle="resize-se" style="position:absolute;inset-inline-end:0;inset-block-end:0;inline-size:14px;block-size:14px;cursor:nwse-resize"></div>`;
+          target.querySelector("strong").textContent = title;
+          target.querySelector("p").textContent = text;
+        });
+      const open = (id, title, text, options = {}) => {
+        surfaces.set(id, surface(id, title, text));
+        wm.create({ id, title, focus: false, ...options });
+      };
+      open("a", "Editor", "Focus a window to see the active title bar.");
+      open("b", "Terminal", "Splitters, tabs, focus ring and shadows all read tokens.");
+      open("c", "Browser", "Tab to a title bar, a tab or a splitter to see the ring.");
+      open("f", "Floating", "A floating window casts --wa-shadow-window.", { mode: "floating", placement: { x: 120, y: 90, width: 280, height: 170 } });
+      wm.focus("a");
+      document.getElementById("layout").onchange = (event) => wm.setLayout({ type: event.target.value });
+
+      // ---- live overrides: all of them are plain custom properties on :root
+      const html = document.documentElement;
+      const overrides = new Map();
+      const set = (name, value) => {
+        if (value === null) {
+          overrides.delete(name);
+          html.style.removeProperty(name);
+        } else {
+          overrides.set(name, value);
+          html.style.setProperty(name, value);
+        }
+        show();
+      };
+      const show = () => {
+        document.getElementById("css").textContent = `:root {\n${[...overrides].map(([k, v]) => `  ${k}: ${v};`).join("\n")}\n}`;
+        const table = document.getElementById("tokens");
+        const cs = getComputedStyle(html);
+        table.replaceChildren(
+          ...Object.keys(THEME_TOKENS).map((name) => {
+            const value = cs.getPropertyValue(name).trim();
+            const tr = document.createElement("tr");
+            const swatch = /^(#|rgb)/.test(value) ? `<i style="background:${value}"></i>` : "";
+            tr.innerHTML = `<td></td><td>${swatch}</td>`;
+            tr.children[0].textContent = name.slice(5);
+            tr.children[1].append(document.createTextNode(value));
+            return tr;
+          }),
+        );
+      };
+      const bind = (id, name, format = (v) => v) => {
+        const input = document.getElementById(id);
+        input.oninput = () => {
+          set(name, format(input.value));
+          const out = document.getElementById(`${id}-out`);
+          if (out) out.textContent = format(input.value);
+        };
+      };
+      bind("accent", "--wa-color-accent");
+      document.getElementById("accent").addEventListener("input", (event) => {
+        set("--wa-ghost-line", event.target.value);
+        set("--wa-zone-line", event.target.value);
+        set("--wa-focus-ring-color", event.target.value);
+      });
+      bind("surface", "--wa-color-surface");
+      bind("radius", "--wa-radius-md", (v) => `${v}px`);
+      bind("space", "--wa-space-md", (v) => `${v}px`);
+      bind("ring", "--wa-focus-ring-width", (v) => `${v}px`);
+      bind("split", "--wa-splitter-line-width", (v) => `${v}px`);
+
+      const PRESETS = {
+        sunset: { "--wa-color-bg": "#2b1b2e", "--wa-color-surface": "#3a2540", "--wa-color-fg": "#fdebd3", "--wa-color-fg-muted": "#e7c4a8", "--wa-color-accent": "#ff7a59", "--wa-color-accent-fg": "#2b1b2e", "--wa-color-accent-soft": "rgb(255 122 89 / 0.2)", "--wa-titlebar-bg": "#4b2f52", "--wa-titlebar-fg": "#fdebd3", "--wa-titlebar-active-bg": "#6a3f66", "--wa-titlebar-border": "#6a3f66", "--wa-color-border": "#6a3f66", "--wa-color-surface-raised": "#4b2f52", "--wa-focus-ring-color": "#ffd166", "--wa-ghost-line": "#ff7a59", "--wa-zone-line": "#ff7a59", "--wa-radius-md": "14px" },
+        paper: { "--wa-color-bg": "#e9e4d8", "--wa-color-surface": "#fbf8f1", "--wa-color-fg": "#2a2620", "--wa-color-fg-muted": "#5a5246", "--wa-color-accent": "#8a3b12", "--wa-color-accent-fg": "#fbf8f1", "--wa-titlebar-bg": "#efe9db", "--wa-titlebar-fg": "#2a2620", "--wa-titlebar-active-bg": "#fbf8f1", "--wa-radius-md": "2px", "--wa-radius-sm": "0px", "--wa-shadow-window": "3px 3px 0 rgb(0 0 0 / 0.25)" },
+        terminal: { "--wa-color-bg": "#000000", "--wa-color-surface": "#04120a", "--wa-color-fg": "#8dff9a", "--wa-color-fg-muted": "#4fbf61", "--wa-color-accent": "#8dff9a", "--wa-color-accent-fg": "#000000", "--wa-titlebar-bg": "#062a14", "--wa-titlebar-fg": "#8dff9a", "--wa-titlebar-active-bg": "#0a3d1d", "--wa-titlebar-border": "#1b6a35", "--wa-color-border": "#1b6a35", "--wa-radius-md": "0px", "--wa-radius-sm": "0px", "--wa-font": "ui-monospace, Menlo, Consolas, monospace", "--wa-focus-ring-color": "#ffffff" },
+      };
+      for (const button of document.querySelectorAll("[data-preset]")) {
+        button.onclick = () => {
+          reset();
+          for (const [name, value] of Object.entries(PRESETS[button.dataset.preset])) set(name, value);
+        };
+      }
+      const reset = () => {
+        for (const name of [...overrides.keys()]) set(name, null);
+        document.getElementById("hc").checked = false;
+      };
+      document.getElementById("reset").onclick = reset;
+
+      document.getElementById("scheme").onchange = (event) => {
+        if (event.target.value) html.setAttribute("data-theme", event.target.value);
+        else html.removeAttribute("data-theme");
+        requestAnimationFrame(show);
+      };
+      // `prefers-contrast: more` cannot be toggled from a page, so simulate it with the same values.
+      document.getElementById("hc").onchange = (event) => {
+        const dark = getComputedStyle(html).colorScheme.includes("dark");
+        for (const [name, token] of Object.entries(THEME_TOKENS)) {
+          const value = token.hc?.[dark ? "dark" : "light"];
+          if (value === undefined) continue;
+          if (event.target.checked) set(name, value);
+          else set(name, null);
+        }
+      };
+      document.addEventListener("wa-theme", () => requestAnimationFrame(show));
+      show();
+      window.wm = wm;
+    </script>
+  </body>
+</html>

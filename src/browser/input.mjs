@@ -51,19 +51,19 @@ let gestureSeq = 0;
 const gestureToken = () => `g${Date.now().toString(36)}.${++gestureSeq}`;
 
 const GHOST_STYLE = {
-  background: "var(--wm-ghost-fill, rgb(59 130 246 / 0.10))",
-  outline: "2px dashed var(--wm-ghost-line, rgb(59 130 246 / 0.75))",
-  "outline-offset": "-2px",
-  "border-radius": "var(--wm-ghost-radius, 6px)",
+  background: "var(--wa-ghost-fill)",
+  outline: "var(--wa-ghost-line-width) dashed var(--wa-ghost-line)",
+  "outline-offset": "calc(-1 * var(--wa-ghost-line-width))",
+  "border-radius": "var(--wa-radius-md)",
   "box-shadow": "none",
   border: "0",
 };
 const GHOST_DRAGGED_STYLE = {
   ...GHOST_STYLE,
-  background: "var(--wm-ghost-fill-strong, rgb(59 130 246 / 0.24))",
-  outline: "2px solid var(--wm-ghost-line, rgb(59 130 246 / 0.9))",
+  background: "var(--wa-ghost-fill-strong)",
+  outline: "var(--wa-ghost-line-width) solid var(--wa-ghost-line)",
 };
-const GHOST_TOO_SMALL_STYLE = { outline: "2px solid var(--wm-ghost-bad, rgb(220 38 38 / 0.9))" };
+const GHOST_TOO_SMALL_STYLE = { outline: "var(--wa-ghost-line-width) solid var(--wa-ghost-bad)" };
 const HIDDEN_TEXT_STYLE = {
   position: "absolute",
   width: "1px",
@@ -564,20 +564,20 @@ export const attachInput = (options) => {
       position: "absolute",
       display: "none",
       "pointer-events": "none",
-      background: "var(--wm-zone-fill, rgb(59 130 246 / 0.18))",
-      outline: "2px solid var(--wm-zone-line, rgb(59 130 246 / 0.9))",
-      "outline-offset": "-2px",
-      "border-radius": "var(--wm-ghost-radius, 6px)",
+      background: "var(--wa-zone-fill)",
+      outline: "var(--wa-ghost-line-width) solid var(--wa-zone-line)",
+      "outline-offset": "calc(-1 * var(--wa-ghost-line-width))",
+      "border-radius": "var(--wa-radius-md)",
     });
     const lineEl = doc.createElement("div");
     lineEl.setAttribute("data-wm-drop-line", "");
     setStyles(lineEl, {
       position: "absolute",
       display: "none",
-      width: "3px",
+      width: "calc(var(--wa-ghost-line-width) * 1.5)",
       "pointer-events": "none",
-      background: "var(--wm-zone-line, rgb(59 130 246 / 0.9))",
-      "border-radius": "2px",
+      background: "var(--wa-zone-line)",
+      "border-radius": "var(--wa-radius-sm)",
     });
     overlay.append(ghostHost, zoneEl, lineEl);
     if (view?.getComputedStyle && view.getComputedStyle(root).position === "static") root.style.setProperty("position", "relative");
@@ -627,7 +627,7 @@ export const attachInput = (options) => {
       visuals.lineEl.style.setProperty("display", "none");
       return;
     }
-    setStyles(visuals.lineEl, { display: "block", left: `${rect.x - 1.5}px`, top: `${rect.y}px`, height: `${rect.height}px` });
+    setStyles(visuals.lineEl, { display: "block", left: `${rect.x}px`, top: `${rect.y}px`, height: `${rect.height}px`, translate: "-50% 0" });
   };
 
   const showWorkspaceTarget = (visuals, element) => {

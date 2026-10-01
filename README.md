@@ -223,7 +223,9 @@ In the browser (`@johnhenry/window-algebra/browser`):
 - **`attachPopouts({ wm, renderer })`** pops a window out into a real browser window, carrying its live DOM there and back.
 - **`attachSync({ wm, channel })`** (opt-in) keeps the tabs of one origin in step over a `BroadcastChannel`: whole-state snapshots, last writer wins by Lamport clock, undo/redo and pop-outs handled. See [Cross-tab sync](docs/api/sync.md).
 
-Every option, attribute and custom property is in [compile and CSS](docs/api/compile.md) and [Browser adapters](docs/api/browser.md).
+**Theming.** Every colour, radius, spacing, focus ring, splitter, title bar and shadow in the library's CSS is a `--wa-*` custom property, with light and dark defaults (OS preference or `data-theme`) and a `prefers-contrast: more` variant; override any of them on `:root`. See [Theming](docs/api/theming.md) and `demo/theming.html`.
+
+Every option and attribute is in [compile and CSS](docs/api/compile.md) and [Browser adapters](docs/api/browser.md).
 
 ## Framework bindings
 
@@ -248,6 +250,7 @@ See [Framework bindings](docs/api/bindings.md).
 | [Layouts and modifiers](docs/api/layouts.md) | `derive`, every layout spec, BSP and docking-tree helpers, split sizing, modifiers |
 | [Drag and drop](docs/api/drops.md) | drop semantics per layout, interpreters, pointer helpers |
 | [compile and CSS](docs/api/compile.md) | render tree, CSS mapping, attributes, `BASE_CSS` custom properties |
+| [Theming](docs/api/theming.md) | the `--wa-*` tokens, light/dark/high-contrast defaults |
 | [Geometry and interaction](docs/api/geometry.md) | rects, size hints, `positionPopup`, gesture math, snap and magnetism |
 | [The manager](docs/api/manager.md) | options, methods, gestures, log, load/serialize |
 | [Browser adapters](docs/api/browser.md) | renderer, input, surfaces, schedulers, pop-outs |

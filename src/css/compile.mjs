@@ -11,6 +11,9 @@
  */
 import { views } from "../algebra/transforms.mjs";
 import { CONTAINER_KINDS } from "../algebra/nodes.mjs";
+import { THEME_CSS } from "./theme.mjs";
+
+export { THEME_CSS, THEME_TOKENS } from "./theme.mjs";
 
 /** Numbers become px; strings pass through. */
 export const px = (value) => (typeof value === "number" ? `${value}px` : value);
@@ -530,36 +533,51 @@ export const toHTML = (renderNode, { slot, indent = "" } = {}) => {
   return `${open}\n${inner}\n${indent}${close}`;
 };
 
-/** Base stylesheet: host sizing plus a transition hook. Optional. */
-export const BASE_CSS = `
+/**
+ * The rules half of the base stylesheet: host sizing, window and tab chrome,
+ * focus, splitters, the drag preview and touch rules. Every colour, radius,
+ * spacing, shadow and outline width is a `--wa-*` token from `THEME_CSS`
+ * (see `css/theme.mjs`).
+ */
+export const RULES_CSS = `
 wm-overlay, wm-row, wm-column, wm-grid, wm-stack { box-sizing: border-box; }
-wm-root, [data-wm-root] { display: block; position: relative; overflow: hidden; }
-[data-wm-root] > wm-overlay { width: 100%; height: 100%; }
-wm-view[inert], wm-view[data-wm-blocked] { filter: saturate(0.6); }
-wm-tabs > button[aria-selected="true"] { font-weight: 600; }
-wm-view[data-wm-urgent], wm-tabs > button[data-wm-urgent] { outline: 2px solid var(--wm-urgent-line, rgb(234 88 12)); outline-offset: -2px; }
+wm-root, [data-wm-root] { display: block; position: relative; overflow: hidden; background: var(--wa-color-bg); color: var(--wa-color-fg); font: var(--wa-font-size)/1.4 var(--wa-font); }
+[data-wm-root] > wm-overlay { inline-size: 100%; block-size: 100%; }
+wm-view[data-mode="floating"] { border-radius: var(--wa-radius-md); box-shadow: var(--wa-shadow-window); }
+wm-view[inert], wm-view[data-wm-blocked] { filter: var(--wa-blocked-filter); }
+wm-tabs { align-items: stretch; gap: var(--wa-space-xs); padding-inline: var(--wa-space-xs); background: var(--wa-titlebar-bg); color: var(--wa-titlebar-fg); border-block-end: var(--wa-border-width) solid var(--wa-titlebar-border); font: var(--wa-font-size)/1.4 var(--wa-font); }
+wm-tabs > button { font: inherit; color: inherit; background: transparent; border: 0; border-start-start-radius: var(--wa-radius-sm); border-start-end-radius: var(--wa-radius-sm); padding: var(--wa-titlebar-padding); cursor: pointer; }
+wm-tabs > button[aria-selected="true"] { font-weight: var(--wa-titlebar-font-weight); background: var(--wa-titlebar-active-bg); }
+wm-view[data-wm-urgent], wm-tabs > button[data-wm-urgent] { outline: var(--wa-ghost-line-width) solid var(--wa-color-urgent); outline-offset: calc(-1 * var(--wa-ghost-line-width)); }
 [data-wm-dragging], [data-wm-dragging] * { cursor: grabbing !important; user-select: none; }
-[data-wm-ghost-label]::after { content: attr(data-wm-ghost-label); position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 10px; border-radius: 999px; font: 600 12px/1.4 system-ui, sans-serif; color: var(--wm-ghost-label-fg, #fff); background: var(--wm-ghost-line, rgb(59 130 246)); }
+[data-wm-ghost-label]::after { content: attr(data-wm-ghost-label); position: absolute; inset-inline-start: 50%; inset-block-start: 50%; translate: -50% -50%; max-inline-size: calc(100% - 2 * var(--wa-space-lg)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: var(--wa-space-xs) var(--wa-space-md); border-radius: var(--wa-radius-pill); font: 600 var(--wa-font-size-sm)/1.4 var(--wa-font); color: var(--wa-ghost-label-fg); background: var(--wa-ghost-line); }
 wm-view[data-wm-draggable="false"] [data-wm-handle="move"], [data-wm-drag-denied] { cursor: not-allowed; }
-wm-view[data-wm-drag-denied] { outline: 2px solid var(--wm-ghost-bad, rgb(220 38 38 / 0.9)); outline-offset: -2px; }
-[data-wm-workspace-target][data-wm-drop-active] { outline: 2px solid var(--wm-zone-line, rgb(59 130 246)); outline-offset: 1px; }
+wm-view[data-wm-drag-denied] { outline: var(--wa-ghost-line-width) solid var(--wa-ghost-bad); outline-offset: calc(-1 * var(--wa-ghost-line-width)); }
+[data-wm-workspace-target][data-wm-drop-active] { outline: var(--wa-ghost-line-width) solid var(--wa-zone-line); outline-offset: calc(var(--wa-ghost-line-width) / 2); }
 [data-wm-handle] { touch-action: none; }
 wm-tabs { touch-action: pan-x; }
 [data-wm-touch~="pinch"] wm-view[data-mode="floating"] { touch-action: none; }
 [data-wm-touch~="swipe-tabs"] wm-tabs { touch-action: pan-y; }
 [data-wm-touch~="swipe-workspaces"] { touch-action: pan-y; }
 [data-wm-touch~="context"] wm-view { -webkit-touch-callout: none; }
-[data-wm-splitter] { background: var(--wm-splitter-fill, transparent); position: relative; z-index: 1; }
+[data-wm-splitter] { background: var(--wa-splitter-fill); position: relative; z-index: 1; }
 [data-wm-splitter]::after { content: ""; position: absolute; inset: 0; margin: auto; }
-[data-wm-splitter][aria-orientation="vertical"]::after { width: 1px; height: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
-[data-wm-splitter][aria-orientation="horizontal"]::after { height: 1px; width: 100%; background: var(--wm-splitter-line, rgb(0 0 0 / 0.08)); }
-[data-wm-splitter]:hover, [data-wm-splitter]:focus-visible, [data-wm-splitter][data-wm-active] { background: var(--wm-splitter-fill-active, rgb(59 130 246 / 0.35)); }
-wm-view:focus-visible, wm-tabs > button:focus-visible, [data-wm-splitter]:focus-visible, [data-wm-handle]:focus-visible { outline: 3px solid var(--wm-focus-ring, #1d4ed8); outline-offset: 2px; box-shadow: 0 0 0 1px var(--wm-focus-ring-halo, #fff); }
-wm-view:focus-visible { outline-offset: -3px; }
-::view-transition-group(*) { animation-duration: var(--wm-transition-duration, 0.25s); }
-::view-transition-old(*), ::view-transition-new(*) { animation-duration: var(--wm-transition-duration, 0.25s); animation-timing-function: var(--wm-transition-easing, ease); }
+[data-wm-splitter][aria-orientation="vertical"]::after { inline-size: var(--wa-splitter-line-width); block-size: 100%; background: var(--wa-splitter-line); }
+[data-wm-splitter][aria-orientation="horizontal"]::after { block-size: var(--wa-splitter-line-width); inline-size: 100%; background: var(--wa-splitter-line); }
+[data-wm-splitter]:hover, [data-wm-splitter]:focus-visible, [data-wm-splitter][data-wm-active] { background: var(--wa-splitter-fill-active); }
+wm-view:focus-visible, wm-tabs > button:focus-visible, [data-wm-splitter]:focus-visible, [data-wm-handle]:focus-visible { outline: var(--wa-focus-ring-width) solid var(--wa-focus-ring-color); outline-offset: var(--wa-focus-ring-offset); box-shadow: 0 0 0 calc(var(--wa-focus-ring-width) / 3) var(--wa-focus-ring-halo); }
+wm-view:focus-visible { outline-offset: calc(-1 * var(--wa-focus-ring-width)); }
+::view-transition-group(*) { animation-duration: var(--wa-transition-duration); }
+::view-transition-old(*), ::view-transition-new(*) { animation-duration: var(--wa-transition-duration); animation-timing-function: var(--wa-transition-easing); }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   wm-overlay, wm-row, wm-column, wm-grid, wm-stack, wm-view, wm-tabs, wm-tabs > button, [data-wm-splitter] { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+@media (forced-colors: active) {
+  wm-view:focus-visible, wm-tabs > button:focus-visible, [data-wm-splitter]:focus-visible, [data-wm-handle]:focus-visible { outline-color: Highlight; }
+  [data-wm-splitter]::after { background: CanvasText; }
+}
 `.trim();
+
+/** Base stylesheet: the default theme (`THEME_CSS`, the `--wa-*` tokens) plus `RULES_CSS`. Optional. */
+export const BASE_CSS = `${THEME_CSS}\n${RULES_CSS}`;

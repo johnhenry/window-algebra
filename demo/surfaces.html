@@ -24,14 +24,14 @@
       .form { padding: 12px; display: grid; gap: 10px; align-content: start; font-size: 13px; }
       .form .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
       .form .bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
-      .form .bar i { display: block; height: 100%; width: 40%; background: var(--wa-color); animation: slide 4s linear infinite; }
+      .form .bar i { display: block; height: 100%; width: 40%; background: var(--win-color); animation: slide 4s linear infinite; }
       @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
       .form .list { height: 110px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; font: 12px/1.9 var(--mono); padding: 0 8px; background: var(--surface-2); }
       .form input[type="text"] { width: 100%; }
       @container wm-view (width < 280px) { .form .wide { display: none; } }
       /* Lazy surface content */
       .lazy { padding: 12px; font-size: 13px; display: grid; gap: 6px; align-content: start; }
-      .lazy .big { font: 700 30px/1 var(--mono); color: var(--wa-color); }
+      .lazy .big { font: 700 30px/1 var(--mono); color: var(--win-color); }
       .lazy ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
       @media (max-width: 900px) {
         main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(520px, 75dvh) auto; }
@@ -91,7 +91,7 @@
         mount(target) {
           stats[id].mounts++;
           log.add("event", `mount ${kind}`, id);
-          target.style.setProperty("--wa-color", color);
+          target.style.setProperty("--win-color", color);
           const body = h("div", { class: "wa-body" });
           const win = h("div", { class: "wa-win" },
             h("div", { class: "wa-bar", "data-wm-handle": "move" }, h("span", { class: "wa-dot" }), h("span", { class: "wa-title" }, title), h("span", { class: "wa-meta", "data-meta": id }, `${kind}Surface`), h("span", { class: "wa-actions" },

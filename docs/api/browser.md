@@ -56,7 +56,7 @@ It reconciles a render tree into real DOM:
 
 **The JS anchor fallback.** With `anchorFallback`, the native anchor declarations are stripped and each anchored element is positioned with `left`/`top` computed from measured rects. Side-anchored elements run the full [`positionPopup`](./geometry.md#positionpopupanchorrect-popupsize-stage-options), including `slide` and `resize` (setting `width`/`height` when it shrinks something). Inside-anchored elements are aligned by `justify-self`/`align-self`. Coordinates and sizes it set are cleared when an element stops being anchored.
 
-**Animation.** Every primary view gets a unique `view-transition-name` (`wm-r<renderer#>-<sanitized id>`, unique per document), so each window animates on its own. `duration`/`easing` set `--wm-transition-duration`/`--wm-transition-easing` on the document element, which `BASE_CSS` reads. The manager passes `immediate: true` for commands carrying a `gesture` token or `immediate: true`.
+**Animation.** Every primary view gets a unique `view-transition-name` (`wm-r<renderer#>-<sanitized id>`, unique per document), so each window animates on its own. `duration`/`easing` set `--wa-transition-duration`/`--wa-transition-easing` on the document element, which `BASE_CSS` reads. The manager passes `immediate: true` for commands carrying a `gesture` token or `immediate: true`.
 
 ## `attachInput(options)`
 
