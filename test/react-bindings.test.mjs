@@ -153,6 +153,61 @@ describe("createReactBindings: WindowManagerStage", () => {
     assert.equal(host.querySelectorAll("[data-action]").length, 3);
   });
 
+  test("stageRef (object or callback) and onStage receive the stage's handles, and null on unmount", () => {
+    const { react, bindings, root } = stageSetup();
+    const { useWindowManager, WindowManagerStage } = bindings;
+    const seen = [];
+    const objectRef = { current: undefined };
+    let wm;
+    const App = () => {
+      ({ wm } = useWindowManager());
+      return react.createElement(WindowManagerStage, {
+        wm,
+        schedule: immediateScheduler,
+        palette: true,
+        sync: false,
+        stageRef: objectRef,
+        onStage: (stage) => seen.push(stage),
+      });
+    };
+    const handle = react.render(App, {}, { container: root });
+    assert.equal(objectRef.current.wm, wm);
+    assert.ok(objectRef.current.renderer);
+    assert.equal(objectRef.current.sync, null);
+    objectRef.current.palette.open();
+    assert.equal(objectRef.current.palette.isOpen, true, "a button can open the palette through the ref");
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0], objectRef.current);
+    handle.unmount();
+    assert.equal(objectRef.current, null);
+    assert.equal(seen.at(-1), null);
+  });
+
+  test("a callback stageRef, and sync: true makes stage.sync.peers() reachable (a \"Tabs: 2\" indicator)", async () => {
+    const { createBroadcastHub } = await import("./helpers/fake-broadcast.mjs");
+    const hub = createBroadcastHub();
+    const stages = {};
+    const mount = (tab) => {
+      const { react, bindings, root } = stageSetup();
+      const { useWindowManager, WindowManagerStage } = bindings;
+      const App = () => {
+        const { wm } = useWindowManager();
+        return react.createElement(WindowManagerStage, {
+          wm,
+          schedule: immediateScheduler,
+          sync: { channel: new hub.BroadcastChannel("wa"), id: tab, schedule: immediateScheduler },
+          stageRef: (value) => (stages[tab] = value),
+        });
+      };
+      react.render(App, {}, { container: root });
+    };
+    mount("tab-a");
+    mount("tab-b");
+    hub.deliver();
+    assert.deepEqual(stages["tab-a"].sync.peers(), ["tab-b"]);
+    assert.deepEqual(stages["tab-b"].sync.peers(), ["tab-a"]);
+  });
+
   test("detaches on unmount: later dispatches no longer touch that DOM", () => {
     const { doc, react, bindings, root } = stageSetup();
     const { useWindowManager, WindowManagerStage } = bindings;

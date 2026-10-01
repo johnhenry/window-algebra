@@ -241,6 +241,8 @@ export const CHECKLIST = [
     ["defineWindowAlgebraElement", "defineWindowAlgebraElement(name): a framework-agnostic <wa-stage> custom element"],
     ["attachStage", "attachStage(host, options): the element's reusable DOM-shaped core (wm + renderer + input)"],
     ["wa-stage-configure", "<wa-stage>.configure(options) / .wm: set or swap the manager live, read it back"],
+    ["wa-stage-handles", "<wa-stage>.renderer / .palette / .sync / .popouts: the handles attachStage creates, null while disconnected or when the option is off (stage.palette.open(), stage.sync.peers())"],
+    ["react-stage-handles", "<WindowManagerStage stageRef onStage sync palette chrome popouts>: the same handles through a ref or callback"],
     ["bindings-exports", "package.json exports subpaths ./react and ./element"],
   ]),
 ];
@@ -416,7 +418,7 @@ export const PAGES = [
     title: "<wa-stage> custom element",
     blurb: "A framework-agnostic custom element that owns its own manager, DOM renderer and input adapter, exposing the live manager as `.wm`. Works fully offline.",
     covers: [
-      "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "bindings-exports", "chrome-option",
+      "defineWindowAlgebraElement", "attachStage", "wa-stage-configure", "wa-stage-handles", "wa-palette", "attachSync", "createPalette", "bindings-exports", "chrome-option",
       "createWindowManager", "createSurfaceRegistry", "lazySurface", "layout/set", "window/close", "undo-redo",
       "window/create", "focus/next",
     ],
@@ -479,7 +481,7 @@ export const PAGES = [
     title: "React bindings",
     blurb: "createReactBindings(React): useWindowManager, useWindowState, and WindowManagerStage rendering window content as React portals. Loads React from esm.sh — needs network.",
     covers: [
-      "createReactBindings", "useWindowManager", "useWindowState", "WindowManagerStage", "react-portal-surfaces", "bindings-exports",
+      "createReactBindings", "useWindowManager", "useWindowState", "WindowManagerStage", "react-portal-surfaces", "react-stage-handles", "createPalette", "bindings-exports",
       "createWindowManager", "layout/set", "window/close", "window/create", "undo-redo", "subscribe",
     ],
   },

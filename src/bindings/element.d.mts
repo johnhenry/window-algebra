@@ -47,6 +47,14 @@ export interface WindowAlgebraElement extends HTMLElement {
   configure(options?: StageOptions): this;
   /** The live window manager while connected, `null` otherwise. */
   readonly wm: WindowManager<any> | null;
+  /** The live DOM renderer while connected, `null` otherwise. */
+  readonly renderer: DomRenderer | null;
+  /** The command palette handle (`open()`, `toggle()`, ...) when the `palette` option is on; `null` otherwise or while disconnected. */
+  readonly palette: Palette | null;
+  /** The cross-tab sync handle (`peers()`, `flush()`, ...) when the `sync` option is on; `null` otherwise or while disconnected. */
+  readonly sync: Sync | null;
+  /** The pop-out handle when the stage has one; `null` otherwise or while disconnected. */
+  readonly popouts: Popouts | null;
 }
 export interface CommandPaletteElement extends HTMLElement {
   configure(options?: PaletteOptions): this;

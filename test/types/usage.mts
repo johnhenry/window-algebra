@@ -255,6 +255,19 @@ handle.detach();
 const Stage = defineWindowAlgebraElement("wa-stage");
 const element = new Stage().configure({ wm });
 element.wm?.getState();
+element.palette?.open();
+element.palette?.isOpen satisfies boolean | undefined;
+element.sync?.peers() satisfies string[] | undefined;
+element.renderer?.measure();
+element.popouts?.isPoppedOut("a");
+// @ts-expect-error the handles are read-only
+element.palette = null;
+handle.palette?.toggle();
+handle.sync?.peers();
+handle.popouts?.popIn("a");
+const stageRef: { current: typeof handle | null } = { current: null };
+WindowManagerStage({ wm, palette: true, sync: true, chrome: true, popouts: true, stageRef, onStage: (stage) => void stage?.palette?.open() });
+WindowManagerStage({ wm, stageRef: (stage) => void stage?.sync?.peers() });
 const Palette = defineCommandPaletteElement();
 new Palette().configure({ wm }).open();
 

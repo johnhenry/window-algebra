@@ -203,6 +203,107 @@ describe("defineWindowAlgebraElement", () => {
   });
 });
 
+describe("<wa-stage> exposes the handles it creates (palette, sync, popouts, renderer)", () => {
+  const registry = () => ({
+    defs: new Map(),
+    define(name, ctor) {
+      this.defs.set(name, ctor);
+    },
+    get(name) {
+      return this.defs.get(name);
+    },
+  });
+  const make = (name) => {
+    const doc = createFakeDocument();
+    class FakeHTMLElement extends FakeElement {
+      constructor() {
+        super("wa-stage", doc);
+      }
+    }
+    const Ctor = defineWindowAlgebraElement(name, { customElements: registry(), HTMLElement: FakeHTMLElement });
+    const el = new Ctor();
+    doc.body.append(el);
+    return { doc, el };
+  };
+
+  test("all null while disconnected, and null for an option that is off", () => {
+    const { el } = make("wa-handles-1");
+    for (const name of ["wm", "renderer", "palette", "sync", "popouts"]) assert.equal(el[name], null, name);
+    el.configure({ schedule: immediateScheduler });
+    el.connectedCallback();
+    assert.ok(el.wm);
+    assert.ok(el.renderer, "the renderer is always there");
+    assert.equal(el.renderer.root, el);
+    assert.equal(el.palette, null, "palette is off by default");
+    assert.equal(el.sync, null, "sync is off by default");
+    assert.equal(el.popouts, null, "popouts are off by default");
+    el.disconnectedCallback();
+    assert.equal(el.renderer, null);
+  });
+
+  test("palette: true gives stage.palette, and a button can open it (not just the shortcut)", () => {
+    const { doc, el } = make("wa-handles-2");
+    el.configure({ schedule: immediateScheduler, palette: true });
+    el.connectedCallback();
+    assert.ok(el.palette);
+    assert.equal(el.palette.isOpen, false);
+    el.palette.open();
+    assert.equal(el.palette.isOpen, true);
+    assert.ok(doc.body.querySelector("[data-wm-palette]"));
+    el.palette.toggle();
+    assert.equal(el.palette.isOpen, false);
+    el.disconnectedCallback();
+    assert.equal(el.palette, null, "released with the stage");
+  });
+
+  test("sync: true gives stage.sync: peers() sees the other tab, flush() and detach() are reachable", async () => {
+    const { createBroadcastHub } = await import("./helpers/fake-broadcast.mjs");
+    const hub = createBroadcastHub();
+    const a = make("wa-handles-3a");
+    const b = make("wa-handles-3b");
+    a.el.configure({ schedule: immediateScheduler, sync: { channel: new hub.BroadcastChannel("wa"), id: "a", schedule: immediateScheduler } });
+    b.el.configure({ schedule: immediateScheduler, sync: { channel: new hub.BroadcastChannel("wa"), id: "b", schedule: immediateScheduler } });
+    a.el.connectedCallback();
+    b.el.connectedCallback();
+    hub.deliver();
+    assert.deepEqual(a.el.sync.peers(), ["b"]);
+    assert.deepEqual(b.el.sync.peers(), ["a"]);
+    a.el.wm.create({ id: "w" });
+    a.el.sync.flush();
+    hub.deliver();
+    assert.ok(b.el.wm.getState().windows.w);
+    assert.equal(a.el.sync.id, "a");
+    b.el.disconnectedCallback();
+    a.el.disconnectedCallback();
+  });
+
+  test("the handles follow .configure(): reconfiguring while connected swaps them, and clearing an option nulls it", () => {
+    const { el } = make("wa-handles-4");
+    el.configure({ schedule: immediateScheduler, palette: true });
+    el.connectedCallback();
+    const first = el.palette;
+    el.configure({ schedule: immediateScheduler, palette: true });
+    assert.ok(el.palette);
+    assert.notEqual(el.palette, first);
+    el.configure({ schedule: immediateScheduler });
+    assert.equal(el.palette, null);
+    el.disconnectedCallback();
+  });
+
+  test("a chrome pop-out button (or popouts: true) gives stage.popouts", () => {
+    const { el } = make("wa-handles-5");
+    el.configure({ schedule: immediateScheduler, chrome: { buttons: ["popout", "close"] } });
+    el.connectedCallback();
+    assert.equal(typeof el.popouts.popOut, "function");
+    el.disconnectedCallback();
+    const other = make("wa-handles-6");
+    other.el.configure({ schedule: immediateScheduler, popouts: true });
+    other.el.connectedCallback();
+    assert.ok(other.el.popouts);
+    other.el.disconnectedCallback();
+  });
+});
+
 describe("command palette bindings", () => {
   const registryFor = () => ({
     defs: new Map(),

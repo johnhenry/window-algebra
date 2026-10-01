@@ -74,12 +74,17 @@ export const createReactBindings = (React) => {
    *   commits synchronously.
    * - `anchorFallback?`, `input?` (object merged into `attachInput`'s
    *   options), `as?` (host tag, default "div"): passed through.
-   * - `chrome?`, `popouts?`: as for `attachStage` (read when the stage attaches, i.e. when `wm` changes).
+   * - `chrome?`, `popouts?`, `sync?`, `palette?`, `direction?`: as for `attachStage` (read when the stage
+   *   attaches, i.e. when `wm` changes).
+   * - `stageRef?`: a ref object (`{ current }`) or a callback that receives the stage's handles
+   *   (`{ wm, renderer, sync, palette, popouts, detach }`) once attached, and `null` when it detaches, so a
+   *   button can call `stageRef.current.palette.open()` or read `stageRef.current.sync.peers()`.
+   * - `onStage?(stage | null)`: the same, as a callback prop.
    * - Everything else (`className`, `style`, `id`, ...) lands on the host
    *   element as ordinary props.
    */
   const WindowManagerStage = (props) => {
-    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, chrome, popouts, as = "div", ...rest } = props;
+    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, chrome, popouts, sync, palette, direction, stageRef, onStage, as = "div", ...rest } = props;
     const hostRef = useRef(null);
     const [portals, setPortals] = useState(() => new Map());
 
@@ -114,8 +119,15 @@ export const createReactBindings = (React) => {
             }
           : undefined;
 
-      const stage = attachStage(root, { wm, surfaceFor, anchorFallback, input, schedule, chrome, popouts });
+      const stage = attachStage(root, { wm, surfaceFor, anchorFallback, input, schedule, chrome, popouts, sync, palette, ...(direction === undefined ? {} : { direction }) });
+      const publish = (value) => {
+        if (typeof stageRef === "function") stageRef(value);
+        else if (stageRef) stageRef.current = value;
+        onStage?.(value);
+      };
+      publish(stage);
       return () => {
+        publish(null);
         stage.detach();
         setPortals(new Map());
       };

@@ -20,8 +20,9 @@ export { attachStage };
  * Defines (and returns) a `<name>` custom element class. Call `.configure(options)`
  * on an instance (any time — before or after it is connected) to set or
  * replace its window manager and renderer/input options; omit it to get a
- * plain default-configured stage. The element exposes `.wm`, live for as
- * long as it is connected (`null` otherwise).
+ * plain default-configured stage. The element exposes the handles `attachStage`
+ * made, live for as long as it is connected (`null` otherwise): `.wm`, `.renderer`,
+ * `.palette` and `.sync` (each also `null` when its option is off), and `.popouts`.
  *
  * @param {string} [name] tag name, must contain a hyphen
  * @param {object} [deps] for testing outside a browser: `{ customElements, HTMLElement }`
@@ -65,6 +66,32 @@ export const defineWindowAlgebraElement = (
     /** The live window manager, or `null` while disconnected. */
     get wm() {
       return this.#stage?.wm ?? null;
+    }
+
+    /** The live DOM renderer, or `null` while disconnected. */
+    get renderer() {
+      return this.#stage?.renderer ?? null;
+    }
+
+    /**
+     * The command palette handle (`open()`, `close()`, `toggle()`, `isOpen`) when the `palette` option is on,
+     * else `null`; `null` too while disconnected. A button can call `stage.palette?.open()`.
+     */
+    get palette() {
+      return this.#stage?.palette ?? null;
+    }
+
+    /**
+     * The cross-tab sync handle (`peers()`, `flush()`, `detach()`, ...) when the `sync` option is on, else
+     * `null`; `null` too while disconnected.
+     */
+    get sync() {
+      return this.#stage?.sync ?? null;
+    }
+
+    /** The `attachPopouts` handle when the stage has one (see `popouts` and `chrome` options), else `null`. */
+    get popouts() {
+      return this.#stage?.popouts ?? null;
     }
   }
 

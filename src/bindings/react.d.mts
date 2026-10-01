@@ -1,6 +1,6 @@
 import type { Scheduler, State, WindowManager, WindowManagerOptions } from "../index.mjs";
 import type { AttachInputOptions } from "../browser/index.mjs";
-import type { StageOptions } from "./element.mjs";
+import type { Stage, StageOptions } from "./element.mjs";
 
 /**
  * The slice of React the bindings use. Pass React itself (or a compatible
@@ -31,6 +31,15 @@ export interface WindowManagerStageProps {
   chrome?: StageOptions["chrome"];
   /** Pop-outs, as for `attachStage`. */
   popouts?: StageOptions["popouts"];
+  /** Cross-tab sync, as for `attachStage`; reach it through `stageRef` (`stage.sync.peers()`). */
+  sync?: StageOptions["sync"];
+  /** A command palette, as for `attachStage`; reach it through `stageRef` (`stage.palette.open()`). */
+  palette?: StageOptions["palette"];
+  direction?: StageOptions["direction"];
+  /** Receives the stage's handles (`wm`, `renderer`, `sync`, `palette`, `popouts`, `detach`) once attached, `null` when it detaches. A ref object or a callback. */
+  stageRef?: { current: Stage | null } | ((stage: Stage | null) => void);
+  /** The same as a callback prop: the handles on attach, `null` on detach. */
+  onStage?: (stage: Stage | null) => void;
   /** The host tag (default `"div"`). Give the host a height: the stage fills it. */
   as?: string;
   /** Everything else (`className`, `style`, `id`, ...) lands on the host element. */

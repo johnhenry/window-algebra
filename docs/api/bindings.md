@@ -57,6 +57,9 @@ Mounts a `createDomRenderer` plus `attachInput` pair into a host element for the
 | `anchorFallback` | Forwarded to `createDomRenderer`. |
 | `chrome` | Built-in window chrome around every window, as for `attachStage` (`true` or `{ buttons, icon, icons, labels, for }`). Read when the stage attaches. |
 | `popouts` | Pop-outs, as for `attachStage`. |
+| `sync`, `palette`, `direction` | As for `attachStage` (cross-tab sync, a command palette, direction following). Read when the stage attaches. |
+| `stageRef` | A ref object (`{ current }`) or a callback. It receives the stage's handles (`{ wm, renderer, sync, palette, popouts, detach }`) once the stage attaches, and `null` when it detaches, so a button can call `stageRef.current?.palette?.open()` and a status line can read `stageRef.current?.sync?.peers()`. It is set from an effect, so read it in event handlers or effects, not during render. |
+| `onStage(stage \| null)` | The same, as a callback prop. |
 | `input` | An object merged into `attachInput`'s options (`{ wm, root }` are supplied; add `announce`, `keyboard`, `modifier`, …). |
 | `as` | The host tag, default `"div"`. |
 | anything else | Passed to the host element (`className`, `style`, `id`, …). |
@@ -92,6 +95,12 @@ Instance API:
 | --- | --- |
 | `configure(options)` | Sets or replaces the stage options (same shape as `attachStage`). If connected, it detaches and re-attaches immediately. It returns the element. |
 | `wm` | The live manager while connected, `null` otherwise. |
+| `renderer` | The live `createDomRenderer` handle (`measure()`, `elementFor(id)`, `bodyFor(id)`, ...) while connected, `null` otherwise. |
+| `palette` | The command palette handle of the `palette` option, `null` while disconnected or when the option is off. `stage.palette.open()`, `.close()`, `.toggle()`, `.isOpen`: a button (or a touch device with no keyboard) can open it, not only its shortcut. |
+| `sync` | The cross-tab sync handle of the `sync` option, `null` while disconnected or when the option is off. `stage.sync.peers()` (a "Tabs: 2" indicator), `.flush()`, `.detach()`, `.id`, `.clock`. |
+| `popouts` | The `attachPopouts` handle, when the `popouts` option (or a `"popout"` chrome button) made one, else `null`. `stage.popouts.popOut(id)`, `.popIn(id)`, `.isPoppedOut(id)`. |
+
+All five are read-only getters that follow the element's lifecycle, like `wm`: they are `null` before it is connected and after it is disconnected, and **`configure()` while connected detaches and re-attaches, so a handle you kept from before is stale; read the property again.** Because they can be `null`, call them with `?.`: `stage.palette?.open()`.
 
 Lifecycle: `connectedCallback` → `attachStage(this, options)`; `disconnectedCallback` → `detach()`. **Without an explicit `wm` in the options, a new manager is created on every connect and every `configure`**, so the previous windows are gone. Pass your own `wm` to keep state across re-parenting or reconfiguration.
 
@@ -131,7 +140,7 @@ attachStage(host, {
   direction,       // "auto" (default: follow an explicit dir) | "ltr" | "rtl" | false
   sync,            // true | attachSync options: keep this stage in step with other tabs (off by default)
   palette,         // true | createPalette options: a command palette for this stage's manager (off by default)
-}) → { wm, renderer, sync, palette, popouts, detach() }   // sync/palette/popouts are the handles, or null
+}) → { wm, renderer, sync, palette, popouts, detach() }   // sync/palette/popouts are the handles, or null; the element's getters return these
 ```
 
 It commits once, then re-commits after dispatches, coalesced to one commit per frame (a bare `requestAnimationFrame`; outside a browser it falls back to a 16 ms timer, so pass `schedule: immediateScheduler` in tests). `detach()` unsubscribes, detaches input and destroys the renderer.

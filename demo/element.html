@@ -28,17 +28,21 @@
       <button class="btn small" id="redo">Redo</button>
       <span class="sep"></span>
       <button class="btn small" id="reconfigure">Swap wm (.configure)</button>
+      <span class="sep"></span>
+      <button class="btn small" id="open-palette" type="button" aria-haspopup="dialog">Command palette</button>
+      <span class="chip" id="tabs" aria-live="polite">Tabs: 1</span>
     </nav>
     <p class="note">
       Works entirely offline: no framework, no build step. <code>&lt;wa-stage&gt;</code> is a plain
       <code>HTMLElement</code> subclass that owns its own window manager, DOM renderer and input adapter for as long
-      as it is connected, and exposes the live manager as <code>.wm</code>.
+      as it is connected, and exposes what it made: <code>.wm</code>, <code>.renderer</code>, and for the
+      <code>palette</code> and <code>sync</code> options <code>.palette</code> (the button calls
+      <code>stage.palette.open()</code>) and <code>.sync</code> (the tab count reads <code>stage.sync.peers()</code>; open this page in a second tab).
     </p>
     <wa-stage id="stage" class="stage" aria-label="window-algebra stage"></wa-stage>
 
     <script type="module">
       import { createWindowManager, createState } from "../src/index.mjs";
-      import { createSurfaceRegistry } from "../src/browser/index.mjs";
       import { defineWindowAlgebraElement } from "../src/bindings/element.mjs";
       import { initPage } from "./shared/kit.mjs";
 
@@ -49,12 +53,12 @@
       // `customElements.define`.
       defineWindowAlgebraElement("wa-stage");
 
-      const surfaces = createSurfaceRegistry();
+      // Content is local to a tab (only state is synced), so build it from the id on demand.
+      const surfaceFor = (id) => ({ mount: (el) => (el.textContent = `${id}: rendered by <wa-stage>'s own DOM renderer, inside its built-in window chrome.`), unmount: () => {} });
       let counter = 0;
       const open = (wm, options = {}) => {
         const id = options.id ?? `w${++counter}`;
         const title = options.title ?? `Window ${counter}`;
-        surfaces.set(id, { mount: (el) => (el.textContent = `${id}: rendered by <wa-stage>'s own DOM renderer, inside its built-in window chrome.`), unmount: () => {} });
         wm.create({ id, title, ...options });
         return id;
       };
@@ -69,7 +73,14 @@
 
       const stage = document.getElementById("stage");
       let wm = startWm();
-      stage.configure({ wm, surfaceFor: surfaces, chrome: true });
+      // palette: true and sync: true create handles; the element exposes them as stage.palette and stage.sync.
+      const refreshTabs = () => {
+        document.getElementById("tabs").textContent = `Tabs: ${(stage.sync?.peers().length ?? 0) + 1}`;
+      };
+      const options = () => ({ wm, surfaceFor, chrome: true, palette: true, sync: { channel: "window-algebra-element-demo", onSync: refreshTabs } });
+      stage.configure(options());
+      document.getElementById("open-palette").onclick = () => stage.palette?.open();
+      setInterval(refreshTabs, 500);
 
       const focused = () => stage.wm.state.focus.window;
       document.getElementById("new").onclick = () => open(stage.wm);
@@ -81,7 +92,7 @@
       // windows) replaces the old one without recreating the element itself.
       document.getElementById("reconfigure").onclick = () => {
         wm = startWm();
-        stage.configure({ wm, surfaceFor: surfaces, chrome: true });
+        stage.configure(options());
       };
 
       window.stage = stage;

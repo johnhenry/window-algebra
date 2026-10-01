@@ -39,6 +39,8 @@
       <span class="sep"></span>
       <button class="btn small" id="undo">Undo</button>
       <button class="btn small" id="redo">Redo</button>
+      <span class="sep"></span>
+      <button class="btn small" id="open-palette" type="button" aria-haspopup="dialog">Command palette</button>
       <span class="chip" id="count"></span>
     </nav>
     <p class="network-note">
@@ -104,6 +106,7 @@
 
         const App = () => {
           const { wm } = useWindowManager({ state: createState({ config: { gap: 6, inset: 6 } }), history: 200 });
+          const stageRef = useRef(null); // WindowManagerStage fills it with { wm, renderer, palette, sync, popouts, detach }
           const wmRef = useRef(wm);
           wmRef.current = wm;
           const count = useWindowState(wm, (state) => Object.keys(state.windows).length);
@@ -121,10 +124,13 @@
           document.getElementById("layout").onchange = (event) => wm.setLayout({ type: event.target.value });
           document.getElementById("undo").onclick = () => wm.undo();
           document.getElementById("redo").onclick = () => wm.redo();
+          document.getElementById("open-palette").onclick = () => stageRef.current?.palette?.open();
 
           return e(WindowManagerStage, {
             wm,
             className: "stage",
+            palette: true,
+            stageRef,
             renderSurface: (id) => e(WindowSurface, { wm, id, title: wm.getState().windows[id]?.title ?? id }),
             createPortal,
           });

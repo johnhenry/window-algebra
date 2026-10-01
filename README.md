@@ -237,7 +237,7 @@ Every option and attribute is in [compile and CSS](docs/api/compile.md) and [Bro
 Neither binding adds a dependency.
 
 - **React** (`@johnhenry/window-algebra/react`): `createReactBindings(React)` returns `useWindowManager`, `useWindowState(wm, selector)` and `<WindowManagerStage wm renderSurface createPortal>`, which renders window content as React portals while the WM owns layout and chrome.
-- **Custom element** (`@johnhenry/window-algebra/element`): `defineWindowAlgebraElement()` registers `<wa-stage>`, a manager, renderer and input adapter for as long as the element is connected. `.configure({ wm, surfaceFor })`, `.wm`. `attachStage(host, options)` is the reusable core.
+- **Custom element** (`@johnhenry/window-algebra/element`): `defineWindowAlgebraElement()` registers `<wa-stage>`, a manager, renderer and input adapter for as long as the element is connected. `.configure({ wm, surfaceFor, chrome, palette, sync })`, `.wm`, and the handles it creates: `.renderer`, `.palette` (`stage.palette.open()`), `.sync` (`stage.sync.peers()`) and `.popouts`. `attachStage(host, options)` is the reusable core. In React, `<WindowManagerStage stageRef={ref}>` hands you the same handles.
 
 See [Framework bindings](docs/api/bindings.md).
 
