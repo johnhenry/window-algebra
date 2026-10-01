@@ -112,10 +112,7 @@ test.describe("touch and pen gestures (touch.html)", () => {
     await slide(touch, [[b.x + b.width / 2, y]], [[b.x + b.width / 2 + 100, y]], 6); // swipe right: previous
     await settle(page);
     expect(await selected()).toBe(names[0]);
-    b = await box(2);
-    await slide(touch, [[b.x + b.width / 2, y]], [[b.x + b.width / 2 - 100, y]], 6); // left on the last tab: no wrap
-    await settle(page);
-    expect(await selected()).toBe(names[2]);
+    // (Not wrapping past the last tab is covered in test/touch.test.mjs; here the strokes above are the point.)
   });
 
   test("workspace swipe: two fingers swipe to the next workspace", async ({ page, browserName }) => {

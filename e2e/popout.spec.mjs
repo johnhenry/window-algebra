@@ -33,8 +33,8 @@ test.describe("pop-out (desktop.html, popups allowed)", () => {
     await expect.poll(async () => (await stateOf(page)).windows[id].status).toBe("popped-out");
     const closed = popup.waitForEvent("close");
     // The same button, now "Pop in", lives in the popup.
-    await popup.locator(`wm-view[data-view="${id}"] [data-action="popout"]`).click();
-    await closed;
+    // Clicking closes the popup under the click, so the click itself may report a closed page (Firefox does).
+    await Promise.all([closed, popup.locator(`wm-view[data-view="${id}"] [data-action="popout"]`).click().catch(() => {})]);
     await expect.poll(async () => (await stateOf(page)).windows[id].status).toBe("normal");
   });
 

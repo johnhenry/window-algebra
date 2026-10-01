@@ -155,7 +155,7 @@
       // 3. iframeSurface with srcdoc (no external sites). The parent counts load events.
       const srcdoc = (theme) => `<!doctype html><html><head><meta charset="utf-8"><style>
         :root{color-scheme:${theme}} body{margin:0;font:13px/1.5 system-ui,sans-serif;padding:12px;background:${theme === "dark" ? "#181c22" : "#fff"};color:${theme === "dark" ? "#e7eaef" : "#161a20"}}
-        .n{font:700 34px/1 ui-monospace,monospace;color:${theme === "dark" ? "#5fc4dc" : "#1b6f85"}} button{font:inherit;padding:3px 10px} .muted{color:${theme === "dark" ? "#a3abb8" : "#566070"};font-size:12px}
+        .n{font:700 34px/1 ui-monospace,monospace;color:${theme === "dark" ? "#5fc4dc" : "#1b6f85"}} button{font:inherit;padding:3px 10px;color:${theme === "dark" ? "#e7eaef" : "#161a20"};background:${theme === "dark" ? "#2c333d" : "#eceef2"};border:1px solid ${theme === "dark" ? "#3d4550" : "#b8bec8"};border-radius:4px} .muted{color:${theme === "dark" ? "#a3abb8" : "#566070"};font-size:12px}
         @keyframes spin{to{transform:rotate(360deg)}} .spin{display:inline-block;width:14px;height:14px;border:2px solid #2c9fb8;border-right-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle}
       </style></head><body>
         <strong>iframeSurface</strong> <span class="spin"></span>
