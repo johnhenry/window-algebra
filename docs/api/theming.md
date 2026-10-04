@@ -30,7 +30,7 @@ Setting `BASE_CSS` as a `<style>`'s `textContent` (the snippet above), and the `
 goes through the CSSOM (`element.style.setProperty`), which a CSP allows, so the fix is only about these two sheets:
 write `BASE_CSS` and `PALETTE_CSS` (both exported; `PALETTE_CSS` from `@johnhenry/window-algebra/browser`) to a `.css`
 file at build time, link it, and pass `injectStyles: false` to `createPalette` (or to `<wa-palette>`'s `configure`).
-Nothing else needs `'unsafe-inline'`. The [workbench](https://github.com/johnhenry/workbench) app does exactly this under
+Nothing else needs `'unsafe-inline'`. The archived [workbench](https://github.com/johnhenry/workbench) app did exactly this under
 `require-trusted-types-for 'script'`.
 
 ## Light, dark and high contrast
