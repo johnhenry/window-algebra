@@ -61,6 +61,8 @@ export const touchTokens = (options) =>
  * @param {(command: object) => unknown} ctx.dispatch
  * @param {(command: object) => unknown} ctx.send dispatch with announcements
  * @param {(event: object) => {x: number, y: number}} ctx.local pointer position relative to the root
+ * @param {() => number} [ctx.unit] screen pixels per unit of `local` (a zoomed stage; default 1): `slop` and the
+ *   swipe distances are screen pixels, so travel in `local` units is multiplied by it before they are compared
  * @param {(target: Element) => Element|null} ctx.viewOf the wm-view element a target is in
  * @param {(id: string) => ({x: number, y: number, width: number, height: number}|null)} ctx.floatRect a pinchable window's rect, or null if it cannot be pinched
  * @param {(rect: object) => object} [ctx.mirror] maps a rect between a window's own (inline-start) x and the
@@ -75,7 +77,7 @@ export const touchTokens = (options) =>
  * @param {() => string} ctx.token a fresh gesture token
  */
 export const createTouchGestures = (ctx) => {
-  const { options, root, getState, dispatch, send, local, viewOf, floatRect, rootWorkspace, stackOrder = () => null, direction, busy, cancelOthers, timers, token, mirror = (rect) => rect } = ctx;
+  const { options, root, getState, dispatch, send, local, viewOf, floatRect, rootWorkspace, stackOrder = () => null, direction, busy, cancelOthers, timers, token, mirror = (rect) => rect, unit = () => 1 } = ctx;
   const pointers = new Map(); // touch pointerId -> { x, y, target, view }
   let single = null; // { pointerId, type, x0, y0, t0, x, y, tabs, press: timer, viewEl, moved }
   let multi = null; // pinch or two-finger swipe in progress
@@ -144,8 +146,9 @@ export const createTouchGestures = (ctx) => {
       return;
     }
     if (cancelled) return;
-    const dx = session.c.x - session.c0.x;
-    const dy = session.c.y - session.c0.y;
+    const s = unit();
+    const dx = (session.c.x - session.c0.x) * s;
+    const dy = (session.c.y - session.c0.y) * s;
     const verdict = swipeOf({ dx, dy, duration: now() - session.t0 }, { distance: options.workspaceSwipeDistance, maxDuration: 900 });
     if (verdict === "left" || verdict === "right") stepWorkspace(verdict === "left" ? 1 : -1);
   };
@@ -252,7 +255,7 @@ export const createTouchGestures = (ctx) => {
       const at = local(event);
       single.x = at.x;
       single.y = at.y;
-      if (!single.moved && Math.hypot(at.x - single.x0, at.y - single.y0) > options.slop) {
+      if (!single.moved && Math.hypot(at.x - single.x0, at.y - single.y0) * unit() > options.slop) {
         single.moved = true;
         clearPress();
       }
@@ -278,7 +281,8 @@ export const createTouchGestures = (ctx) => {
       clearPress();
       single = null;
       if (!cancelled && (session.strip || session.windows) && !multi) {
-        const verdict = swipeOf({ dx: session.x - session.x0, dy: session.y - session.y0, duration: now() - session.t0 }, { distance: options.swipeDistance });
+        const s = unit();
+        const verdict = swipeOf({ dx: (session.x - session.x0) * s, dy: (session.y - session.y0) * s, duration: now() - session.t0 }, { distance: options.swipeDistance });
         if (verdict === "left" || verdict === "right") {
           if (session.strip) stepTab(session.strip, verdict === "left" ? 1 : -1);
           else stepWindow(verdict === "left" ? 1 : -1);

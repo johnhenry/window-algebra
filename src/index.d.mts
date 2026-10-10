@@ -6,6 +6,7 @@
  */
 import type { LayoutNode, ViewNode } from "./types/tree.mjs";
 import type {
+  Bounds,
   BuiltInLayoutSpec,
   Config,
   Constraints,
@@ -276,6 +277,8 @@ export function paintOrder(state: State, outputId?: string): string[];
 /** The stage's reading direction (`"ltr"` when `config.direction` is missing). */
 export function directionOf(state: State): Direction;
 export function isRtl(state: State): boolean;
+/** What bounds floating windows (`"stage"` when `config.bounds` is missing). */
+export function boundsOf(state: State): Bounds;
 export function matchRules(state: State, win: Partial<WindowRecord> & { id: string }): number[];
 export function validRules(rules: unknown): rules is Rule[];
 export const MATCH_FIELDS: readonly string[];

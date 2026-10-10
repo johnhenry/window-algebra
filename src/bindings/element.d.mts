@@ -1,5 +1,5 @@
 import type { WindowManager, WindowManagerOptions } from "../index.mjs";
-import type { AttachInputOptions, AttachPopoutsOptions, AttachSyncOptions, ChromeOptions, DomRenderer, PaletteOptions, Palette, Popouts, Sync, SurfaceFor } from "../browser/index.mjs";
+import type { AttachInputOptions, AttachPopoutsOptions, AttachSyncOptions, ChromeOptions, DomRenderer, PaletteOptions, Palette, Popouts, StageCoordinates, Sync, SurfaceFor } from "../browser/index.mjs";
 import type { Scheduler } from "../index.mjs";
 
 export interface StageOptions {
@@ -26,6 +26,8 @@ export interface StageOptions {
   palette?: boolean | Omit<PaletteOptions, "wm">;
   /** Right-to-left: `"auto"` (default) follows an explicit `dir`; `"ltr"`/`"rtl"` set it once; `false` never touches it. */
   direction?: "auto" | "ltr" | "rtl" | false;
+  /** A transformed stage (pan/zoom canvas), forwarded to both `createDomRenderer` and `attachInput`. */
+  coordinates?: StageCoordinates;
 }
 
 export interface Stage {

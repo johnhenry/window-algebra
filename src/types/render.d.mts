@@ -1,5 +1,5 @@
 /** The compiler's output: a plain description of elements, attributes and CSS declarations. */
-import type { Direction } from "./state.mjs";
+import type { Bounds, Direction } from "./state.mjs";
 
 /** A render node. Views carry `view` and `primary`; text-only nodes (a tab button) carry `text`. */
 export interface RenderNode {
@@ -20,6 +20,8 @@ export interface RenderNode {
 export interface PresentationContext {
   /** `"rtl"` puts `dir="rtl"` on the root and mirrors placements and anchors. Default `"ltr"`. */
   direction?: Direction;
+  /** `"none"` (an unbounded canvas) marks the root `data-wm-bounds="none"` and lets it overflow. Default `"stage"`. */
+  bounds?: Bounds;
   focused?: string | null;
   blocked?: string[];
   titles?: Record<string, string>;

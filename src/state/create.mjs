@@ -31,6 +31,18 @@ export const DEFAULT_CONFIG = Object.freeze({
    * May be missing on a saved state: read it as "ltr".
    */
   direction: "ltr",
+  /**
+   * What bounds floating windows: "stage" (default) or "none". Under "none"
+   * the stage is an unbounded canvas (a pannable, zoomable world): floating
+   * windows keep any coordinates, negative or far outside the stage's box,
+   * and nothing clamps them into it; there are no snap zones (no half,
+   * quarter or drag-to-top-edge maximize, whatever `snap.edges` says), the
+   * stage edges do not attract under magnetism (other windows still do), a
+   * tiled window dragged out as floating lands at the pointer unclamped, and
+   * `compile` lets the root overflow (`data-wm-bounds="none"`). May be
+   * missing on a saved state: read it as "stage" (`boundsOf(state)`).
+   */
+  bounds: "stage",
   /** Gap between tiled siblings (px), 0 for none. */
   gap: 0,
   /** Inset around the tiled area (px), 0 for none. */

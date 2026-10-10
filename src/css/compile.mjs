@@ -372,7 +372,7 @@ const splitterAfter = (target, index, elementKey, context = {}) => {
  * Compile a layout tree into a render tree.
  *
  * @param {object} tree layout-algebra tree
- * @param {object} [context] from `presentationContext(state)`: { focused, blocked, titles, modes, statuses, roles, urgent, modal }
+ * @param {object} [context] from `presentationContext(state)`: { direction, bounds, focused, blocked, titles, modes, statuses, roles, urgent, modal }
  * @param {object} [options]
  * @param {string} [options.key] key of the root element
  */
@@ -386,6 +386,7 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
   collect(tree);
 
   const rtl = context.direction === "rtl";
+  const unbounded = context.bounds === "none";
   const blocked = new Set(context.blocked ?? []);
   const urgent = new Set(context.urgent ?? []);
   const modal = new Set(context.modal ?? []);
@@ -515,8 +516,14 @@ export const compile = (tree, context = {}, { key = "root" } = {}) => {
       key: elementKey,
       // The root of a right-to-left presentation carries `dir`: flex rows, grids and tab strips below it
       // then run right to left on their own, and every offset above is already logical.
-      attrs: { ...attrs, "data-layout": target.type, ...(rtl && !parent ? { dir: "rtl" } : {}) },
-      style: { ...own, ...style },
+      attrs: {
+        ...attrs,
+        "data-layout": target.type,
+        ...(rtl && !parent ? { dir: "rtl" } : {}),
+        ...(unbounded && !parent ? { "data-wm-bounds": "none" } : {}),
+      },
+      // An unbounded stage (`config.bounds: "none"`, a canvas) lets windows outside its box show: the root does not clip.
+      style: { ...own, ...style, ...(unbounded && !parent ? { overflow: "visible" } : {}) },
       children: [],
     };
     // Children with ancestor-dependent styles need the element's own padding/gap preserved.
@@ -601,6 +608,7 @@ export const RULES_CSS = `
 wm-overlay, wm-row, wm-column, wm-grid, wm-stack { box-sizing: border-box; }
 wm-root, [data-wm-root] { display: block; position: relative; overflow: hidden; background: var(--wa-color-bg); color: var(--wa-color-fg); font: var(--wa-font-size)/1.4 var(--wa-font); }
 [data-wm-root] > wm-overlay { inline-size: 100%; block-size: 100%; }
+[data-wm-root]:has(> [data-wm-bounds="none"]) { overflow: visible; background: transparent; }
 wm-view[data-mode="floating"] { border-radius: var(--wa-radius-md); box-shadow: var(--wa-shadow-window); }
 wm-view[inert], wm-view[data-wm-blocked] { filter: var(--wa-blocked-filter); }
 wm-tabs { align-items: stretch; gap: var(--wa-space-xs); padding-inline: var(--wa-space-xs); background: var(--wa-titlebar-bg); color: var(--wa-titlebar-fg); border-block-end: var(--wa-border-width) solid var(--wa-titlebar-border); font: var(--wa-font-size)/1.4 var(--wa-font); }

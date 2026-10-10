@@ -75,7 +75,7 @@ export const createReactBindings = (React) => {
    *   commits synchronously.
    * - `anchorFallback?`, `input?` (object merged into `attachInput`'s
    *   options), `as?` (host tag, default "div"): passed through.
-   * - `chrome?`, `popouts?`, `sync?`, `palette?`, `direction?`: as for `attachStage` (read when the stage
+   * - `chrome?`, `popouts?`, `sync?`, `palette?`, `direction?`, `coordinates?`: as for `attachStage` (read when the stage
    *   attaches, i.e. when `wm` changes).
    * - `stageRef?`: a ref object (`{ current }`) or a callback that receives the stage's handles
    *   (`{ wm, renderer, sync, palette, popouts, detach }`) once attached, and `null` when it detaches, so a
@@ -85,7 +85,7 @@ export const createReactBindings = (React) => {
    *   element as ordinary props.
    */
   const WindowManagerStage = (props) => {
-    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, chrome, popouts, sync, palette, direction, stageRef, onStage, as = "div", ...rest } = props;
+    const { wm, renderSurface, createPortal, anchorFallback, input, schedule, chrome, popouts, sync, palette, direction, coordinates, stageRef, onStage, as = "div", ...rest } = props;
     const hostRef = useRef(null);
     const [portals, setPortals] = useState(() => new Map());
 
@@ -120,7 +120,7 @@ export const createReactBindings = (React) => {
             }
           : undefined;
 
-      const stage = attachStage(root, { wm, surfaceFor, anchorFallback, input, schedule, chrome, popouts, sync, palette, ...(direction === undefined ? {} : { direction }) });
+      const stage = attachStage(root, { wm, surfaceFor, anchorFallback, input, schedule, chrome, popouts, sync, palette, ...(direction === undefined ? {} : { direction }), ...(coordinates ? { coordinates } : {}) });
       const publish = (value) => {
         if (typeof stageRef === "function") stageRef(value);
         else if (stageRef) stageRef.current = value;

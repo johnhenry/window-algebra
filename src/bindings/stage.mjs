@@ -34,24 +34,27 @@ import { DEFAULT_CHROME_BUTTONS } from "../browser/chrome.mjs";
  *   `"ltr"`/`"rtl"` set it once; `false` never touches it.
  * @param {boolean|object} [options.palette] a command palette (Ctrl/Cmd+Shift+P) for this stage's window
  *   manager: `true`, or options for `createPalette` (`shortcut`, `exclude`, ...). Off by default.
+ * @param {{ toStage(clientX: number, clientY: number): { x: number, y: number }, scale?: () => number }} [options.coordinates]
+ *   a stage the application transforms (a pannable, zoomable canvas): forwarded to `createDomRenderer` and
+ *   `attachInput` (see `browser/coordinates.mjs`).
  * @param {(task: () => void) => void} [options.schedule] when commits run after a state change; default
  *   `createFrameScheduler()` (many commands, one commit per frame). Pass `immediateScheduler` to commit synchronously.
  * @returns {{ wm: object, renderer: object, sync: object|null, palette: object|null, popouts: object|null, detach(): void }}
  */
 export const attachStage = (host, options = {}) => {
-  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, palette, chrome, popouts, direction = "auto", schedule = createFrameScheduler() } = options;
+  const { wm = createWindowManager(options.manager), anchorFallback, surfaceFor, input, sync, palette, chrome, popouts, direction = "auto", schedule = createFrameScheduler(), coordinates } = options;
   if (direction === "ltr" || direction === "rtl") {
     if (wm.getState().config?.direction !== direction) wm.dispatch({ type: "config/set", direction });
   }
   const directionHandle = direction === "auto" ? attachDirection({ wm, element: host }) : null;
-  const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor, chrome });
+  const renderer = createDomRenderer({ root: host, document: host.ownerDocument, anchorFallback, surfaceFor, chrome, ...(coordinates ? { coordinates } : {}) });
   let live = true;
   const commit = () => live && renderer.commit(wm.present().render);
   commit();
   const unsubscribe = wm.subscribe(() => schedule(commit));
   const wantsPopouts = popouts || (chrome && Array.isArray(chrome.buttons ?? DEFAULT_CHROME_BUTTONS) && (chrome.buttons ?? DEFAULT_CHROME_BUTTONS).includes("popout"));
   const popoutsHandle = wantsPopouts ? attachPopouts({ wm, renderer, ...(popouts === true ? {} : popouts) }) : null;
-  const detachInput = attachInput({ root: host, wm, ...(popoutsHandle ? { popouts: popoutsHandle } : {}), ...input });
+  const detachInput = attachInput({ root: host, wm, ...(popoutsHandle ? { popouts: popoutsHandle } : {}), ...(coordinates ? { coordinates } : {}), ...input });
   const syncHandle = sync ? attachSync({ wm, ...(sync === true ? {} : sync) }) : null;
   const paletteHandle = palette ? createPalette({ wm, document: host.ownerDocument, ...(popoutsHandle ? { popouts: popoutsHandle } : {}), ...(palette === true ? {} : palette) }) : null;
   return {
