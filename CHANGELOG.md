@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 — floating windows on a pannable, zoomable, unbounded canvas (2026-10-09)
+
+Additive: nothing changes for a stage without the new option and config key, so `^0.1.0` picks this up.
+
+Asked for by a spatial notebook (a natto.dev-style canvas of panes) that puts the stage inside a world element it pans and zooms with `transform: translate(x, y) scale(z)`. Before this, pointer positions and measured rects were screen pixels, so at a zoom other than 1 a dragged window outran or lagged the cursor, grips mis-tracked and snap distances were wrong, and the stage clamped, snapped and clipped windows to its own box.
+
+### Added
+
+- **`coordinates: { toStage(clientX, clientY), scale?() }` on `attachInput`, `createDomRenderer`, `attachStage` and `WindowManagerStage`.** `toStage` maps a client point to root-local stage units (the units of `placement`) and `scale()` is the zoom (read off `toStage` when left out); both are called on every use, so they can read live pan and zoom. Floating moves and resizes, grab offsets, the tiled-drag and tab-drag targets, splitter travel, pinch, keyboard moves of a measured window, `measure()`, the JS anchor fallback and the drag ghost all go through it, so a window and its grips track the cursor 1:1 on screen at any zoom. `config.snap.threshold`/`magnet`, the tab-drag band and the touch slop and swipe distances stay screen pixels (divided by the zoom); placements, the `snap` grid and `floatStep` are stage units. Without the hook the math is exactly what it was: a test runs the same gestures with and without a scale-1 hook and gets the same commands. New type `StageCoordinates`. Introduced in 58dedfd.
+- **`config.bounds: "stage" | "none"`** (default `"stage"`, validated by `config/set`, read with the new `boundsOf(state)`). `"none"` makes the stage an unbounded canvas: floating windows keep any coordinates, negative or far away; no snap-zone preview and no drag-to-top-edge maximize, whatever `snap.edges` says; the stage edges stop attracting under magnetism (other windows still do); a tiled window dragged out as floating lands at the pointer unclamped; `compile` marks the root `data-wm-bounds="none"` with `overflow: visible` (`presentationContext` gains `bounds`), and `BASE_CSS` makes the host `overflow: visible; background: transparent`. A saved state without the key reads as `"stage"`, so `STATE_VERSION` stays `2` and nothing migrates. Introduced in 58dedfd.
+- **`demo/canvas.html`**: panes on a world you pan (drag empty space) and zoom (wheel around the cursor), at negative coordinates too, with a switch back to a bounded stage; `e2e/canvas.spec.mjs` drives it with real pointer input at zoom 0.5 and 2. Documented in [docs/api/browser.md](docs/api/browser.md#zoomed-and-unbounded-stages-a-canvas). Introduced in f2dcb7b.
+
 ## 0.1.0 — swipe between monocle windows, and two fixes found by the clawser desktop (2026-10-09)
 
 **This is the first minor release, and consumers on `^0.0.0` need to move.** Under npm's caret rules `^0.0.0` matches only `0.0.0`, so it does not pick up `0.1.0`; update the range to `^0.1.0` (for `0.x` versions a caret covers the minor, so it then follows `0.1.x`). Nothing else breaks: every change below is additive or a bug fix.
