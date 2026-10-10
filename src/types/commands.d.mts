@@ -23,6 +23,12 @@ export interface CommandMeta {
   gesture?: string;
   /** Commit the render at once, never inside a view transition. */
   immediate?: boolean;
+  /**
+   * `false`: apply and log the command but keep it out of undo (it neither pushes a step nor clears
+   * redo). `true`: record it even when its type is in the manager's `history.ignore`. No effect
+   * without the manager's `history` option.
+   */
+  history?: boolean;
 }
 
 // ------------------------------------------------------------------ windows: lifecycle and focus

@@ -44,7 +44,9 @@ const coalesce = (commands, command) => {
  *   renderer per output id, for driving several stages (multiple outputs) at once; see `setRenderer`
  *   to attach/replace/remove one later
  * @param {(task: () => void) => void} [options.schedule] commit scheduler (default: immediate)
- * @param {boolean|number} [options.history] enable undo/redo (number = limit)
+ * @param {boolean|number|{ limit?: number, ignore?: Iterable<string> }} [options.history] enable
+ *   undo/redo (number = limit); the object form also takes `ignore`, command types that are applied
+ *   and logged but never become an undo step (focus and stacking, say)
  * @param {(effect: object, wm: object) => void} [options.onEffect] interpret effects
  *
  * Gestures: commands carrying the same `gesture` token in a row (a floating
@@ -55,6 +57,14 @@ const coalesce = (commands, command) => {
  * `gesture` token (or an explicit `command.immediate: true`) also tells a
  * renderer's `animate` option to commit that render immediately, never
  * mid-transition (see `createDomRenderer`'s `animate` option).
+ *
+ * Ignored commands (`history.ignore`, or `history: false` on the command):
+ * the state changes and the command is logged, but no undo step is pushed and
+ * the redo stack is kept. History holds whole states, so an ignored change
+ * rides along with the step before it: undo rolls it back with that step, and
+ * redo brings it back. One made after an undo (while redo is available) is
+ * discarded by the next undo or redo, which restore their snapshots exactly.
+ * Either way `replay(origin, log)` still equals the state.
  */
 export const createWindowManager = ({
   state: initial = createState(),
@@ -70,7 +80,14 @@ export const createWindowManager = ({
 } = {}) => {
   const dropRegistry = { ...DROPS, ...drops };
   const extensions = drops ? { ...dropHandlers(dropRegistry), ...extraHandlers } : extraHandlers;
-  let history = createHistory(initial, { limit: typeof historyOption === "number" ? historyOption : 100 });
+  const historyConfig = typeof historyOption === "object" && historyOption !== null ? historyOption : {};
+  const historyOn = Boolean(historyOption);
+  const historyLimit = typeof historyOption === "number" ? historyOption : (historyConfig.limit ?? 100);
+  const ignoredTypes = new Set(historyConfig.ignore ?? []);
+  // A command's own `history` flag wins over the `ignore` list.
+  const skipsHistory = (command) =>
+    historyOn && command?.history !== true && (command?.history === false || ignoredTypes.has(command?.type));
+  let history = createHistory(initial, { limit: historyLimit });
   const listeners = new Set();
   // One renderer per output, for driving several stages at once. `renderer`
   // (single-output) is kept alongside it, always addressing the focused
@@ -79,8 +96,17 @@ export const createWindowManager = ({
   // The command log mirrors history: undo moves the last entry aside and redo
   // puts it back, so `replay(wm.origin, wm.log)` always equals the present
   // state. A `load()` is recorded as a marker that starts a new origin.
+  //
+  // An ignored command (see `skipsHistory`) is logged as an `ignored` entry
+  // that belongs to the step before it: undo moves a step aside together with
+  // the ignored entries after it, as one group. Ignored commands applied while
+  // redo is available are `transient`: the next undo or redo first drops them
+  // (and puts back `redoBase`, the state before them), so the snapshots in
+  // `history.future` stay the states the log replays to.
   let entries = [];
   let undone = [];
+  let transient = 0;
+  let redoBase;
   const lastLoad = () => entries.findLastIndex((entry) => entry.load !== undefined);
 
   const getState = () => history.present;
@@ -140,14 +166,26 @@ export const createWindowManager = ({
       const token = command?.gesture;
       if (token != null && undone.length === 0 && last?.gesture === token) {
         // Same gesture: replace the present (the gesture's first command already
-        // pushed the pre-gesture state) and extend the entry.
+        // pushed the pre-gesture state) and extend the entry. An ignored command
+        // carrying the open gesture's token joins the gesture too.
         history = { ...history, present: out.state, future: [] };
         entries[entries.length - 1] = { gesture: token, commands: coalesce(last.commands, command) };
+        undone = [];
+      } else if (skipsHistory(command)) {
+        // Applied and logged, but not an undo step: `past` and `future` stay.
+        if (undone.length > 0) {
+          if (transient === 0) redoBase = getState();
+          transient += 1;
+        }
+        history = { ...history, present: out.state };
+        entries.push({ command, ignored: true });
       } else {
-        history = historyOption ? record(history, out.state) : { ...history, present: out.state };
+        history = historyOn ? record(history, out.state) : { ...history, present: out.state };
         entries.push(token != null ? { gesture: token, commands: [command] } : { command });
+        undone = [];
+        transient = 0;
+        redoBase = undefined;
       }
-      undone = [];
     }
     const wm = api;
     for (const effect of out.effects) {
@@ -174,10 +212,22 @@ export const createWindowManager = ({
 
   const travel = (fn, direction) => {
     const before = getState();
+    if (!(direction < 0 ? canUndo(history) : canRedo(history))) return before;
+    if (transient > 0) {
+      // Drop the ignored changes made since the undo, so the step lands exactly.
+      entries.splice(entries.length - transient);
+      history = { ...history, present: redoBase };
+      transient = 0;
+      redoBase = undefined;
+    }
     history = fn(history);
+    if (direction < 0) {
+      // A step and the ignored entries that followed it move aside together.
+      const end = entries.findLastIndex((entry) => !entry.ignored);
+      if (end !== -1) undone.unshift(entries.splice(end));
+    }
+    if (direction > 0 && undone.length) entries.push(...undone.shift());
     if (getState() !== before) {
-      if (direction < 0 && entries.length) undone.unshift(entries.pop());
-      if (direction > 0 && undone.length) entries.push(undone.shift());
       render();
       notify([{ type: "history/changed" }, ...focusChange(before, getState())], null);
     }
@@ -319,9 +369,11 @@ export const createWindowManager = ({
       }
       const next = migrated.state;
       const before = getState();
-      history = historyOption ? record(history, next) : { ...history, present: next };
+      history = historyOn ? record(history, next) : { ...history, present: next };
       entries.push({ load: next });
       undone = [];
+      transient = 0;
+      redoBase = undefined;
       render();
       notify([{ type: "state/loaded" }, ...focusChange(before, next)], null);
       return next;

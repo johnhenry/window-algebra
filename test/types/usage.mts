@@ -167,11 +167,21 @@ wm.dispatch({ type: "window/set-title", id: "term", title: "Shell" });
 // @ts-expect-error dispatch is typed too
 wm.dispatch({ type: "window/set-title", id: "term" });
 
+// History that keeps focus and stacking out of undo (#10).
+const editor = createWindowManager({ history: { limit: 200, ignore: ["window/focus", "window/raise", "focus/next"] } });
+editor.focus("term", { history: false });
+editor.dispatch({ type: "window/raise", id: "term", gesture: "g", history: true });
+// @ts-expect-error not a command type
+createWindowManager({ history: { ignore: ["window/levitate"] } });
+// @ts-expect-error the per-command flag is a boolean
+editor.dispatch({ type: "window/blur", history: "no" });
+
 // A manager with commands of its own.
 type Ping = { type: "my/ping"; n: number };
 const custom = createWindowManager<Ping>({ extensions: { "my/ping": (s) => ({ state: s }) } });
 custom.dispatch({ type: "my/ping", n: 2 });
 custom.dispatch({ type: "window/blur" });
+createWindowManager<Ping>({ history: { ignore: ["my/ping", "window/focus"] } });
 // @ts-expect-error not a built-in, not a Ping
 custom.dispatch({ type: "my/pong" });
 
