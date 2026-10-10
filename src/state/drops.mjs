@@ -46,6 +46,9 @@ const setWorkspace = (state, id, patch) => ({
 /** Can this window take part in tiled drops (as dragged window or target)? */
 export const isDroppable = (state, win) => inTiledBase(state, win) && win.status === "normal";
 
+/** Does a window hold a slot in a stateful layout's stored tree? Every tiled window does, whatever its status. */
+const isSlotted = (state, wid) => state.windows[wid]?.role === "window" && state.windows[wid]?.mode === "tiled";
+
 /** The workspace's tiled windows in order: the ids a layout interpreter receives. */
 export const tiledOrder = (state, workspaceId) =>
   (state.workspaces[workspaceId]?.windows ?? []).filter((id) => isDroppable(state, state.windows[id]));
@@ -101,14 +104,15 @@ const spiralAxis = (spec, ids, target) => {
 
 const bspDrops = {
   ops: () => ({ center: "swap", left: "split", right: "split", top: "split", bottom: "split" }),
-  apply(spec, ids, { id, target, zone, op }) {
-    let tree = bspReconcile(spec.tree, ids);
+  apply(spec, ids, { id, target, zone, op, keep = ids }) {
+    // Reconcile against every tiled window, not just the droppable ones: a minimized window keeps its slot.
+    let tree = bspReconcile(spec.tree, keep);
     if (op === "swap" && bspIds(tree).includes(id)) tree = bspSwap(tree, id, target);
     else {
       tree = bspRemove(tree, id);
       tree = zone === "center" ? bspInsert(tree, { id, target }) : bspPlace(tree, { id, target, side: zone });
     }
-    return { ids: bspIds(tree), layout: { ...spec, tree } };
+    return { ids: bspIds(tree).filter((leaf) => leaf === id || ids.includes(leaf)), layout: { ...spec, tree } };
   },
 };
 
@@ -131,8 +135,9 @@ const treeDrops = {
     if (treeParentType(tree, target) === "tabs") return { center, left: "before", right: "after", top: "split", bottom: "split" };
     return { center, left: "split", right: "split", top: "split", bottom: "split" };
   },
-  apply(spec, ids, { id, target, zone, op }) {
-    let tree = treeReconcile(spec.tree, ids);
+  apply(spec, ids, { id, target, zone, op, keep = ids }) {
+    // Reconcile against every tiled window, not just the droppable ones: a minimized window keeps its slot.
+    let tree = treeReconcile(spec.tree, keep);
     if (op === "swap" && treeIds(tree).includes(id)) {
       tree = treeSwap(tree, id, target);
     } else {
@@ -141,7 +146,7 @@ const treeDrops = {
       else if (op === "split") tree = treeSplit(tree, { id, target, side: zone });
       else tree = treeAddTab(tree, { id, target });
     }
-    return { ids: treeIds(tree), layout: { ...spec, tree } };
+    return { ids: treeIds(tree).filter((leaf) => leaf === id || ids.includes(leaf)), layout: { ...spec, tree } };
   },
 };
 
@@ -228,7 +233,7 @@ const applyOp = (state, drops, { id, target, zone, op }) => {
     next = { ...next, windows: { ...next.windows, [id]: { ...next.windows[id], mode: "tiled" } } };
   }
   const out = interpreter.apply
-    ? interpreter.apply(ws.layout, ids, { id, target, zone, op })
+    ? interpreter.apply(ws.layout, ids, { id, target, zone, op, keep: ws.windows.filter((w) => isSlotted(state, w)) })
     : { ids: reorder(ids, id, target, op) };
   const patch = { windows: writeOrder(ws.windows, out.ids) };
   if (out.layout) patch.layout = out.layout;

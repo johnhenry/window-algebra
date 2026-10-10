@@ -715,12 +715,14 @@ Converts whatever layout the workspace has into an equivalent docking tree (`{ t
 | Current layout | Resulting tree |
 | --- | --- |
 | `bsp` | the same splits (`treeFromBsp`), every ratio preserved |
-| `columns` / `rows` | one `row` / `column` of the tiled windows, keeping stored `sizes[""]` if it matches the count |
+| `columns` / `rows` | one `row` / `column` of the **rendered** tiled windows, keeping stored `sizes[""]` if it matches their count |
 | `master-stack` | a two-way `row` of master(s) and the stack (sides and `ratio` preserved); a single `column` when there are no more windows than `masterCount` |
 | `tabs` / `monocle` | one `tabs` container |
 | anything else (`spiral`, `grid`, `floating`, a function spec, custom types) | a flat `row` in the current tiled order |
 
 A single window becomes a bare leaf and no windows becomes `null`. Modifiers and `drag` on the old spec are dropped.
+
+**Minimized windows.** Every layout except `bsp` stores no slot for a window, and its stored `sizes` (and `masterCount`) count the windows that are rendered, so the conversion is made from the rendered windows: a minimized (or popped-out, or maximized) window gets no leaf. When it comes back, `derive` appends it to the root (`treeReconcile`, which gives it the mean weight when the root has `sizes`). A `bsp` tree does store each window's slot, so `bsp` keeps the leaf of a minimized window, with its ratios, and the window returns where it was. See [Layouts › Minimized windows](./layouts.md#minimized-windows-in-a-stored-tree).
 
 - **Events:** `layout/changed { workspace, layout }`.
 - **Effects:** `render`.
@@ -766,11 +768,13 @@ Resizes a persistent split and stores it in the layout spec. `path` (default `""
 | `spiral` | the split depth as a string (`"0"` = outermost) | `spec.ratios[depth]` | `[a, b]` | nudges `ratios[depth]` (or the shared `ratio` when unset) |
 | `tree` | comma-joined child indices (`"0,1"`; `""` = root) | that `row`/`column` container's `sizes` | exactly one weight per child | nudges the pair at `index`/`index + 1` (missing sizes count as equal weights) |
 
+`path` and `weights` address the tree as it is **rendered**, which is what a splitter handle carries. For `bsp` and `tree` a stored leaf that is not on screen (a minimized window keeps its slot) is not rendered: `weights` for a `tree` container has one entry per *rendered* child, the dormant children keep their stored weights, and a `delta` `index` counts rendered children. See [Layouts › Minimized windows](./layouts.md#minimized-windows-in-a-stored-tree).
+
 `index` defaults to `0`. Ratios are clamped to `[0.05, 0.95]`, and a nudged pair keeps at least 5% of its shared total on each side. Weights must be finite and positive. Exactly one of `delta` and `weights` is needed; if both are given, `weights` wins. For `columns`/`rows` the length of `weights` is not checked against the child count. A mismatched array is stored, but the layout ignores it and falls back to equal weights until the counts agree.
 
 - **Events:** `layout/split-resized { workspace, path }`.
 - **Effects:** `render`.
-- **Rejections:** `unknown-workspace`, `not-resizable` (a function spec or a layout type not in the table, including `grid`, `tabs` and `monocle`), `invalid-weights` (fewer than 2, non-positive or non-finite; for `tree`, the wrong count), `missing-value` (neither a finite `delta` nor `weights`), `unknown-split` (a non-empty `path` on columns/rows/master-stack, a BSP path that does not reach a split, a tree path that does not reach a container or reaches a `tabs` container), `invalid-path` (a BSP path with characters other than `0`/`1`, a spiral path that is not a non-negative integer, a malformed tree path), `invalid-index` (negative for columns/rows; out of range for a tree `delta`), `missing-weights`.
+- **Rejections:** `unknown-workspace`, `not-resizable` (a function spec or a layout type not in the table, including `grid`, `tabs` and `monocle`), `invalid-weights` (fewer than 2, non-positive or non-finite; for `tree`, a count other than the number of rendered children of that container), `missing-value` (neither a finite `delta` nor `weights`), `unknown-split` (a non-empty `path` on columns/rows/master-stack, a BSP path that does not reach a split, a tree path that does not reach a container or reaches a `tabs` container), `invalid-path` (a BSP path with characters other than `0`/`1`, a spiral path that is not a non-negative integer, a malformed tree path), `invalid-index` (negative for columns/rows; out of range for a tree `delta`), `missing-weights`.
 
 `compile` renders a draggable splitter carrying exactly the `path`/`index` this command expects. See [compile › Splitters](./compile.md#splitters).
 

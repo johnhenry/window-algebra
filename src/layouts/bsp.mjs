@@ -141,6 +141,43 @@ export const bspNodeAt = (tree, path) => {
   return isSplit(node) ? node : null;
 };
 
+const hasLive = (node, live) => (node.type === "leaf" ? live.has(node.id) : hasLive(node.first, live) || hasLive(node.second, live));
+
+/**
+ * The stored path of a *rendered* split. A stored tree can hold leaves that are
+ * not on screen (a minimized window keeps its slot); `derive` renders the tree
+ * reconciled with the shown windows, where a split with one side wholly dormant
+ * collapses into the other side, so a splitter's `path` is a path in that
+ * rendered tree. `live` is the Set of shown ids. Returns the stored path of the
+ * same split, or `null` when `path` addresses no rendered split. With every
+ * leaf shown it is the identity.
+ */
+export const bspResolveShown = (tree, live, path) => {
+  let node = tree ?? null;
+  let stored = "";
+  const collapse = () => {
+    while (isSplit(node)) {
+      const first = hasLive(node.first, live);
+      const second = hasLive(node.second, live);
+      if (first && second) return;
+      if (!first && !second) {
+        node = null;
+        return;
+      }
+      stored += first ? "0" : "1";
+      node = first ? node.first : node.second;
+    }
+  };
+  collapse();
+  for (const step of path) {
+    if (!isSplit(node)) return null;
+    stored += step === "0" ? "0" : "1";
+    node = step === "0" ? node.first : node.second;
+    collapse();
+  }
+  return isSplit(node) ? stored : null;
+};
+
 /** Set the ratio of the split at `path` (see `bspNodeAt`); other splits are untouched. */
 export const bspSetRatioAt = (tree, path, ratio) => {
   const clamped = Math.min(0.95, Math.max(0.05, ratio));

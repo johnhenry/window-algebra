@@ -118,6 +118,7 @@ Binary space partitioning: a stateful layout expressed functionally. The tree is
 | `bspRotate(tree, id)` | Toggles the direction of the split directly containing `id`. |
 | `bspParentDirection(tree, id)` | The direction of that split, or `null`. |
 | `bspNodeAt(tree, path)` | The split reached by `"0"`/`"1"` steps (`""` = root), or `null` when the path hits a leaf or runs off the tree. |
+| `bspResolveShown(tree, shown, path)` | The stored path of the split a splitter's *rendered* `path` addresses, given the `Set` of shown ids (see [Minimized windows](#minimized-windows-in-a-stored-tree)); `null` when it addresses no rendered split. |
 | `bspSetRatioAt(tree, path, ratio)` | Sets the ratio (clamped) of the split at `path`. |
 | `bspToLayout(tree, path = "")` | Interprets the tree as rows/columns with weights, each split carrying `resize: { path, weights }`. `null` → `row({})`. |
 | `bspFrom(ids, options?)` | Builds a tree by inserting ids in order. |
@@ -144,8 +145,9 @@ The docking tree is the n-ary counterpart to BSP, in the style of i3, Dockview a
 | `treeSplit(tree, { id, target, side, ratio = 0.5 })` | Replaces leaf `target` with a new `row` (`left`/`right`) or `column` (`top`/`bottom`) holding `id` on that side. `id` must already be absent. |
 | `treeAddTab(tree, { id, target })` | Adds `id` as a tab right after `target`: it joins `target`'s `tabs` parent, or wraps `target` in a new `tabs`. |
 | `treeInsertTab(tree, { id, target, position })` | Inserts `id` before or after `target` inside its `tabs` parent. It falls back to `treeAddTab` if `target` is not in a `tabs` container. |
-| `treeReconcile(tree, ids)` | Drops leaves not in `ids`. Missing ids are appended to the root container's children, or wrapped with a lone-leaf root in a new `tabs`, or become a `tabs` container when the tree is empty. |
+| `treeReconcile(tree, ids)` | Drops leaves not in `ids`. Missing ids are appended to the root container's children (a root with valid `sizes` keeps them; an appended child takes the mean weight), or wrapped with a lone-leaf root in a new `tabs`, or become a `tabs` container when the tree is empty. |
 | `treeNodeAt(tree, path)` | The container at comma-joined child indices (`""` = root), or `null`. |
+| `treeResolveShown(tree, shown, path)` | Resolves a splitter's *rendered* `path` against a stored tree, given the `Set` of shown ids: `{ path, node, shown }` (the stored path and container, and the indices of its rendered children), or `null`. See [Minimized windows](#minimized-windows-in-a-stored-tree). |
 | `treeSetSizesAt(tree, path, weights)` | Sets the `sizes` of the container at `path`, only when `weights.length` matches its child count. |
 | `treeToLayout(tree, { focused }?)` | Interprets the tree: rows/columns with weights (and `resize: { path, weights }` when they have two or more children), and `tabs` as `stack({ active, chrome: "tabs" })`. |
 | `treeFrom(ids, { type = "tabs" }?)` | A flat container of `type`, a bare leaf for one id, or `null` for none. |
@@ -153,6 +155,16 @@ The docking tree is the n-ary counterpart to BSP, in the style of i3, Dockview a
 | `isTreeContainer(node)` | A row/column/tabs object with a `children` array. |
 
 `layout/to-tree` converts any layout into a tree. See [Commands](./commands.md#layoutto-tree).
+
+### Minimized windows in a stored tree
+
+A stored `bsp` or `tree` keeps the leaf of a window that is minimized (or popped out, or maximized), so the window comes back where it was. `derive` renders the tree reconciled with the windows that are *shown*: dormant leaves vanish and a container left with one rendered child collapses into it. The rules that follow:
+
+- **Rendered is what is addressed.** A splitter's `path` and `weights` (and `layout/resize-split`'s `index`) describe the rendered tree. `layout/resize-split` resolves them to the stored container (`treeResolveShown`, `bspResolveShown`), so a drag is accepted whether or not a dormant leaf sits in the tree. For a `tree` container `weights` has one entry per rendered child; the dormant children keep their stored weights and their place. For `bsp` the rendered path of a split whose other side is dormant is the path of the collapsed tree. A rendered window the stored tree lacks is appended first (`treeReconcile`/`bspReconcile`), and a stale leaf for a window that no longer exists is simply dormant.
+- **Drops keep slots.** `window/drop` (and the swap/move commands' tree edits) reconcile the stored tree with every tiled window, not only the ones that can be dropped on, so a drop no longer prunes a minimized window's slot.
+- **Seeding.** `layout/set` with `type: "bsp"`/`"tree"` and no tree seeds it from every tiled window, minimized ones included: there are no sizes to disagree with, and the slots are kept.
+- **`layout/to-tree` from a layout with no stored slots** (`columns`, `rows`, `master-stack`, `tabs`, ...) converts what is rendered, so stored `sizes` stay parallel to the children. The minimized window is appended when it returns. From `bsp` the slot is kept.
+- **Not covered.** A closed window's leaf is not pruned from a stored `tree` until a drop reconciles it; it is dormant, so it no longer affects resizing.
 
 ## Split sizing
 

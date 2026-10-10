@@ -13,9 +13,9 @@
  */
 import { LAYERS, ROLES, STATUSES, createWindowRecord, createWorkspace, createOutput } from "./create.mjs";
 import { constrainSize } from "../geometry/rect.mjs";
-import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile } from "../layouts/bsp.mjs";
-import { treeFrom, treeFromBsp, treeNodeAt, treeSetSizesAt } from "../layouts/tree.mjs";
-import { modalTarget, descendantsOf, focusable, isVisible, isBlocked, isDescendantOf, isSticky, fullscreenWindow, visibleWindows } from "./queries.mjs";
+import { bspInsert, bspRemove, bspSetRatio, bspRotate, bspNodeAt, bspSetRatioAt, bspReconcile, bspIds, bspResolveShown } from "../layouts/bsp.mjs";
+import { treeFrom, treeFromBsp, treeSetSizesAt, treeReconcile, treeIds, treeResolveShown } from "../layouts/tree.mjs";
+import { modalTarget, descendantsOf, focusable, isVisible, isBlocked, isDescendantOf, isSticky, fullscreenWindow, visibleWindows, shownTiledIds } from "./queries.mjs";
 import { dropHandlers, swapWindows, DRAG_MODES, isDroppable } from "./drops.mjs";
 import { matchRules, validRules, foldRuleSets, SET_FIELDS as RULE_SET_FIELDS } from "./rules.mjs";
 import { migrate } from "./migrate.mjs";
@@ -935,12 +935,14 @@ const handlers = {
     const wsId = command.workspace ?? state.activeWorkspace;
     const ws = state.workspaces[wsId];
     if (!ws) return rejected(state, command, "unknown-workspace");
-    const ids = ws.windows.filter((id) => isTiled(state.windows[id]));
+    // What is rendered: a minimized window has no slot in columns/rows/master-stack/..., so it has no leaf here
+    // (and the stored `sizes` are parallel to the rendered windows). A BSP tree does store its slot: keep it.
+    const ids = shownTiledIds(state, wsId);
     const spec = ws.layout;
     const type = spec && typeof spec === "object" ? spec.type : null;
     let tree;
     if (type === "bsp") {
-      tree = treeFromBsp(bspReconcile(spec.tree, ids));
+      tree = treeFromBsp(bspReconcile(spec.tree, ws.windows.filter((id) => isTiled(state.windows[id]))));
     } else if (type === "columns" || type === "rows") {
       const container = type === "columns" ? "row" : "column";
       const stored = spec.sizes?.[""];
@@ -1044,10 +1046,15 @@ const handlers = {
       layout = { ...spec, ratio };
     } else if (spec.type === "bsp") {
       if (!/^[01]*$/.test(path)) return rejected(state, command, "invalid-path");
-      const node = bspNodeAt(spec.tree ?? null, path);
+      // `path` addresses the rendered tree (minimized leaves collapse their split); resolve it in the stored one.
+      const shown = new Set(shownTiledIds(state, wsId));
+      const stored = spec.tree ?? null;
+      const base = bspReconcile(stored, [...bspIds(stored), ...shown]);
+      const storedPath = bspResolveShown(base, shown, path);
+      const node = storedPath === null ? null : bspNodeAt(base, storedPath);
       if (!node) return rejected(state, command, "unknown-split");
       const ratio = hasWeights ? ratioFromPair(command.weights[0], command.weights[1]) : clampRatio(node.ratio + command.delta);
-      layout = { ...spec, tree: bspSetRatioAt(spec.tree, path, ratio) };
+      layout = { ...spec, tree: bspSetRatioAt(base, storedPath, ratio) };
     } else if (spec.type === "spiral") {
       const depth = Number(path);
       if (path === "" || !Number.isInteger(depth) || depth < 0) return rejected(state, command, "invalid-path");
@@ -1075,25 +1082,35 @@ const handlers = {
       layout = { ...spec, sizes: { ...(spec.sizes ?? {}), "": weights } };
     } else if (spec.type === "tree") {
       if (!/^(\d+(,\d+)*)?$/.test(path)) return rejected(state, command, "invalid-path");
-      const node = treeNodeAt(spec.tree ?? null, path);
-      if (!node || node.type === "tabs") return rejected(state, command, "unknown-split");
-      const n = node.children.length;
+      // `path` and `weights` describe the rendered children (dormant leaves, such as a minimized window's, are not
+      // rendered and have no splitter); resolve them against the stored container and leave dormant children's weights alone.
+      const shown = new Set(shownTiledIds(state, wsId));
+      const stored = spec.tree ?? null;
+      const base = treeReconcile(stored, [...treeIds(stored), ...shown]);
+      const target = treeResolveShown(base, shown, path);
+      if (!target || target.node.type === "tabs") return rejected(state, command, "unknown-split");
+      const { node } = target;
+      const total = node.children.length;
+      const n = target.shown.length;
       const index = Number.isInteger(command.index) ? command.index : 0;
+      const current = Array.isArray(node.sizes) && node.sizes.length === total && node.sizes.every((w) => typeof w === "number" && Number.isFinite(w) && w > 0) ? node.sizes : new Array(total).fill(1);
+      const visibleWeights = target.shown.map((i) => current[i]);
       let weights;
       if (hasWeights) {
         if (command.weights.length !== n) return rejected(state, command, "invalid-weights");
         weights = command.weights.slice();
       } else {
         if (index < 0 || index + 1 >= n) return rejected(state, command, "invalid-index");
-        const stored = Array.isArray(node.sizes) && node.sizes.length === n ? node.sizes : new Array(n).fill(1);
-        weights = stored.slice();
-        const total = weights[index] + weights[index + 1];
-        const min = total * 0.05;
-        const a = Math.min(total - min, Math.max(min, weights[index] + command.delta));
+        weights = visibleWeights;
+        const sum = weights[index] + weights[index + 1];
+        const min = sum * 0.05;
+        const a = Math.min(sum - min, Math.max(min, weights[index] + command.delta));
         weights[index] = a;
-        weights[index + 1] = total - a;
+        weights[index + 1] = sum - a;
       }
-      layout = { ...spec, tree: treeSetSizesAt(spec.tree, path, weights) };
+      const merged = current.slice();
+      target.shown.forEach((storedIndex, k) => (merged[storedIndex] = weights[k]));
+      layout = { ...spec, tree: treeSetSizesAt(base, target.path, merged) };
     } else {
       return rejected(state, command, "not-resizable");
     }

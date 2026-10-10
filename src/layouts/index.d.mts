@@ -51,6 +51,11 @@ export function bspRotate(tree: BspTree | null | undefined, id: string): BspTree
 export function bspParentDirection(tree: BspTree | null | undefined, id: string): "horizontal" | "vertical" | null;
 /** The split reached by `"0"`/`"1"` steps (`""` is the root), or `null`. */
 export function bspNodeAt(tree: BspTree | null | undefined, path: string): BspSplit | null;
+/**
+ * The stored path of the split a splitter's rendered `path` addresses, given the `shown` ids: dormant leaves (a minimized window's) are not
+ * rendered and a split with one side wholly dormant collapses into the other. `null` when `path` addresses no rendered split.
+ */
+export function bspResolveShown(tree: BspTree | null | undefined, shown: ReadonlySet<string>, path: string): string | null;
 export function bspSetRatioAt(tree: BspTree | null | undefined, path: string, ratio: number): BspTree | null;
 /** Interpret a tree as rows/columns with weights, each split carrying `resize: { path, weights }`. */
 export function bspToLayout(tree: BspTree | null | undefined, path?: string): LayoutNode;
@@ -72,10 +77,20 @@ export function treeSplit(tree: TreeNode | null | undefined, options: { id: stri
 export function treeAddTab(tree: TreeNode | null | undefined, options: { id: string; target: string }): TreeNode | null;
 /** Insert `id` before or after `target` inside its `tabs` parent. */
 export function treeInsertTab(tree: TreeNode | null | undefined, options: { id: string; target: string; position: "before" | "after" }): TreeNode | null;
-/** Drop leaves not in `ids` and append the missing ones. */
+/** Drop leaves not in `ids` and append the missing ones (a root with valid `sizes` keeps them; an appended child takes the mean weight). */
 export function treeReconcile(tree: TreeNode | null | undefined, ids: string[]): TreeNode | null;
 /** The container at comma-joined child indices (`""` is the root), or `null`. */
 export function treeNodeAt(tree: TreeNode | null | undefined, path: string): TreeContainer | null;
+/**
+ * Resolve a splitter's rendered `path` against a stored tree, given the `shown` ids: `path` is the stored path of the same container,
+ * `node` that container and `shown` the indices of its rendered children (dormant leaves, a minimized window's, are skipped and a
+ * container with one rendered child collapses into it). `null` when `path` addresses no rendered container.
+ */
+export function treeResolveShown(
+  tree: TreeNode | null | undefined,
+  shown: ReadonlySet<string>,
+  path: string,
+): { path: string; node: TreeContainer; shown: number[] } | null;
 /** Set the `sizes` of the container at `path` when the count matches. */
 export function treeSetSizesAt(tree: TreeNode | null | undefined, path: string, weights: number[]): TreeNode | null;
 /** Interpret the tree: rows/columns with weights, and `tabs` as a tabbed stack. */
