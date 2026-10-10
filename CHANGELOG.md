@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.2 — a minimized window no longer breaks splitter drags or `layout/to-tree` sizes (2026-10-09)
+
+Bug fix, no API change beyond two additive helpers; found by erisera-code/clawser (#11).
+
+### Fixed
+
+- **`layout/resize-split` on a `tree` or `bsp` is accepted when a window that is not shown still has a leaf in the stored tree (#11).** A splitter handle carries the `path` and `weights` of the *rendered* tree (`derive` reconciles the stored tree with the shown windows, so a minimized window's leaf is gone and its split collapses), but the command validated them against the *stored* tree, so a drag was rejected with `invalid-weights` (`tree`) or hit the wrong split or `unknown-split` (`bsp`) as soon as one window was minimized, and nothing was persisted. The command now resolves the path against the rendered tree and writes the result into the stored one: `weights` has one entry per rendered child, dormant children keep their weights and their place, and a `delta` `index` counts rendered children. A stale leaf for a closed window is dormant in the same way. With nothing dormant it behaves exactly as before.
+- **`layout/to-tree` keeps `columns`/`rows` `sizes` when a window is minimized (#11).** It sized the new container by every tiled window, including the minimized one, so `stored.length !== ids.length` and the sizes were dropped. It now converts the rendered windows (master-stack's `masterCount` too), the same set the layout drew. `bsp` still keeps a minimized window's leaf, with every ratio.
+- **A drop no longer prunes a minimized window's slot from a stored `tree`/`bsp`.** `window/drop` reconciled the tree with the droppable windows only, so any drop forgot where a minimized window sat and it came back at the end. Drops now reconcile against every tiled window.
+- **`treeReconcile` keeps the root's `sizes` when it appends a window** (the new child takes the mean weight), instead of the length mismatch resetting every split to equal weights when a window is created or restored.
+
+### Added
+
+- `treeResolveShown`, `bspResolveShown` (`@johnhenry/window-algebra/layouts`) and `shownTiledIds` (root): resolve a rendered path to the stored one, and the ids a workspace's layout is handed. The semantics (minimized windows keep their slot; resize and conversion address what is rendered) are in [docs/api/layouts.md](docs/api/layouts.md#minimized-windows-in-a-stored-tree).
+
+An application that kept its stored tree pruned to the shown windows, or converted on a copy of the state with the hidden windows untiled, only to make splitter drags and `layout/to-tree` work, can drop that code.
+
 ## 0.1.1 — floating windows on a pannable, zoomable, unbounded canvas (2026-10-09)
 
 Additive: nothing changes for a stage without the new option and config key, so `^0.1.0` picks this up.

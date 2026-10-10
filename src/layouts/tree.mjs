@@ -145,6 +145,11 @@ export const treeInsertTab = (tree, { id, target, position }) => {
  * missing from the tree is appended — to the root container's children when
  * the root already is one, wrapped alongside the sole leaf in a new `tabs`
  * container otherwise, or as a fresh `tabs` container when the tree is empty.
+ * A root with valid `sizes` keeps them: an appended child takes the mean weight.
+ *
+ * Only leaves of windows that are *shown* belong in `ids` when rendering (that
+ * is what `derive` does); the stored tree is reconciled against every tiled
+ * window instead, so a minimized window keeps its slot (see `docs/api/layouts.md`).
  */
 export const treeReconcile = (tree, ids) => {
   let next = tree ?? null;
@@ -154,7 +159,14 @@ export const treeReconcile = (tree, ids) => {
   if (missing.length === 0) return next;
   if (next == null) return missing.length === 1 ? missing[0] : { type: "tabs", children: missing };
   if (typeof next === "string") return { type: "tabs", children: [next, ...missing] };
-  return { ...next, children: [...next.children, ...missing] };
+  const grown = { ...next, children: [...next.children, ...missing] };
+  // Keep the root's stored sizes: each appended child gets the mean of the existing weights (an equal share), instead
+  // of the length mismatch resetting every split to equal weights.
+  if (Array.isArray(next.sizes) && next.sizes.length === next.children.length && next.sizes.every((w) => typeof w === "number" && Number.isFinite(w) && w > 0)) {
+    const mean = next.sizes.reduce((a, b) => a + b, 0) / next.sizes.length;
+    grown.sizes = [...next.sizes, ...missing.map(() => mean)];
+  }
+  return grown;
 };
 
 /**
@@ -173,6 +185,49 @@ export const treeNodeAt = (tree, path) => {
   }
   return isTreeContainer(node) ? node : null;
 };
+
+const hasLive = (node, live) => (typeof node === "string" ? live.has(node) : node.children.some((child) => hasLive(child, live)));
+
+/**
+ * Address a *rendered* split in a stored tree. A stored tree may hold leaves
+ * that are not on screen (a minimized window keeps its slot, so it comes back
+ * where it was; a closed window's leaf may linger), and `derive` renders the
+ * tree reconciled with the windows that are shown: dormant leaves vanish and
+ * a container left with one shown child collapses into it. A splitter handle
+ * carries a `path` in that rendered tree, so it cannot be applied to the
+ * stored one directly. `live` is the Set of shown ids; `path` is the rendered
+ * path. Returns `{ path, node, shown }`: the stored path of the same split,
+ * the stored container, and the indices of its shown children (the rendered
+ * children, in order); or `null` when `path` addresses no rendered split.
+ * With every leaf shown it is the identity.
+ */
+export const treeResolveShown = (tree, live, path) => {
+  if (tree == null) return null;
+  let node = tree;
+  const stored = [];
+  const collapse = () => {
+    while (isTreeContainer(node)) {
+      const shown = shownIndices(node, live);
+      if (shown.length !== 1) break;
+      stored.push(shown[0]);
+      node = node.children[shown[0]];
+    }
+  };
+  collapse();
+  for (const i of path === "" ? [] : path.split(",").map(Number)) {
+    if (!isTreeContainer(node) || !Number.isInteger(i) || i < 0) return null;
+    const shown = shownIndices(node, live);
+    if (i >= shown.length) return null;
+    stored.push(shown[i]);
+    node = node.children[shown[i]];
+    collapse();
+  }
+  if (!isTreeContainer(node)) return null;
+  const shown = shownIndices(node, live);
+  return shown.length === 0 ? null : { path: stored.join(","), node, shown };
+};
+
+const shownIndices = (node, live) => node.children.flatMap((child, i) => (hasLive(child, live) ? [i] : []));
 
 /** Set the `sizes` of the row/column container at `path` (see `treeNodeAt`); other containers are untouched. */
 export const treeSetSizesAt = (tree, path, weights) => {

@@ -256,6 +256,11 @@ export function windowsIn(state: State, workspaceId?: string): WindowRecord[];
 export function isSticky(state: State, win: WindowRecord): boolean;
 export function isVisible(state: State, id: string): boolean;
 export function visibleWindows(state: State, outputId?: string): WindowRecord[];
+/**
+ * The ids a workspace's layout interpreter receives when it is on screen: its tiled-base windows that are shown (not minimized or
+ * popped out), in workspace order. Works for any workspace, not only the active one.
+ */
+export function shownTiledIds(state: State, workspaceId: string): string[];
 export function isPoppedOut(state: State, id: string): boolean;
 export function poppedOutWindows(state: State): WindowRecord[];
 export function scratchpadWindows(state: State): WindowRecord[];

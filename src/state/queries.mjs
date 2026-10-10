@@ -211,6 +211,22 @@ export const inTiledBase = (state, win) =>
   win.status !== "maximized";
 
 /**
+ * The ids a workspace's layout interpreter is handed when the workspace is on
+ * screen: its tiled-base windows that are shown (not minimized or popped out,
+ * no hidden ancestor), in workspace order. Same set `derive` computes for the
+ * active workspace, but for any workspace, so commands can address what is
+ * rendered (`layout/resize-split`, `layout/to-tree`) without it being active.
+ */
+export const shownTiledIds = (state, workspaceId) =>
+  (state.workspaces[workspaceId]?.windows ?? []).filter((id) => {
+    const win = state.windows[id];
+    return inTiledBase(state, win) && shownStatus(state, win);
+  });
+
+const shownStatus = (state, win) =>
+  win.status !== "minimized" && win.status !== "popped-out" && (!win.parent || (state.windows[win.parent] ? shownStatus(state, state.windows[win.parent]) : true));
+
+/**
  * Visible windows of an output's active workspace in the order they are
  * painted, bottom to top — what `derive` produces, as opposed to
  * `stackingOrder`, the logical stack across all workspaces:
