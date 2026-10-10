@@ -12,6 +12,7 @@ The effectful edge. Everything here is exported from `@johnhenry/window-algebra/
   - [Pointer behaviour](#pointer-behaviour)
   - [Touch and pen](#touch-and-pen)
   - [Right-to-left](#right-to-left)
+  - [Zoomed and unbounded stages (a canvas)](#zoomed-and-unbounded-stages-a-canvas)
   - [Keyboard](#keyboard)
   - [Focus sync](#focus-sync)
   - [Announcements](#announcements)
@@ -33,6 +34,7 @@ createDomRenderer({
   anchorFallback,       // boolean; default: true where CSS.supports("anchor-name: --x") is false
   animate,              // false | true | { duration?: number(ms) | string, easing?: string }
   chrome,               // false | true | { buttons, icon, icons, labels, for }: built-in window chrome, see below
+  coordinates,          // { toStage(clientX, clientY), scale?() }: a stage the app pans and zooms, see attachInput
 }) → renderer
 ```
 
@@ -48,7 +50,7 @@ It reconciles a render tree into real DOM:
 | --- | --- |
 | `root` | The host element. |
 | `commit(renderTree, { immediate = false }?)` | Applies a render tree. With `animate`, it runs inside `document.startViewTransition` unless `immediate` is set, a transition is already in flight (rapid commits coalesce), the browser lacks View Transitions, or `prefers-reduced-motion: reduce` matches. |
-| `measure()` | `{ [id]: rect }` for every primary view, relative to `root`. |
+| `measure()` | `{ [id]: rect }` for every primary view, relative to `root`: screen pixels, or stage units with [`coordinates`](#zoomed-and-unbounded-stages-a-canvas). |
 | `elementFor(id)` | The view element for a window id, if rendered. |
 | `bodyFor(id)` | Where a view's content mounts: its chrome body when `chrome` is on (and the window has chrome), else the view element. |
 | `anchorFallback` | Whether anchored elements are positioned by JS. |
@@ -59,7 +61,7 @@ It reconciles a render tree into real DOM:
 | `destroy()` | Unmounts every surface, removes every element, and disconnects the observer. |
 | `styleOf(key)` | Debug helper: the inline style text recorded for a key. |
 
-**The JS anchor fallback.** With `anchorFallback`, the native anchor declarations are stripped and each anchored element is positioned with `left`/`top` computed from measured rects. Side-anchored elements run the full [`positionPopup`](./geometry.md#positionpopupanchorrect-popupsize-stage-options), including `slide` and `resize` (setting `width`/`height` when it shrinks something). Inside-anchored elements are aligned by `justify-self`/`align-self`. Coordinates and sizes it set are cleared when an element stops being anchored.
+**The JS anchor fallback.** With `anchorFallback`, the native anchor declarations are stripped and each anchored element is positioned with `left`/`top` computed from measured rects. Side-anchored elements run the full [`positionPopup`](./geometry.md#positionpopupanchorrect-popupsize-stage-options), including `slide` and `resize` (setting `width`/`height` when it shrinks something). Inside-anchored elements are aligned by `justify-self`/`align-self`. Coordinates and sizes it set are cleared when an element stops being anchored. With [`coordinates`](#zoomed-and-unbounded-stages-a-canvas), the rects are converted to stage units first, so it positions correctly inside a zoomed root.
 
 **Animation.** Every primary view gets a unique `view-transition-name` (`wm-r<renderer#>-<sanitized id>`, unique per document), so each window animates on its own. `duration`/`easing` set `--wa-transition-duration`/`--wa-transition-easing` on the document element, which `BASE_CSS` reads. The manager passes `immediate: true` for commands carrying a `gesture` token or `immediate: true`.
 
@@ -90,6 +92,7 @@ attachInput({
   afterRender,           // (task) => void: when to move DOM focus after a focus change (default: next frame)
   touch,                 // true | { pinch, swipe, contextMenu, ... }: touch and pen gestures (opt-in), see below
   popouts,               // an attachPopouts handle: window/pop-out and window/pop-in buttons open and close the real window
+  coordinates,           // { toStage(clientX, clientY), scale?() }: a stage the app pans and zooms, see below
 }) → detach
 ```
 
@@ -117,7 +120,7 @@ Anywhere on the page (usually a workspace switcher): `data-wm-workspace-target="
 ### Pointer behaviour
 
 - **Press on any window** focuses it (`window/focus`), unless it is already focused. A press on a blocked window only redirects focus (`preventDefault`, no drag).
-- **Floating move** (`status: "normal"`): captures the pointer on the handle. Every move dispatches `window/move` with a shared `gesture` token, **magnetized** onto the stage and other visible windows (`config.snap.magnet`). The adapter tracks intent as the pointer moves. With the modifier held (or `config.drag.toTiled: "always"`), hovering a tiled window previews the slot it would take, and release dispatches `window/drop`. Near a stage edge or corner, the snap-zone preview appears, and release dispatches one `window/resize`. Over a workspace target, release moves the window there and restores its position. <kbd>Escape</kbd> or `pointercancel` moves it back (in the same gesture).
+- **Floating move** (`status: "normal"`): captures the pointer on the handle. Every move dispatches `window/move` with a shared `gesture` token, **magnetized** onto the stage (unless `config.bounds` is `"none"`) and other visible windows (`config.snap.magnet`). The adapter tracks intent as the pointer moves. With the modifier held (or `config.drag.toTiled: "always"`), hovering a tiled window previews the slot it would take, and release dispatches `window/drop`. Near a stage edge or corner, the snap-zone preview appears, and release dispatches one `window/resize` (never on an unbounded stage). Over a workspace target, release moves the window there and restores its position. <kbd>Escape</kbd> or `pointercancel` moves it back (in the same gesture).
 - **Floating resize**: `window/resize` per move (with `constrainSize` and magnetism), sharing a gesture token.
 - **Tiled drag**: a press on a droppable tiled window's move handle becomes a drag after `threshold` px (touch: after a still `longPress`; moving first hands the gesture back to the browser, and the context menu is suppressed). An overlay (`[data-wm-drag-overlay]`) then covers the stage, which shields iframes from the pointer and holds the preview: the hypothetical next state is rendered through the same derive → compile pipeline into ghost outlines. Constraints are dropped from the ghost so it shows each **slot**, and slots that would violate a window's constraints are outlined red (`data-wm-too-small`). The drop zone is highlighted. With the modifier held (`toFloating: "modifier"`) or outside the stage (`"threshold"`), the preview shows the window floating at the pointer instead. Release dispatches exactly one command: `window/drop` (with a `geometry` estimate when `tooSmall: "reject"`), `window/detach`, or `window/move-to-workspace` (with `follow` from config). <kbd>Escape</kbd> or `pointercancel` aborts. Pressing or releasing the modifier mid-drag updates the preview without moving the pointer.
 - **Tab drag**: drag a tab along its strip; an insertion line shows where it lands, and release dispatches `window/drop` with zone `left`/`right` (past the last tab means last).
@@ -176,6 +179,40 @@ With `config.direction: "rtl"` (see [Layouts › Right-to-left](./layouts.md#rig
 | Swipes (`touch`) | swiping toward the inline-start edge (right) goes to the next tab or workspace |
 
 **Following the page's `dir`.** `attachDirection({ wm, element })` (also on `attachStage` as `direction: "auto"`, the default) reads an explicit `dir` on the stage or any ancestor, or a computed `direction: rtl`, dispatches `config/set { direction }` when it differs, and watches `dir` changes with a `MutationObserver`. A page with **no** `dir` says nothing, so `createState({ config: { direction: "rtl" } })` still works. `pageDirection(element)` is the pure read (`"rtl"`, `"ltr"` or `undefined`). `attachStage` also takes `direction: "ltr" | "rtl"` (set once) or `false` (never touch it). Cross-tab sync keeps the direction per tab (it is neither sent nor applied).
+
+### Zoomed and unbounded stages (a canvas)
+
+A spatial notebook or whiteboard puts floating windows on a world the user pans and zooms. The usual shape: the app owns a viewport element (it clips, draws the background and takes pan and zoom gestures), and the renderer's root, which is also `attachInput`'s root, sits inside it as the "world", transformed with `transform: translate(x, y) scale(z)` and `transform-origin: 0 0`. Two things make that work:
+
+- **`coordinates`** on `createDomRenderer` and `attachInput` (and `attachStage`, `WindowManagerStage`): `{ toStage(clientX, clientY) → { x, y }, scale?() → number }`. `toStage` maps a client (viewport) point to root-local **stage units**, the untransformed CSS pixels a floating window's `placement` is in; `scale()` is screen pixels per stage unit, the zoom (left out, it is read off `toStage`). Both are called on every use, so they can read live pan and zoom values. Pass the same object to both.
+- **`config.bounds: "none"`** (see [State › Configuration](./state.md#configuration-config)): the stage is unbounded, so floating windows may have any coordinates, negative or far outside the root's box.
+
+```js
+const view = { x: 0, y: 0, z: 1 };           // the app's own pan and zoom
+const coordinates = {
+  toStage(clientX, clientY) {
+    const r = viewport.getBoundingClientRect();
+    return { x: (clientX - r.left - viewport.clientLeft - view.x) / view.z, y: (clientY - r.top - viewport.clientTop - view.y) / view.z };
+  },
+  scale: () => view.z,
+};
+const renderer = createDomRenderer({ root: world, surfaceFor, chrome: true, coordinates });
+const wm = createWindowManager({ state: createState({ layout: { type: "floating" }, config: { bounds: "none" } }), renderer });
+attachInput({ root: world, wm, coordinates });
+// pan or zoom: change `view`, then world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`
+```
+
+With `coordinates`, every pointer position, grab offset and measured rect goes through the hook: a dragged window, a resize grip, a pinch, a splitter and the drag ghost all track the cursor 1:1 on screen at any zoom, and `measure()`, the JS anchor fallback and the drop targets work in stage units. Distances keep the units they are documented in:
+
+| In screen pixels (constant at every zoom) | In stage units |
+| --- | --- |
+| `config.snap.threshold`, `config.snap.magnet`, `threshold`, `detachDistance`, the tab-drag band, `touch.slop`, `touch.swipeDistance`, `touch.workspaceSwipeDistance` | placements, `measure()`, `snap` (the grid), `floatStep`, `PINCH_MIN_SIZE`, `x`/`y` of a `contextMenu` press |
+
+Under `config.bounds: "none"`: no snap-zone preview and no drag-to-top-edge maximize (whatever `snap.edges` says), the stage's edges do not attract (other windows still do, within `snap.magnet`), a tiled window dragged out as floating lands at the pointer unclamped, and the root does not clip (`compile` writes `data-wm-bounds="none"` and `overflow: visible`; `BASE_CSS` makes the host `overflow: visible; background: transparent`, so the viewport's own background shows). Panning and zooming are the app's: the library never changes the transform, and a press on empty space inside the root starts no gesture, so the app's own pan handler can take it. See `demo/canvas.html`.
+
+What stays bounded: `window/maximize` (and a window's maximized state) fills the root's own box, a dialog's `"center"` placement and notifications are placed in it, and the drag overlay that shields iframes during a tiled drag covers it. Size the world element to the viewport (as `inset: 0` inside it does) if those should match what the user sees at zoom 1. Only translation and a uniform scale are supported: no rotation or skew.
+
+Without `coordinates` the adapters work in screen pixels relative to the root's box, exactly as before; that is right for an untransformed stage, and wrong for a scaled one.
 
 ### Keyboard
 

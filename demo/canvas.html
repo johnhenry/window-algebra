@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Infinite canvas</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+    <style>
+      .note { margin: 8px 16px 0; font-size: 12.5px; color: var(--muted); }
+      .note code { background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+      /* The viewport is the app's: it clips, draws the grid and takes pan and zoom gestures. */
+      #viewport {
+        position: relative;
+        overflow: hidden;
+        margin: 8px;
+        min-height: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--bg-grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+        touch-action: none;
+        cursor: grab;
+      }
+      #viewport.panning { cursor: grabbing; }
+      /*
+       * The world is the renderer's root and the input adapter's root. The app transforms it; the library only
+       * needs the coordinates hook to know how. With config.bounds "none", BASE_CSS lets it overflow, so panes far
+       * outside its box (negative coordinates included) still show.
+       */
+      #world { position: absolute; inset: 0; transform-origin: 0 0; }
+      #world wm-view { cursor: auto; }
+      .cell { padding: 10px 12px; font-size: 13px; }
+      .cell pre { margin: 0 0 8px; padding: 8px; border-radius: 6px; background: var(--surface-2); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+      .cell output { display: block; color: var(--muted); }
+      #status { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+    </style>
+  </head>
+  <body class="app" style="grid-template-rows: auto auto auto 1fr">
+    <header class="site"></header>
+    <nav class="toolbar" aria-label="Canvas controls">
+      <button class="btn small" id="new" type="button">New pane</button>
+      <span class="sep"></span>
+      <button class="btn small" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <output id="zoom" aria-live="polite">100%</output>
+      <button class="btn small" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button class="btn small" id="reset" type="button">Reset view</button>
+      <span class="sep"></span>
+      <button class="btn small" id="undo" type="button">Undo</button>
+      <button class="btn small" id="redo" type="button">Redo</button>
+      <span class="sep"></span>
+      <label><input type="checkbox" id="bounded" /> Bounded stage (snap zones, clamping)</label>
+      <span id="status"></span>
+    </nav>
+    <p class="note">
+      A spatial notebook: the panes live in a world the page pans and zooms with <code>transform: translate() scale()</code>.
+      Scroll the wheel over empty space (or hold Ctrl/⌘ anywhere) to zoom around the cursor, drag empty space to pan.
+      Dragging a title bar or a grip tracks the cursor at every zoom, because <code>attachInput</code> and
+      <code>createDomRenderer</code> get <code>coordinates: { toStage, scale }</code>; <code>config.bounds: "none"</code>
+      turns off snap zones and clamping, so panes go anywhere, negative coordinates included.
+    </p>
+    <div id="viewport" role="region" aria-label="Canvas viewport">
+      <div id="world" role="group" aria-label="Canvas"></div>
+    </div>
+
+    <script type="module">
+      import { createWindowManager, createState } from "../src/index.mjs";
+      import { createDomRenderer, attachInput, createSurfaceRegistry, createFrameScheduler } from "../src/browser/index.mjs";
+      import { initPage, h } from "./shared/kit.mjs";
+
+      initPage({ current: "./canvas.html", title: "Infinite canvas" });
+
+      const viewport = document.getElementById("viewport");
+      const world = document.getElementById("world");
+
+      // ---------------------------------------------------------------- the view (the app's own pan/zoom state)
+      const view = { x: 260, y: 160, z: 1 };
+      const MIN_ZOOM = 0.2;
+      const MAX_ZOOM = 4;
+      const apply = () => {
+        world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+        viewport.style.backgroundSize = `${24 * view.z}px ${24 * view.z}px`;
+        viewport.style.backgroundPosition = `${view.x}px ${view.y}px`;
+        document.getElementById("zoom").textContent = `${Math.round(view.z * 100)}%`;
+      };
+      /** Zoom to `z`, keeping the world point under viewport point (cx, cy) where it is. */
+      const zoomAt = (z, cx, cy) => {
+        const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+        view.x = cx - ((cx - view.x) * next) / view.z;
+        view.y = cy - ((cy - view.y) * next) / view.z;
+        view.z = next;
+        apply();
+      };
+      const setView = (z, x, y) => {
+        Object.assign(view, { z, x, y });
+        apply();
+      };
+
+      // The one thing the library needs: client point -> world (stage) units, and the zoom.
+      const coordinates = {
+        toStage(clientX, clientY) {
+          const r = viewport.getBoundingClientRect();
+          return { x: (clientX - r.left - viewport.clientLeft - view.x) / view.z, y: (clientY - r.top - viewport.clientTop - view.y) / view.z };
+        },
+        scale: () => view.z,
+      };
+
+      // ---------------------------------------------------------------- the window manager
+      const surfaces = createSurfaceRegistry();
+      const renderer = createDomRenderer({ root: world, surfaceFor: surfaces, chrome: { buttons: ["close"] }, coordinates });
+      const wm = createWindowManager({
+        state: createState({ layout: { type: "floating" }, config: { bounds: "none" } }),
+        renderer,
+        schedule: createFrameScheduler(),
+        history: 200,
+      });
+      attachInput({ root: world, wm, keyboard: true, coordinates });
+
+      let counter = 0;
+      const open = (title, code, result, placement) => {
+        const id = `cell${++counter}`;
+        surfaces.set(id, { mount: (el) => el.append(h("div", { class: "cell" }, h("pre", {}, code), h("output", {}, result))), unmount: () => {} });
+        wm.create({ id, title, mode: "floating", placement });
+        return id;
+      };
+      open("data", "const xs = [3, 1, 4, 1, 5, 9];", "Array(6) [3, 1, 4, 1, 5, 9]", { x: -200, y: -120, width: 300, height: 150 });
+      open("sorted", "const sorted = [...xs].sort((a, b) => a - b);", "Array(6) [1, 1, 3, 4, 5, 9]", { x: 160, y: -60, width: 320, height: 150 });
+      open("sum", "sorted.reduce((a, b) => a + b, 0)", "23", { x: 40, y: 140, width: 260, height: 140 });
+
+      // ---------------------------------------------------------------- pan (drag empty space) and zoom (wheel)
+      let pan = null;
+      viewport.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || event.target.closest("wm-view")) return;
+        pan = { id: event.pointerId, x: event.clientX - view.x, y: event.clientY - view.y };
+        viewport.setPointerCapture(event.pointerId);
+        viewport.classList.add("panning");
+      });
+      viewport.addEventListener("pointermove", (event) => {
+        if (!pan || event.pointerId !== pan.id) return;
+        setView(view.z, event.clientX - pan.x, event.clientY - pan.y);
+      });
+      const endPan = () => {
+        pan = null;
+        viewport.classList.remove("panning");
+      };
+      viewport.addEventListener("pointerup", endPan);
+      viewport.addEventListener("pointercancel", endPan);
+      viewport.addEventListener(
+        "wheel",
+        (event) => {
+          // Over a pane, a plain wheel scrolls its content; Ctrl/⌘ (and a trackpad pinch, which sets ctrlKey) zooms.
+          if (event.target.closest("wm-view") && !event.ctrlKey && !event.metaKey) return;
+          event.preventDefault();
+          const r = viewport.getBoundingClientRect();
+          zoomAt(view.z * Math.exp(-event.deltaY * 0.0015), event.clientX - r.left - viewport.clientLeft, event.clientY - r.top - viewport.clientTop);
+        },
+        { passive: false },
+      );
+      const center = () => [viewport.clientWidth / 2, viewport.clientHeight / 2];
+      document.getElementById("zoom-in").onclick = () => zoomAt(view.z * 1.25, ...center());
+      document.getElementById("zoom-out").onclick = () => zoomAt(view.z / 1.25, ...center());
+      document.getElementById("reset").onclick = () => setView(1, 260, 160);
+
+      // ---------------------------------------------------------------- toolbar
+      document.getElementById("new").onclick = () => {
+        // A new pane where the middle of the viewport is now, whatever the pan and zoom.
+        const r = viewport.getBoundingClientRect();
+        const p = coordinates.toStage(r.left + r.width / 2, r.top + r.height / 2);
+        const n = counter + 1;
+        open(`cell ${n}`, `// cell ${n}`, "undefined", { x: Math.round(p.x - 130), y: Math.round(p.y - 60), width: 260, height: 120 });
+      };
+      document.getElementById("undo").onclick = () => wm.undo();
+      document.getElementById("redo").onclick = () => wm.redo();
+      document.getElementById("bounded").onchange = (event) => wm.dispatch({ type: "config/set", bounds: event.target.checked ? "stage" : "none" });
+      const status = document.getElementById("status");
+      wm.subscribe((state) => {
+        const p = state.windows[state.focus.window]?.placement;
+        status.textContent = p ? `${state.focus.window}: ${Math.round(p.x)}, ${Math.round(p.y)} ${Math.round(p.width)}×${Math.round(p.height)}` : "";
+      });
+
+      apply();
+      // For the browser tests and for tinkering in devtools.
+      window.wm = wm;
+      window.canvas = { view, setView, zoomAt, coordinates, renderer };
+    </script>
+  </body>
+</html>

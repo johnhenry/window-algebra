@@ -106,7 +106,7 @@ Pointer-agnostic: feed them positions from a mouse, touch, pen, a synthetic sour
 
 ## Snap zones and magnetism
 
-Windows Snap, macOS tiling and window-manager magnetism, for **floating** windows. Tiled windows use `window/drop` instead. They are configured by [`config.snap`](./state.md#configuration-config) and applied by `attachInput`. A released snap is one `window/resize { id, x, y, width, height }` carrying the drag's `gesture` token, so the whole gesture is one undo step. `constrainSize` still clamps it, so a zone never violates a window's constraints (the window may just not fill the whole zone).
+Windows Snap, macOS tiling and window-manager magnetism, for **floating** windows. Tiled windows use `window/drop` instead. They are configured by [`config.snap`](./state.md#configuration-config) and applied by `attachInput`. The helpers take every rect, point and distance in one coordinate space; `attachInput` feeds them root-relative stage units and, on a zoomed stage ([`coordinates`](./browser.md#zoomed-and-unbounded-stages-a-canvas)), divides `threshold` and `magnet` by the zoom, so both stay constant in screen pixels. On an unbounded stage (`config.bounds: "none"`) it never asks for a zone and leaves the stage rect out of `others`. A released snap is one `window/resize { id, x, y, width, height }` carrying the drag's `gesture` token, so the whole gesture is one undo step. `constrainSize` still clamps it, so a zone never violates a window's constraints (the window may just not fill the whole zone).
 
 | Export | Description |
 | --- | --- |
