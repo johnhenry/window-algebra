@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3 — focus and stacking can stay out of undo (2026-10-10)
+
+Additive: nothing changes without the new option or flag, so `^0.1.0` picks this up. Found building miso (a natto.dev-style canvas notebook), where clicking a pane to select it made Cmd+Z "undo the click" instead of the last move (#10).
+
+### Added
+
+- **`history: { limit, ignore }` on `createWindowManager`, and `history: false` on a command (#10).** `ignore` lists command types (`window/focus`, `window/raise`, ...) that are applied, notified and logged but never become an undo step and never clear the redo stack; `history: false` does the same for one command, the way `immediate` marks one, and `history: true` records a command whose type is in `ignore`. `replay(wm.origin, wm.log)` still equals `wm.getState()`: ignored commands are in `log`. History holds whole states, so an ignored change is undone together with the recorded step before it (and redone with it), and one made after an undo is discarded by the next undo or redo, which land on exactly the states they left. An ignored command carrying the open gesture's token joins that gesture; otherwise it never opens one, so a plain click leaves no step. New type `HistoryOptions`; `CommandMeta` gains `history`. Documented in [docs/api/manager.md](docs/api/manager.md#keeping-commands-out-of-undo). Introduced in b1d6d3a.
+
+An application that undid in a loop until something other than focus or stacking changed (comparing `windows` before and after) can pass the list instead and call `undo()`/`redo()` once.
+
 ## 0.1.2 — a minimized window no longer breaks splitter drags or `layout/to-tree` sizes (2026-10-09)
 
 Bug fix, no API change beyond two additive helpers; found by erisera-code/clawser (#11).
