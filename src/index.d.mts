@@ -367,6 +367,17 @@ export interface Renderer {
 export type Scheduler = (task: () => void) => void;
 export type Listener<C extends { type: string } = Command> = (state: State, events: Event[], command: C | null) => void;
 
+/** The object form of the manager's `history` option. */
+export interface HistoryOptions<C extends { type: string } = never> {
+  /** Undo steps kept (default 100). */
+  limit?: number;
+  /**
+   * Command types that are applied and logged but never become an undo step, and never clear redo
+   * (focus and stacking, say). A command's own `history` flag overrides this list.
+   */
+  ignore?: ReadonlyArray<CommandType | C["type"]>;
+}
+
 export interface WindowManagerOptions<C extends { type: string } = never> {
   /** The initial state (default `createState()`). */
   state?: State;
@@ -382,8 +393,8 @@ export interface WindowManagerOptions<C extends { type: string } = never> {
   renderers?: Record<string, Renderer>;
   /** Commit scheduler (default: immediate). */
   schedule?: Scheduler;
-  /** Enable undo/redo (a number is the limit; `true` is 100). */
-  history?: boolean | number;
+  /** Enable undo/redo (a number is the limit; `true` is 100; an object also takes `ignore`). */
+  history?: boolean | number | HistoryOptions<C>;
   /** Interpret every effect but `render`. */
   onEffect?: (effect: Effect, wm: WindowManager<C>) => void;
 }

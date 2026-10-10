@@ -1,6 +1,6 @@
 {
   "name": "@johnhenry/window-algebra",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A functional window manager for the browser: pure state updates, a small layout algebra that derives a presentation tree, and CSS (flex, grid, anchor positioning, container queries) as the final layout solver.",
   "type": "module",
   "main": "./src/index.mjs",
