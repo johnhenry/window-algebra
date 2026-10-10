@@ -23,6 +23,8 @@ Read-only, pure functions over a state. They never mutate their input. Every que
 | `activeWorkspace(state)` | The active workspace **record** of the focused output (not its id; the id is `state.activeWorkspace`). |
 | `focusedWindow(state)` | The focused window record, or `undefined`. |
 | `windowsIn(state, workspaceId = state.activeWorkspace)` | That workspace's window records in workspace order, including invisible ones (minimized, children of hidden parents). |
+| `directionOf(state)`, `isRtl(state)` | `config.direction` (`"ltr"` when missing), and whether it is `"rtl"`. |
+| `boundsOf(state)` | `config.bounds`: `"none"` for an unbounded canvas, else `"stage"` (also when the key is missing on an older saved state). |
 
 ## Outputs
 
@@ -132,6 +134,8 @@ The non-layout facts `compile` needs, as a plain object:
 
 | Field | Contents | Used by `compile` for |
 | --- | --- | --- |
+| `direction` | `directionOf(state)` | `dir="rtl"` on the root, mirrored placements |
+| `bounds` | `boundsOf(state)` | `data-wm-bounds="none"` and `overflow: visible` on the root |
 | `focused` | `state.focus.window` | `data-focused` |
 | `blocked` | ids blocked by a modal | `data-wm-blocked`, `aria-disabled` |
 | `titles` | `{ id: title }` | `aria-label`, tab text |

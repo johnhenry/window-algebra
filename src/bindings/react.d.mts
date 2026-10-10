@@ -36,6 +36,8 @@ export interface WindowManagerStageProps {
   /** A command palette, as for `attachStage`; reach it through `stageRef` (`stage.palette.open()`). */
   palette?: StageOptions["palette"];
   direction?: StageOptions["direction"];
+  /** A transformed stage (pan/zoom canvas), as for `attachStage`. */
+  coordinates?: StageOptions["coordinates"];
   /** Receives the stage's handles (`wm`, `renderer`, `sync`, `palette`, `popouts`, `detach`) once attached, `null` when it detaches. A ref object or a callback. */
   stageRef?: { current: Stage | null } | ((stage: Stage | null) => void);
   /** The same as a callback prop: the handles on attach, `null` on detach. */

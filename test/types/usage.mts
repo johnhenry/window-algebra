@@ -22,6 +22,7 @@ import {
   paletteEntries,
   buildCommand,
   directionOf,
+  boundsOf,
   type Command,
   type CommandOf,
   type CommandType,
@@ -48,6 +49,7 @@ import {
   CHROME_BUTTONS,
   type ChromeButton,
   type Surface,
+  type StageCoordinates,
 } from "@johnhenry/window-algebra/browser";
 import { column, grid, overlay, isView, validate, type ViewNode, type RowNode } from "@johnhenry/window-algebra/algebra";
 import { mirror, views, mapViews, find } from "@johnhenry/window-algebra/transforms";
@@ -104,6 +106,10 @@ update(state, { type: "window/drop", id: "a", target: "b", zone: "middle" });
 update(state, { type: "window/set-layer", id: "a", layer: "overlay" });
 // @ts-expect-error direction is "ltr" or "rtl"
 update(state, { type: "config/set", direction: "auto" });
+update(state, { type: "config/set", bounds: "none" });
+createState({ config: { bounds: "none", snap: { magnet: 6 } } });
+// @ts-expect-error bounds is "stage" or "none"
+update(state, { type: "config/set", bounds: "infinite" });
 // @ts-expect-error a mode is tiled or floating
 update(state, { type: "window/set-mode", id: "a", mode: "docked" });
 
@@ -201,6 +207,8 @@ BASE_CSS.length;
 THEME_TOKENS["--wa-color-accent"].light;
 geometry.constrainSize({ width: 10, height: 10 }, { minWidth: 20, aspectRatio: { min: 1, max: 2 } });
 directionOf(next) satisfies "ltr" | "rtl";
+boundsOf(next) satisfies "stage" | "none";
+next.config.bounds satisfies "stage" | "none";
 
 const catalog = paletteEntries(next, { query: "close" });
 catalog[0]?.fields[0]?.kind;
@@ -228,6 +236,14 @@ chromed.bodyFor("a")?.classList;
 createDomRenderer({ root: stage, chrome: true });
 // @ts-expect-error a chrome button is one of five
 createDomRenderer({ root: stage, chrome: { buttons: ["explode"] } });
+// A pan/zoom canvas: one coordinate hook for the renderer and the input adapter.
+let zoom = 1;
+const coordinates: StageCoordinates = { toStage: (clientX, clientY) => ({ x: clientX / zoom, y: clientY / zoom }), scale: () => zoom };
+createDomRenderer({ root: stage, coordinates }).measure().a?.width;
+attachInput({ root: stage, wm, coordinates });
+attachInput({ root: stage, wm, coordinates: { toStage: (x, y) => ({ x, y }) } });
+// @ts-expect-error toStage returns a point
+attachInput({ root: stage, wm, coordinates: { toStage: (x: number) => x } });
 chromeSurface({ id: "a", title: "A", wm, body: (el) => void el.classList, buttons: ["maximize"] }) satisfies Surface;
 CHROME_BUTTONS satisfies readonly ChromeButton[];
 CHROME_CSS satisfies string;
@@ -250,7 +266,7 @@ bindings.useWindowState(wm, (s) => s.focus.window) satisfies string | null;
 const { WindowManagerStage } = bindings;
 WindowManagerStage({ wm, className: "stage", as: "section" });
 
-const handle = attachStage(stage, { wm, chrome: { buttons: ["close"] }, popouts: true, sync: true, palette: { shortcut: false }, direction: "auto", input: { keyboard: true } });
+const handle = attachStage(stage, { wm, chrome: { buttons: ["close"] }, popouts: true, sync: true, palette: { shortcut: false }, direction: "auto", input: { keyboard: true }, coordinates });
 handle.detach();
 const Stage = defineWindowAlgebraElement("wa-stage");
 const element = new Stage().configure({ wm });

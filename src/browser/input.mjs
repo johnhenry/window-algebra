@@ -36,7 +36,7 @@
 import { createDrag, updateDrag, createResize, updateResize } from "../interaction/drag.mjs";
 import { dropTargetAt, zoneRect } from "../interaction/drop.mjs";
 import { snapZoneAt, snapZoneRect, magnetize, magnetizeResize } from "../interaction/snap.mjs";
-import { isBlocked, isVisible, inTiledBase, outputActiveWorkspace } from "../state/queries.mjs";
+import { isBlocked, isVisible, inTiledBase, outputActiveWorkspace, boundsOf } from "../state/queries.mjs";
 import { update } from "../state/update.mjs";
 import { DROPS, dragMode, isDroppable, tiledOrder } from "../state/drops.mjs";
 import { derive, presentationContext } from "../state/derive.mjs";
@@ -45,6 +45,7 @@ import { bspNodeAt } from "../layouts/bsp.mjs";
 import { DEFAULT_CONFIG } from "../state/create.mjs";
 import { createDomRenderer } from "./dom.mjs";
 import { createTouchGestures, touchOptions, touchTokens } from "./touch.mjs";
+import { coordinateSpace } from "./coordinates.mjs";
 
 /** Elements that handle their own pointer input, even inside a drag handle. */
 const INTERACTIVE = "[data-wm-command], button, a, input, select, textarea, label, [contenteditable]";
@@ -195,6 +196,13 @@ const comboOf = (event) =>
  *   `{ type, id }`; `false` turns it off), `contextDelay` (ms, default 500), `slop`, `swipeDistance`,
  *   `workspaceSwipeDistance`. It sets `data-wm-touch` on `root`, which `BASE_CSS` maps to the `touch-action`
  *   each gesture needs.
+ * @param {{ toStage(clientX: number, clientY: number): { x: number, y: number }, scale?: () => number }} [options.coordinates]
+ *   for a stage the application transforms (a pannable, zoomable canvas): `toStage` maps a client point to
+ *   root-local stage units (the units of `placement`), `scale()` gives screen pixels per stage unit (default: read
+ *   off `toStage`). Every pointer position, grab offset and measured rect then goes through it, so a dragged window
+ *   tracks the cursor 1:1 at any zoom, and the pixel distances in `config.snap` (`threshold`, `magnet`) and the
+ *   touch distances stay constant on screen. Pass the same object to `createDomRenderer`. Without it the adapter
+ *   works in screen pixels relative to `root`'s box, which is exact for an untransformed stage.
  * @returns {() => void} detach
  */
 export const attachInput = (options) => {
@@ -221,7 +229,13 @@ export const attachInput = (options) => {
     floatStep = 10,
     output,
     touch,
+    coordinates,
   } = options;
+  // A transformed stage (pan/zoom canvas): convert client points and rects to stage units. Null for a plain
+  // stage, whose math below stays exactly the screen-pixel math it always was.
+  const space = coordinateSpace(coordinates);
+  /** Screen pixels per stage unit (1 without a `coordinates` hook): divide a screen-pixel distance by it. */
+  const unit = () => (space ? space.scale() : 1);
   // The workspace this root's stage actually shows: the given output's own
   // active workspace when this input is bound to one output (multi-output
   // rigs, one `attachInput` per stage), otherwise the globally focused
@@ -320,29 +334,43 @@ export const attachInput = (options) => {
 
   // ------------------------------------------------------------ geometry helpers
 
+  /** A client rect as a root-relative rect: screen pixels from `origin` (root's client rect), or stage units with `coordinates`. */
+  const localRect = (r, origin) => (space ? space.rect(r) : { x: r.left - origin.left, y: r.top - origin.top, width: r.width, height: r.height });
+
   /** Realized rects of the views actually shown (not hidden stack children or projections), root-relative. */
   const measureViews = () => {
-    const origin = root.getBoundingClientRect();
+    const origin = space ? null : root.getBoundingClientRect();
     const out = {};
     for (const element of root.querySelectorAll("wm-view[data-view]")) {
       if (element.hasAttribute("data-view-projection") || element.closest("[data-wm-drag-overlay]")) continue;
       if (element.closest("[inert]") && !element.hasAttribute("data-wm-blocked")) continue;
-      const r = element.getBoundingClientRect();
-      out[element.getAttribute("data-view")] = { x: r.left - origin.left, y: r.top - origin.top, width: r.width, height: r.height };
+      out[element.getAttribute("data-view")] = localRect(element.getBoundingClientRect(), origin);
     }
     return out;
   };
 
+  /** The pointer, root-relative (stage units with `coordinates`). */
   const localPoint = (event) => {
+    if (space) return space.point(event.clientX, event.clientY);
     const origin = root.getBoundingClientRect();
     return { x: event.clientX - origin.left, y: event.clientY - origin.top };
   };
 
+  /**
+   * The pointer for a floating move or resize, which only ever uses differences from the press: the client point
+   * itself on a plain stage, the stage point on a transformed one (so the window follows the cursor 1:1).
+   */
+  const gesturePoint = (event) => (space ? space.point(event.clientX, event.clientY) : { x: event.clientX, y: event.clientY });
+
   /** `root`'s own rect, root-relative — the "stage" snap zones are measured against. */
   const stageRect = () => {
     const r = root.getBoundingClientRect();
+    if (space) return { x: 0, y: 0, ...space.size(r) };
     return { x: 0, y: 0, width: r.width, height: r.height };
   };
+
+  /** Is this an unbounded stage (`config.bounds: "none"`, a canvas)? No snap zones, no stage magnet, no clamping. */
+  const unbounded = (state) => boundsOf(state) === "none";
 
   // ------------------------------------------------------------ right-to-left
   // `config.direction: "rtl"` mirrors the horizontal axis. Pointer positions are always physical, but a
@@ -356,8 +384,17 @@ export const attachInput = (options) => {
   /** 1 in a left-to-right stage, -1 in a right-to-left one: the sign of a horizontal "forward". */
   const flow = () => (isRtlNow() ? -1 : 1);
 
-  /** Effective `config.snap`, defaulting fields a state saved before this feature omits. */
-  const snapConfigOf = (state) => ({ ...DEFAULT_CONFIG.snap, ...state.config.snap });
+  /**
+   * Effective `config.snap`, defaulting fields a state saved before this feature omits. Its `threshold` and `magnet`
+   * are screen pixels: on a zoomed stage (`coordinates`) they are converted to stage units, so they feel the same at
+   * every zoom level.
+   */
+  const snapConfigOf = (state) => {
+    const cfg = { ...DEFAULT_CONFIG.snap, ...state.config.snap };
+    if (!space) return cfg;
+    const s = unit();
+    return { ...cfg, threshold: Number(cfg.threshold) / s, magnet: Number(cfg.magnet) / s };
+  };
 
   /**
    * Rects (root-relative) of every window visible on the active workspace but `selfId`,
@@ -366,7 +403,8 @@ export const attachInput = (options) => {
    * onto it too, so this doesn't re-filter by `win.workspace`.
    */
   const otherRects = (state, selfId, geometry) => {
-    const rects = [stageRect()];
+    // An unbounded stage has no edges to attract a window; other windows still do.
+    const rects = unbounded(state) ? [] : [stageRect()];
     for (const win of Object.values(state.windows)) {
       if (win.id === selfId || !isVisible(state, win.id)) continue;
       const r = win.mode === "floating" ? mirrorRect(win.placement) : geometry?.[win.id];
@@ -469,11 +507,14 @@ export const attachInput = (options) => {
     const workspace = rootWorkspace(state);
     const container = el.parentNode;
     const rect = container?.getBoundingClientRect?.() ?? { width: 0, height: 0 };
-    const mainSize = Math.max(1, (axis === "x" ? rect.width : rect.height) - (count - 1) * SPLITTER_SIZE);
+    // Sizes and pointer travel are screen pixels; divided by `scale` they are stage units, like the constraints.
+    const scale = unit();
+    const mainSize = Math.max(1, (axis === "x" ? rect.width : rect.height) / scale - (count - 1) * SPLITTER_SIZE);
     const prevEl = el.previousSibling;
     const nextEl = el.nextSibling;
     const prevRect = prevEl?.getBoundingClientRect?.();
     const nextRect = nextEl?.getBoundingClientRect?.();
+    const extent = (r) => (r ? (axis === "x" ? r.width : r.height) / scale : undefined);
     splitter = {
       token: gestureToken(),
       workspace,
@@ -486,8 +527,9 @@ export const attachInput = (options) => {
       origin: axis === "x" ? event.clientX : event.clientY,
       prevId: singleViewId(prevEl),
       nextId: singleViewId(nextEl),
-      prevSize: axis === "x" ? prevRect?.width : prevRect?.height,
-      nextSize: axis === "x" ? nextRect?.width : nextRect?.height,
+      prevSize: extent(prevRect),
+      nextSize: extent(nextRect),
+      scale,
       el,
     };
     el.setAttribute("data-wm-active", "");
@@ -504,7 +546,7 @@ export const attachInput = (options) => {
   const updateSplitter = (event) => {
     const pos = splitter.axis === "x" ? event.clientX : event.clientY;
     // The first pane is on the right in RTL: moving the pointer right then shrinks it.
-    const travel = splitter.axis === "x" ? (pos - splitter.origin) * flow() : pos - splitter.origin;
+    const travel = (splitter.axis === "x" ? (pos - splitter.origin) * flow() : pos - splitter.origin) / splitter.scale;
     const pixelDelta = clampSplitterPixelDelta(splitter, travel);
     const { baseline, index, mainSize } = splitter;
     const total = baseline[index] + baseline[index + 1];
@@ -676,7 +718,8 @@ export const attachInput = (options) => {
     const shown = new Set(tiledOrder(next, workspace));
     if (next.windows[dragged]?.workspace === workspace) shown.add(dragged);
     const titles = Object.fromEntries(Object.values(next.windows).map((win) => [win.id, win.title]));
-    visuals.ghost ??= createDomRenderer({ root: visuals.ghostHost, document: doc, anchorFallback: false });
+    // The ghost host covers `root` exactly, so it measures in the same space (stage units with `coordinates`).
+    visuals.ghost ??= createDomRenderer({ root: visuals.ghostHost, document: doc, anchorFallback: false, coordinates });
     visuals.ghost.commit(ghostify(render, { shown, dragged, titles }));
     visuals.ghostGeometry = visuals.ghost.measure();
     // Flag slots that would violate a window's min/max constraints.
@@ -713,7 +756,8 @@ export const attachInput = (options) => {
     if (session.kind === "tab") {
       // The nearest tab along the strip (so past the last tab means "last"), within a band around it.
       const gap = (tab) => Math.max(tab.rect.x - point.x, 0, point.x - (tab.rect.x + tab.rect.width));
-      const band = session.tabs.filter((tab) => point.y >= tab.rect.y - 24 && point.y <= tab.rect.y + tab.rect.height + 24);
+      const reach = 24 / unit(); // screen px above and below the strip
+      const band = session.tabs.filter((tab) => point.y >= tab.rect.y - reach && point.y <= tab.rect.y + tab.rect.height + reach);
       const hit = band.sort((a, b) => gap(a) - gap(b))[0];
       if (!hit || hit.id === session.id) return null;
       const zone = point.x < hit.rect.x + hit.rect.width / 2 ? "left" : "right";
@@ -731,15 +775,17 @@ export const attachInput = (options) => {
         settings.toFloating === "modifier" ? held : settings.toFloating === "threshold" ? outsideRoot(event, detachDistance) : false;
       if (detaching) {
         // At the pointer (keeping the grab offset), clamped inside the stage when it fits.
-        const rootRect = root.getBoundingClientRect();
+        const rootRect = stageRect();
         const { width, height } = win.placement;
         const grabX = Math.min(session.grab.x, Math.max(24, width - 24));
         // The window's left edge on screen follows the pointer (keeping the grab offset); its `x` is measured
-        // from the inline-start edge, so in RTL that is the right edge. Clamped inside the stage when it fits.
+        // from the inline-start edge, so in RTL that is the right edge. Clamped inside the stage when it fits,
+        // except on an unbounded stage (a canvas), where it lands wherever the pointer is.
         const left = point.x - grabX;
         const raw = isRtlNow() ? rootRect.width - left - width : left;
-        const x = Math.round(Math.min(Math.max(raw, 0), Math.max(0, rootRect.width - width)));
-        const y = Math.round(Math.min(Math.max(point.y - session.grab.y, 0), Math.max(0, rootRect.height - height)));
+        const free = unbounded(state);
+        const x = Math.round(free ? raw : Math.min(Math.max(raw, 0), Math.max(0, rootRect.width - width)));
+        const y = Math.round(free ? point.y - session.grab.y : Math.min(Math.max(point.y - session.grab.y, 0), Math.max(0, rootRect.height - height)));
         return { type: "detach", key: "detach", command: { type: "window/detach", id: session.id, x, y } };
       }
     }
@@ -747,8 +793,8 @@ export const attachInput = (options) => {
       const allowed = settings.toTiled === "always" || (settings.toTiled === "modifier" && held);
       const found = allowed ? dropTargetAt(state, session.geometry ?? {}, point, session.id, { drops, allowFloating: true }) : null;
       if (found) return { type: "drop", key: `drop:${found.target}:${found.zone}`, drop: { id: session.id, ...found } };
-      const snapCfg = snapConfigOf(state);
-      const zone = snapZoneAt(stageRect(), point, snapCfg);
+      // An unbounded stage has no edges: no half, quarter or drag-to-top maximize zones.
+      const zone = unbounded(state) ? null : snapZoneAt(stageRect(), point, snapConfigOf(state));
       return zone ? { type: "snap", key: `snap:${zone}`, zone } : null;
     }
     const found = dropTargetAt(state, session.geometry ?? {}, point, session.id, { drops, allowFloating: session.kind === "floating" });
@@ -1015,15 +1061,12 @@ export const attachInput = (options) => {
         return;
       }
       if (!isDroppable(state, win) || isBlocked(state, id) || dragMode(state, win.workspace) === "off") return;
-      const origin = root.getBoundingClientRect();
-      const tabs = [...(tab.parentNode?.querySelectorAll?.("[data-wm-tab]") ?? [tab])].map((element) => {
-        const r = element.getBoundingClientRect();
-        return {
-          id: element.getAttribute("data-wm-tab"),
-          element,
-          rect: { x: r.left - origin.left, y: r.top - origin.top, width: r.width, height: r.height },
-        };
-      });
+      const origin = space ? null : root.getBoundingClientRect();
+      const tabs = [...(tab.parentNode?.querySelectorAll?.("[data-wm-tab]") ?? [tab])].map((element) => ({
+        id: element.getAttribute("data-wm-tab"),
+        element,
+        rect: localRect(element.getBoundingClientRect(), origin),
+      }));
       arm(event, { kind: "tab", id, tabs });
       return;
     }
@@ -1049,7 +1092,7 @@ export const attachInput = (options) => {
     if (control && control !== handle && control.closest?.("[data-wm-handle]") === handle) return;
     if (event.button !== undefined && event.button !== 0) return;
     const kind = handle.getAttribute("data-wm-handle");
-    const origin = { x: event.clientX, y: event.clientY };
+    const origin = gesturePoint(event);
 
     // Pinned windows do not move: show "not allowed" for the length of the press.
     if (kind === "move" && win.draggable === false) {
@@ -1095,7 +1138,13 @@ export const attachInput = (options) => {
     // A tiled window's title bar: a potential drag, decided by the threshold (or a long press).
     if (kind === "move" && isDroppable(state, win) && dragMode(state, win.workspace) !== "off") {
       const r = viewElement.getBoundingClientRect();
-      arm(event, { kind: "tiled", id, grab: { x: event.clientX - r.left, y: event.clientY - r.top } });
+      let grab = { x: event.clientX - r.left, y: event.clientY - r.top };
+      if (space) {
+        const at = space.point(event.clientX, event.clientY);
+        const v = space.rect(r);
+        grab = { x: at.x - v.x, y: at.y - v.y };
+      }
+      arm(event, { kind: "tiled", id, grab });
       event.preventDefault();
     }
   };
@@ -1109,7 +1158,7 @@ export const attachInput = (options) => {
     }
     if (gesture) {
       if (gesture.pointerId !== undefined && event.pointerId !== undefined && event.pointerId !== gesture.pointerId) return;
-      const pointer = { x: event.clientX, y: event.clientY };
+      const pointer = gesturePoint(event);
       if (gesture.kind === "floating") {
         // Other windows' rects do not change while a floating window moves: measure once.
         gesture.geometry ??= measureViews();
@@ -1310,9 +1359,7 @@ export const attachInput = (options) => {
   const measuredRect = (id) => {
     const element = viewElementFor(id);
     if (!element) return null;
-    const r = element.getBoundingClientRect();
-    const o = root.getBoundingClientRect();
-    return { x: r.left - o.left, y: r.top - o.top, width: r.width, height: r.height };
+    return localRect(element.getBoundingClientRect(), space ? null : root.getBoundingClientRect());
   };
 
   /**
@@ -1441,6 +1488,7 @@ export const attachInput = (options) => {
         dispatch,
         send,
         local: localPoint,
+        unit,
         viewOf,
         floatRect: pinchRect,
         mirror: mirrorRect,

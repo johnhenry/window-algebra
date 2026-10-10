@@ -126,11 +126,12 @@ Any window with `status: "maximized"` fills the stage (`place({ top: 0, right: 0
 
 ## Configuration (`config`)
 
-`createState({ config })` merges the given keys over `DEFAULT_CONFIG`; `drag`, `urgency` and `snap` merge one level deep. At runtime, change it with [`config/set`](./commands.md#configset), which also merges plain-object values one level deep and validates `drag`, `rules`, `urgency` and `snap`.
+`createState({ config })` merges the given keys over `DEFAULT_CONFIG`; `drag`, `urgency` and `snap` merge one level deep. At runtime, change it with [`config/set`](./commands.md#configset), which also merges plain-object values one level deep and validates `drag`, `rules`, `urgency`, `snap`, `direction` and `bounds`.
 
 | Key | Default | Meaning | Validated by `config/set` |
 | --- | --- | --- | --- |
 | `direction` | `"ltr"` | Reading direction: `"ltr"` or `"rtl"`. Under `"rtl"` every horizontal arrangement mirrors (see [Layouts › Right-to-left](./layouts.md#right-to-left)). May be missing on a saved state: read it as `"ltr"` (`directionOf(state)`). | `"ltr"` \| `"rtl"` |
+| `bounds` | `"stage"` | What bounds floating windows: `"stage"`, or `"none"` for an unbounded canvas (a pannable, zoomable world). Under `"none"`: floating windows keep any coordinates, negative or far outside the stage's box; there are no snap zones (no half, quarter or drag-to-top-edge maximize, whatever `snap.edges` says); the stage edges do not attract under magnetism (other windows still do); a tiled window dragged out as floating lands at the pointer unclamped; `compile` marks the root `data-wm-bounds="none"` with `overflow: visible`, and `BASE_CSS` makes the host `overflow: visible; background: transparent`. Commands that fill the stage (`window/maximize`, a dialog's `"center"`) still use the stage's own box. May be missing on a saved state: read it as `"stage"` (`boundsOf(state)`). See [Browser adapters › Zoomed and unbounded stages](./browser.md#zoomed-and-unbounded-stages-a-canvas). | `"stage"` \| `"none"` |
 | `focusRaises` | `true` | Focusing a window also raises it (and its descendants) within its layer. | no |
 | `gap` | `0` | Gap in px between tiled siblings. It wraps every container in the tiled base, unless a `smart-gaps`/`no-gaps` modifier suppresses it. | no |
 | `inset` | `0` | Padding in px around the tiled base, suppressed the same way. | no |
@@ -146,8 +147,8 @@ Any window with `status: "maximized"` fills the stage (`place({ top: 0, right: 0
 | `rules` | `[]` | Declarative window rules, applied at `window/create`. See [`rules/set`](./commands.md#rulesset) and [Queries › Rules](./queries.md#rules). | `validRules` |
 | `urgency.clearOnFocus` | `true` | Focusing an urgent window clears its hint. | boolean |
 | `snap.edges` | `true` | While dragging a floating window, approaching a stage edge or corner previews a half, quarter or maximize placement and applies it on release. | boolean |
-| `snap.threshold` | `16` | How close in px the pointer must be to a stage edge or corner. | `≥ 0` |
-| `snap.magnet` | `8` | During a floating move or resize, edges within this many px snap onto other visible windows' edges and the stage. `0` disables magnetism. | `≥ 0` |
+| `snap.threshold` | `16` | How close in px the pointer must be to a stage edge or corner. Screen pixels: on a zoomed stage (`attachInput`'s `coordinates`) it is divided by the zoom. | `≥ 0` |
+| `snap.magnet` | `8` | During a floating move or resize, edges within this many px snap onto other visible windows' edges and the stage (not the stage under `bounds: "none"`). `0` disables magnetism. Screen pixels, like `threshold`. | `≥ 0` |
 | `snap.zones` | `"halves-quarters"` | `"halves-quarters"`, `"halves"` (edges only), `"quarters"` (corners only) or `"off"`. | one of the four |
 
 Keys `config/set` does not validate are stored as given. Unknown keys are kept (and serialized) but ignored by the library.

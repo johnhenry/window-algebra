@@ -96,6 +96,8 @@ View attributes:
 
 `compile(tree, context)` reads `context.direction` (`"ltr"` default, or `"rtl"`, from `presentationContext(state)`). In `"rtl"` the **root** element gets `dir="rtl"`, so flex rows, grids and tab strips run right to left by themselves and the compiled styles stay identical to the left-to-right ones. The only styles that change are the physical ones: a numeric `place` `x` is negated, and an `anchor`'s horizontal side, gravity and (along the horizontal axis) alignment are mirrored, so `position-area` and `data-wm-anchor-opts` are always the physical truth. No compiled style contains `left`, `right`, `margin-left` or `padding-right` except the anchor offset margin, which faces the already-mirrored side. See [Layouts › Right-to-left](./layouts.md#right-to-left).
 
+It also reads `context.bounds` (`"stage"` default, or `"none"` from `config.bounds`). Under `"none"` (an unbounded canvas) the **root** element gets `data-wm-bounds="none"` and `overflow: visible` instead of the overlay's `overflow: hidden`, so a floating window at negative or far-away coordinates is still painted; `BASE_CSS` does the same for the host (`[data-wm-root]:has(> [data-wm-bounds="none"])`). Nothing else changes: placements are compiled the same way.
+
 ## Anchors
 
 An `anchor` modifier compiles to `position: absolute; position-anchor: --wm-<to>` plus:

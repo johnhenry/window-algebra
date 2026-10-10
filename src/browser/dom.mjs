@@ -11,6 +11,7 @@
 import { styleText } from "../css/compile.mjs";
 import { positionPopup } from "../geometry/positioner.mjs";
 import { buildChrome, normalizeChrome } from "./chrome.mjs";
+import { coordinateSpace } from "./coordinates.mjs";
 
 const supportsAnchors = (win) => {
   try {
@@ -55,8 +56,14 @@ const identSafe = (id) => String(id).replace(/[^a-zA-Z0-9_-]/g, "-") || "x";
  *   translation) and `for(id)` (return `false` to leave a window bare: a tooltip, a toast). The title follows
  *   the window's title on every commit. Off by default; needs `RULES_CSS`/`BASE_CSS` for its look. A window in a
  *   tab strip gets no title bar (its tab is the title). The pop-out button needs `attachInput`'s `popouts`.
+ * @param {{ toStage(clientX: number, clientY: number): { x: number, y: number }, scale?: () => number }} [options.coordinates]
+ *   for a stage the application transforms (a pannable, zoomable canvas): maps a client point to root-local stage
+ *   units (the units of a floating window's `placement`), and `scale()` gives screen pixels per stage unit. With it,
+ *   `measure()` and the JS anchor fallback work in stage units; without it, in screen pixels relative to `root`'s
+ *   box (exact for an untransformed stage). Pass the same object to `attachInput`. See `coordinates.mjs`.
  */
-export const createDomRenderer = ({ root, surfaceFor = () => undefined, document: doc = root.ownerDocument, anchorFallback, animate, chrome } = {}) => {
+export const createDomRenderer = ({ root, surfaceFor = () => undefined, document: doc = root.ownerDocument, anchorFallback, animate, chrome, coordinates } = {}) => {
+  const space = coordinateSpace(coordinates);
   const chromeConfig = normalizeChrome(chrome);
   const chromes = new WeakMap(); // view element → chrome handle, or null for a window left bare
   const elements = new Map(); // key → Element
@@ -287,8 +294,26 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
    * path can only partially express (see `anchorStyle` in `src/css/compile.mjs`);
    * "inside" mode keeps the simpler center-alignment math it always had.
    */
+  /**
+   * A measured rect as `{ left, top, right, bottom, width, height }`: the client rect itself, or (with a
+   * `coordinates` hook) the same rect in root-local stage units, so the math below runs unchanged in either space.
+   */
+  const box = (element) => {
+    const r = element.getBoundingClientRect();
+    if (!space) return r;
+    const { x, y, width, height } = space.rect(r);
+    return { left: x, top: y, right: x + width, bottom: y + height, width, height };
+  };
+  /** The root's own box in the same space as `box`: the stage's origin is (0, 0) in stage units. */
+  const rootBox = () => {
+    const r = root.getBoundingClientRect();
+    if (!space) return r;
+    const { width, height } = space.size(r);
+    return { left: 0, top: 0, right: width, bottom: height, width, height };
+  };
+
   const positionAnchoredFallback = () => {
-    const rootRect = root.getBoundingClientRect();
+    const rootRect = rootBox();
     const stage = { x: 0, y: 0, width: rootRect.width, height: rootRect.height };
     const positioned = new Set();
     const sized = new Set();
@@ -297,8 +322,8 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       if (!element) continue;
       const target = elements.get(`view:${spec.to}`);
       if (!target || !target.isConnected) continue;
-      const t = target.getBoundingClientRect();
-      const e = element.getBoundingClientRect();
+      const t = box(target);
+      const e = box(element);
       let left;
       let top;
       if (spec.mode === "side") {
@@ -441,14 +466,14 @@ export const createDomRenderer = ({ root, surfaceFor = () => undefined, document
       if (useFallback) positionAnchoredFallback();
     },
 
-    /** Realized geometry of every primary view, relative to the root. */
+    /** Realized geometry of every primary view, relative to the root (in stage units with a `coordinates` hook). */
     measure() {
-      const origin = root.getBoundingClientRect();
+      const origin = space ? null : root.getBoundingClientRect();
       const out = {};
       for (const [key, element] of elements) {
         if (!key.startsWith("view:") || key.includes("#")) continue;
         const r = element.getBoundingClientRect();
-        out[key.slice(5)] = { x: r.left - origin.left, y: r.top - origin.top, width: r.width, height: r.height };
+        out[key.slice(5)] = space ? space.rect(r) : { x: r.left - origin.left, y: r.top - origin.top, width: r.width, height: r.height };
       }
       return out;
     },

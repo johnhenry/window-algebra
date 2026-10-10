@@ -57,7 +57,7 @@ const validConstraints = (constraints) =>
     return false;
   });
 
-const CONFIG_KEYS = Object.freeze(["focusRaises", "gap", "inset", "defaultPlacement", "drag", "rules", "urgency", "snap", "direction"]);
+const CONFIG_KEYS = Object.freeze(["focusRaises", "gap", "inset", "defaultPlacement", "drag", "rules", "urgency", "snap", "direction", "bounds"]);
 
 const setWindow = (state, id, patch) => ({
   ...state,
@@ -1130,6 +1130,7 @@ const handlers = {
     if (Object.keys(patch).some((key) => !CONFIG_KEYS.includes(key))) return rejected(state, command, "invalid-config");
     if (patch.focusRaises !== undefined && typeof patch.focusRaises !== "boolean") return rejected(state, command, "invalid-config");
     if (patch.direction !== undefined && patch.direction !== "ltr" && patch.direction !== "rtl") return rejected(state, command, "invalid-config");
+    if (patch.bounds !== undefined && patch.bounds !== "stage" && patch.bounds !== "none") return rejected(state, command, "invalid-config");
     if (!optional(patch.gap, isExtent) || !optional(patch.inset, isExtent)) return rejected(state, command, "invalid-config");
     const placement = patch.defaultPlacement;
     if (placement !== undefined) {

@@ -12,6 +12,9 @@ export const directionOf = (state) => (state.config?.direction === "rtl" ? "rtl"
 /** Does this state mirror horizontal arrangements? */
 export const isRtl = (state) => directionOf(state) === "rtl";
 
+/** What bounds floating windows: "stage" unless `config.bounds` is "none" (an unbounded canvas); it may be missing on a saved state. */
+export const boundsOf = (state) => (state.config?.bounds === "none" ? "none" : "stage");
+
 export const activeWorkspace = (state) => state.workspaces[state.activeWorkspace];
 
 /** The output that currently has input focus. */

@@ -29,6 +29,8 @@ export type Role = "window" | "dialog" | "sheet" | "popover" | "menu" | "tooltip
 export type Status = "normal" | "minimized" | "maximized" | "fullscreen" | "popped-out";
 export type Mode = "tiled" | "floating";
 export type Direction = "ltr" | "rtl";
+/** What bounds floating windows: the stage's box (`"stage"`), or nothing (`"none"`, an unbounded canvas). */
+export type Bounds = "stage" | "none";
 export type DropZone = "center" | "left" | "right" | "top" | "bottom";
 /** What a drop does: exchange slots, move before/after, split (BSP, tree) or add as a tab (tree). */
 export type DropOp = "swap" | "before" | "after" | "split" | "tab";
@@ -316,6 +318,11 @@ export interface SnapConfig {
 export interface Config {
   /** Reading direction. May be missing on an old saved state: read it as `"ltr"` (`directionOf`). */
   direction: Direction;
+  /**
+   * `"none"` makes the stage an unbounded canvas: floating windows keep any coordinates, no snap zones, no stage
+   * magnet, no clamping, the root does not clip. May be missing on an old saved state: read it as `"stage"` (`boundsOf`).
+   */
+  bounds: Bounds;
   focusRaises: boolean;
   gap: number;
   inset: number;

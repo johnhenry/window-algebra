@@ -161,6 +161,8 @@ export const CHECKLIST = [
     ["keyboard-moves", "keyboard moving of the focused window (keyboard option)"], ["tab-buttons", "tab chrome buttons"], ["snap", "snap to grid"],
     ["snap-zones", "Windows-Snap-style half/quarter/maximize preview while dragging a floating window near a stage edge or corner (config.snap.edges/threshold/zones)"],
     ["magnetize", "magnetism: floating move/resize snaps to other visible windows' edges and the stage (config.snap.magnet)"],
+    ["coordinates", "coordinates: { toStage, scale } on attachInput / createDomRenderer / attachStage: a stage the app pans and zooms with a CSS transform; drags and grips track the cursor 1:1, measure() reports stage units, snap distances stay screen pixels"],
+    ["bounds-none", "config.bounds: \"none\": an unbounded canvas; floating windows anywhere (negative too), no snap zones or drag-to-top maximize, no stage magnet, no clamping, the root does not clip (boundsOf)"],
     ["splitter-drag", "drag a splitter to resize (pointer capture, min/max constraints, one undo step)"],
     ["splitter-keyboard", "focus a splitter and press the arrow key along its axis (splitterStep option)"],
     ["htmlSurface"], ["lazySurface"], ["iframeSurface"], ["canvasSurface"], ["createSurfaceRegistry"],
@@ -463,6 +465,17 @@ export const PAGES = [
       "touch-option", "chrome-option", "chrome-grips", "touch-pinch", "touch-swipe-tabs", "touch-swipe-workspaces", "touch-context", "touch-longpress", "drag-move", "tiled-drag", "keyboard",
       "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "workspace/activate", "window/resize", "window/focus",
       "window/toggle-floating", "window/maximize", "window/minimize", "window/close", "undo-redo", "subscribe",
+    ],
+  },
+  {
+    href: "./canvas.html",
+    short: "Canvas",
+    title: "Infinite canvas",
+    blurb: "Floating panes on a pannable, zoomable, unbounded world: wheel zoom around the cursor, drag empty space to pan, drag and resize panes at any zoom. coordinates + config.bounds: \"none\".",
+    covers: [
+      "coordinates", "bounds-none", "chrome-option", "chrome-grips", "drag-move", "resize-edges", "magnetize", "snap-zones", "measure", "floating-layout",
+      "createWindowManager", "attachInput", "createDomRenderer", "createFrameScheduler", "createSurfaceRegistry", "window/create", "window/move", "window/resize",
+      "window/close", "config/set", "undo-redo", "subscribe", "keyboard-moves",
     ],
   },
   {

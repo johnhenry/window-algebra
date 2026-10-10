@@ -115,6 +115,20 @@ export interface ChromeSurfaceOptions extends Omit<ChromeOptions, "buttons" | "f
 /** Wrap one window's content in the built-in chrome, as a surface (for a custom renderer). */
 export function chromeSurface(options: ChromeSurfaceOptions): Surface;
 
+// ------------------------------------------------------------------ coordinates
+
+/**
+ * The coordinate space of a stage the application transforms (a pannable, zoomable canvas: the root inside a
+ * world element with `transform: translate(x, y) scale(z)`). Pass the same object to `createDomRenderer` and
+ * `attachInput`. Translation and uniform scale only.
+ */
+export interface StageCoordinates {
+  /** A client (viewport) point in root-local stage units: the units of a floating window's `placement`. */
+  toStage(clientX: number, clientY: number): Point;
+  /** Screen pixels per stage unit (the zoom). Default: read off `toStage`. */
+  scale?(): number;
+}
+
 // ------------------------------------------------------------------ the DOM renderer
 
 export interface DomRendererOptions {
@@ -131,13 +145,15 @@ export interface DomRendererOptions {
    * options. Off by default; styled by `CHROME_CSS`, which `BASE_CSS` includes.
    */
   chrome?: boolean | ChromeOptions;
+  /** A transformed stage: `measure()` and the JS anchor fallback then work in stage units. */
+  coordinates?: StageCoordinates;
 }
 
 export interface DomRenderer extends Renderer {
   readonly root: Element;
   /** Apply a render tree. With `immediate`, never inside a view transition. */
   commit(renderTree: RenderNode, options?: { immediate?: boolean }): void;
-  /** Realized geometry of every primary view, relative to `root`. */
+  /** Realized geometry of every primary view, relative to `root` (in stage units with `coordinates`). */
   measure(): Record<string, Rect>;
   elementFor(id: string): Element | undefined;
   /** Where a view's content mounts: its chrome body when `chrome` is on, else `elementFor(id)`. */
@@ -238,6 +254,11 @@ export interface AttachInputOptions {
   popouts?: Pick<Popouts, "popOut" | "popIn">;
   /** Opt-in touch and pen gestures. `true` is pinch, tab swipes and the `wm-contextmenu` event. */
   touch?: boolean | TouchOptions;
+  /**
+   * A transformed stage (pan/zoom canvas): pointer positions, grab offsets and measured rects go through it, so
+   * gestures track the cursor 1:1 at any zoom; `config.snap` distances and touch distances stay screen pixels.
+   */
+  coordinates?: StageCoordinates;
 }
 /** Wire pointer, keyboard and touch events inside `root` to commands. Returns `detach`. */
 export function attachInput(options: AttachInputOptions): () => void;

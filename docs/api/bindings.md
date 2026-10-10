@@ -57,7 +57,7 @@ Mounts a `createDomRenderer` plus `attachInput` pair into a host element for the
 | `anchorFallback` | Forwarded to `createDomRenderer`. |
 | `chrome` | Built-in window chrome around every window, as for `attachStage` (`true` or `{ buttons, icon, icons, labels, for }`). Read when the stage attaches. |
 | `popouts` | Pop-outs, as for `attachStage`. |
-| `sync`, `palette`, `direction` | As for `attachStage` (cross-tab sync, a command palette, direction following). Read when the stage attaches. |
+| `sync`, `palette`, `direction`, `coordinates` | As for `attachStage` (cross-tab sync, a command palette, direction following, a pan/zoom coordinate hook). Read when the stage attaches. |
 | `stageRef` | A ref object (`{ current }`) or a callback. It receives the stage's handles (`{ wm, renderer, sync, palette, popouts, detach }`) once the stage attaches, and `null` when it detaches, so a button can call `stageRef.current?.palette?.open()` and a status line can read `stageRef.current?.sync?.peers()`. It is set from an effect, so read it in event handlers or effects, not during render. |
 | `onStage(stage \| null)` | The same, as a callback prop. |
 | `input` | An object merged into `attachInput`'s options (`{ wm, root }` are supplied; add `announce`, `keyboard`, `modifier`, …). |
@@ -140,6 +140,7 @@ attachStage(host, {
   direction,       // "auto" (default: follow an explicit dir) | "ltr" | "rtl" | false
   sync,            // true | attachSync options: keep this stage in step with other tabs (off by default)
   palette,         // true | createPalette options: a command palette for this stage's manager (off by default)
+  coordinates,     // { toStage, scale? }: a stage the app pans and zooms; forwarded to createDomRenderer and attachInput
 }) → { wm, renderer, sync, palette, popouts, detach() }   // sync/palette/popouts are the handles, or null; the element's getters return these
 ```
 
