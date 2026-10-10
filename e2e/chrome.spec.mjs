@@ -56,6 +56,17 @@ test.describe("built-in window chrome (chrome.html)", () => {
     await expect(button(page, "form", "Maximize window: Settings")).toBeVisible();
   });
 
+  test("a hidden title bar leaves the body filling the window (it is pinned to the 1fr row)", async ({ demo, page }) => {
+    await demo("chrome.html");
+    await settle(page);
+    await page.addStyleTag({ content: "#stage .wa-chrome-bar { display: none; }" });
+    await settle(page);
+    const w = win(page, "notes");
+    const chrome = await w.locator(".wa-chrome").boundingBox();
+    const body = await w.locator("[data-wa-chrome-body]").boundingBox();
+    expect(Math.round(body.height)).toBe(Math.round(chrome.height));
+  });
+
   test("keyboard: Tab reaches the buttons; Enter and Space press them", async ({ demo, page, browserName }) => {
     await demo("chrome.html");
     await settle(page);

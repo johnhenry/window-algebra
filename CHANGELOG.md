@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0 — swipe between monocle windows, and two fixes found by the clawser desktop (2026-10-09)
+
+**This is the first minor release, and consumers on `^0.0.0` need to move.** Under npm's caret rules `^0.0.0` matches only `0.0.0`, so it does not pick up `0.1.0`; update the range to `^0.1.0` (for `0.x` versions a caret covers the minor, so it then follows `0.1.x`). Nothing else breaks: every change below is additive or a bug fix.
+
+Found while building the window-algebra desktop in erisera-code/clawser.
+
+### Added
+
+- **`touch: { swipe: { windows: true } }` swipes between the windows of a monocle or tabs stack (#6).** One finger, a horizontal stroke of at least `swipeDistance` px (default 48), mostly horizontal, within 700 ms, the same classifier as tab swipes: `window/focus` on the next window (swipe left) or the previous one (swipe right), no wrap, mirrored under `config.direction: "rtl"`. It works on the body of a window, not just on a tab strip, so a phone layout that shows one window at a time gets the gesture from the library. A stroke that starts in a text field, a `select`, a `contenteditable` element, a splitter or a handle, or in a horizontally scrolling element, is left alone. It is off unless asked for (`swipe: true` still means tabs only), adds a `swipe-windows` token to `data-wm-touch`, and `BASE_CSS` maps it to `touch-action: pan-y` on the stage and on `wm-view`, and `CHROME_CSS` on the built-in chrome's scrolling body (a touch that starts inside a scroller does not inherit it from the stage, and the browser took such a stroke as its own: `pointercancel`); an app with its own vertical scrollers inside a window sets `touch-action: pan-y` on them too. `TouchOptions.swipe` gains `windows`. Documented in [docs/api/browser.md](docs/api/browser.md#touch-and-pen).
+
+### Fixed
+
+- **A hidden title bar no longer hands the window body the `auto` grid row (#5).** `.wa-chrome` is a grid with `grid-template-rows: auto minmax(0, 1fr)`, but `.wa-chrome-body` had no row of its own, so hiding the bar (`display: none` on `.wa-chrome-bar`, as a tiled window with its own header does) let auto-placement put the body in the `auto` row, sized by its content instead of filling the window. `.wa-chrome-body` is now pinned to `grid-row: 2`, whether or not the bar is rendered. An application that worked around it with `grid-row: 2` on the body can drop that rule.
+- **`popIn()` puts back the inline geometry `popOut()` took away (#7).** `popOut()` makes the element fill the popup (`position: static; width: 100%; height: 100vh; box-sizing: border-box`, and it removes `left`, `top`, `inset`, `flex`, `grid-area`, `transform`, ...), and `popIn()` handed the element back to the renderer, which only re-patches the properties it manages: a tile came back `position: static; height: 100vh`, and a tiled window lost the `flex` its layout gave it. `popOut()` now remembers each inline property it is about to change, and `popIn()` (also when the popup is closed by the user) restores them before the renderer adopts the element. An application that saved and restored the element's `style` around release and adopt can drop that code.
+
 ## 0.0.0 — first release (2026-09-28)
 
 **New package, never published under another name.** `@johnhenry/window-algebra` is the first npm distribution of this library, and `0.0.0` is its first version under any name. It follows the family convention that a package starts at `0.0.0`; the number is not a maturity claim. Under npm's caret rules `^0.0.0` matches only `0.0.0`, so consumers should pin exactly until a deliberate `0.1.0`.

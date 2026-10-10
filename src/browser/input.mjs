@@ -189,7 +189,7 @@ const comboOf = (event) =>
  * @param {boolean|object} [options.touch] opt-in touch and pen gestures (see `touch.mjs` and docs/api/browser.md):
  *   `true` turns on pinch-to-resize for floating windows (two touches), a horizontal swipe on a tab strip to
  *   switch tabs, and a long-press context event. An object picks: `pinch` (default true), `swipe`
- *   (`{ tabs, workspaces }`, a two-finger swipe switching workspaces; `false` for none), `contextMenu`
+ *   (`{ tabs, workspaces, windows }`: a two-finger swipe switching workspaces, a one-finger swipe between the windows of a monocle or tabs stack; `false` for none), `contextMenu`
  *   (`true` dispatches a `wm-contextmenu` event on the window, a function receives
  *   `{ id, x, y, clientX, clientY, pointerType, target }`, a string is a command type dispatched with
  *   `{ type, id }`; `false` turns it off), `contextDelay` (ms, default 500), `slop`, `swipeDistance`,
@@ -1445,6 +1445,11 @@ export const attachInput = (options) => {
         floatRect: pinchRect,
         mirror: mirrorRect,
         rootWorkspace,
+        stackOrder: (state) => {
+          const workspace = rootWorkspace(state);
+          const type = state.workspaces[workspace]?.layout?.type;
+          return type === "monocle" || type === "tabs" ? tiledOrder(state, workspace) : null;
+        },
         direction: () => (getState().config?.direction === "rtl" ? -1 : 1),
         busy: () => Boolean(drag || splitter || gesture?.moved || (pending && pending.kind !== "denied")),
         cancelOthers: () => {

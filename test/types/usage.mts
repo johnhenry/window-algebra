@@ -218,7 +218,7 @@ surfaces.set("a", surface);
 const renderer = createDomRenderer({ root: stage, surfaceFor: surfaces, animate: { duration: 150 } });
 renderer.commit(compile(derived, context), { immediate: true });
 renderer.elementFor("a")?.classList;
-const detach = attachInput({ root: stage, wm, keyboard: true, touch: { swipe: { tabs: true, workspaces: true }, contextMenu: (press) => void press.pointerType } });
+const detach = attachInput({ root: stage, wm, keyboard: true, touch: { swipe: { tabs: true, workspaces: true, windows: true }, contextMenu: (press) => void press.pointerType } });
 detach();
 attachInput({ root: stage, wm, touch: { contextMenu: "window/toggle-floating" } });
 // @ts-expect-error a context command must be a real command type

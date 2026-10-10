@@ -135,30 +135,31 @@ attachInput({
   root, wm,
   touch: {
     pinch: true,                       // two touches on a floating window resize it
-    swipe: { tabs: true, workspaces: false },
+    swipe: { tabs: true, workspaces: false, windows: false },
     contextMenu: (press) => openMenu(press), // true | (press) => void | "window/toggle-floating" | false
     contextDelay: 500,                 // ms held still
     slop: 10,                          // px of drift that cancels a long press
-    swipeDistance: 48,                 // px for a tab swipe
+    swipeDistance: 48,                 // px for a tab or window swipe
     workspaceSwipeDistance: 64,        // px for a two-finger workspace swipe
   },
 });
 ```
 
-`touch: true` means `pinch`, `swipe: { tabs: true }` and `contextMenu: true`. `swipe: false` turns both swipes off; `workspaces` is off by default because it needs `touch-action: pan-y` on the whole stage.
+`touch: true` means `pinch`, `swipe: { tabs: true }` and `contextMenu: true`. `swipe: false` turns every swipe off; `workspaces` and `windows` are off by default because each needs `touch-action: pan-y` on the whole stage.
 
 | Gesture | Pointers | Result |
 | --- | --- | --- |
 | Pinch | two **touch** pointers on the same floating window (not tiled, blocked, pinned or minimized) | `window/resize` with `x`, `y`, `width`, `height` per move and one shared `gesture` token: one undo step, one log entry. The window scales with the finger distance (honouring `constraints`, never below 48 px) and follows the fingers' midpoint. `pointercancel` puts it back. The pure math is `createPinch`/`updatePinch`. |
 | Tab swipe | one touch or pen pointer, a horizontal stroke on a tab strip of at least `swipeDistance` px, mostly horizontal, within 700 ms | `window/focus` on the next tab (swipe left) or previous (swipe right); no wrap. A vertical stroke scrolls as usual. The classifier is `swipeOf`. |
+| Window swipe | `swipe.windows`: one touch or pen pointer, a horizontal stroke of at least `swipeDistance` px, mostly horizontal, within 700 ms, that starts on a tiled window of a `monocle` or `tabs` layout | `window/focus` on the next window of the stack (swipe left) or the previous one (swipe right); no wrap. Strokes that start in a text field, `select`, `contenteditable`, a handle or splitter, or in a horizontally scrolling element, are left to the page. Layouts that show several windows (columns, master-stack, ...) ignore it. |
 | Workspace swipe | two **touch** pointers, a horizontal stroke of the midpoint of at least `workspaceSwipeDistance` px (when they are not a pinch) | `workspace/activate` on the next (swipe left) or previous workspace of the stage's output; no wrap. |
 | Long press | one touch or pen pointer held still for `contextDelay` ms on a window (not on a control, tab or splitter) | `contextMenu`: `true` dispatches a bubbling `wm-contextmenu` event on the window element (`detail` is the press); a function is called with `{ id, x, y, clientX, clientY, pointerType, target }` (`x`/`y` are relative to `root`); a string is a command type dispatched as `{ type, id }`. The native context menu that follows is suppressed. A held press on a floating title bar cancels its (unmoved) move first; on a **tiled** title bar it still starts a drag, as before, and does not fire. |
 
 A second finger always ends a single-finger gesture in progress (a floating move is put back, a drag cancelled), then starts a pinch if both fingers are on one floating window, else a workspace swipe if enabled.
 
-**`touch-action`.** The browser decides which touch gestures it keeps by `touch-action` on the touched element and its ancestors, so each gesture needs its own. The adapter sets `data-wm-touch` on `root` (tokens `pinch`, `swipe-tabs`, `swipe-workspaces`, `context`), and `BASE_CSS` maps them: floating windows get `touch-action: none` (pinch), tab strips `pan-y` (horizontal strokes are the page's, vertical ones scroll), the stage `pan-y` for workspace swipes, windows `-webkit-touch-callout: none` (long press). Handles and splitters are always `touch-action: none`. Without `BASE_CSS`, set the same rules yourself. The costs: with `pinch`, a floating window's own content cannot be panned by touch; with `swipe.workspaces`, nothing inside the stage scrolls horizontally by touch.
+**`touch-action`.** The browser decides which touch gestures it keeps by `touch-action` on the touched element and its ancestors, so each gesture needs its own. The adapter sets `data-wm-touch` on `root` (tokens `pinch`, `swipe-tabs`, `swipe-workspaces`, `swipe-windows`, `context`), and `BASE_CSS` maps them: floating windows get `touch-action: none` (pinch), tab strips `pan-y` (horizontal strokes are the page's, vertical ones scroll), the stage `pan-y` for workspace and window swipes, windows `-webkit-touch-callout: none` (long press). Handles and splitters are always `touch-action: none`. Without `BASE_CSS`, set the same rules yourself. The costs: with `pinch`, a floating window's own content cannot be panned by touch; with `swipe.workspaces`, nothing inside the stage scrolls horizontally by touch. `swipe.windows` needs `pan-y` on the stage too, and a `pan-y` set only on the stage does not reach a touch that starts inside a scroller, so give the app's own vertical scrollers `touch-action: pan-y` as well. `BASE_CSS` sets it on `wm-view`, and `CHROME_CSS` on the chrome's scrolling body (`.wa-chrome-body`).
 
-Under `config.direction: "rtl"` swipes mirror: swiping toward the inline-start edge (right) goes to the next tab or workspace.
+Under `config.direction: "rtl"` swipes mirror: swiping toward the inline-start edge (right) goes to the next tab, window or workspace.
 
 ### Right-to-left
 
@@ -319,7 +320,7 @@ attachPopouts({
 
 **`popOut(id, options?)`**: it dry-runs `window/pop-out` first, so it never opens a popup for a refused command. Then it opens a window (`name` defaults to `wm-popout-<id>`; `features` defaults to `popup,width=<w>,height=<h>` from the window's placement) and sets its title. It copies every `<link rel=stylesheet>` and `<style>` from the page into the popup, `release`s the view's element, `adoptNode`s it into the popup and makes it fill the popup, and dispatches `window/pop-out`. It keeps the popup's title in sync with the window title, and focusing the popup clears the WM focus (`window/blur`): a popped-out window is not on the stage, so it can never be the WM's focused window. It returns `dispatch`'s result, a rejection (`unknown-window`, `blocked`), or `{ events: [command/rejected popup-blocked] }` when `open()` returns a falsy or already-closed window. State and the DOM are untouched in that case. Popping out an already popped-out window returns an empty result.
 
-**`popIn(id)`**: closes the popup, carries the element back (`adoptNode` + `renderer.adopt`, so the surface was never unmounted) and dispatches `window/pop-in`. The same happens automatically when the popup closes itself (`pagehide`/`beforeunload`).
+**`popIn(id)`**: closes the popup, puts back the inline geometry `popOut` took away (`position`, `width`, `height`, `box-sizing`, `flex`, `left`/`top`/`inset`, `grid-area`, `transform`, ...: the values the layout had given the element, since the renderer only re-patches the properties it manages), carries the element back (`adoptNode` + `renderer.adopt`, so the surface was never unmounted) and dispatches `window/pop-in`. The same happens automatically when the popup closes itself (`pagehide`/`beforeunload`).
 
 **Chrome in the popup**: the window's `data-wm-command` buttons move into the popup with it, outside the stage root `attachInput` listens on, so the popup gets the same click delegation: a button dispatches `{ type, id }` (`data-wm-target` overrides `id`), and `window/pop-in` goes through `popIn(id)` so the DOM is carried back. Give a pop-out button `data-wm-command="window/pop-in"` while its window is popped out and it works from inside the popup.
 

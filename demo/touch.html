@@ -28,7 +28,7 @@
     </nav>
     <p class="note">
       Touch or pen, or the buttons: <code>attachInput({ touch })</code>. <strong>Pinch</strong> a floating window with two fingers to resize it,
-      <strong>swipe</strong> left or right on the tab strip to switch tabs, <strong>two-finger swipe</strong> to switch workspace,
+      <strong>swipe</strong> left or right on the tab strip to switch tabs, <strong>two-finger swipe</strong> to switch workspace, <strong>swipe a monocle</strong> (one window at a time) to show the next window,
       <strong>long-press</strong> a window for its menu, and drag a title bar to move it (a tiled one after a short hold). A mouse never triggers these.
     </p>
     <ul id="gesture-log" aria-label="Gesture log"></ul>
@@ -100,7 +100,7 @@
         root,
         wm,
         keyboard: true,
-        touch: { swipe: { tabs: true, workspaces: true }, contextMenu: showMenu },
+        touch: { swipe: { tabs: true, workspaces: true, windows: true }, contextMenu: showMenu },
       });
       wm.subscribe((state, events) => {
         document.getElementById("where").textContent = state.activeWorkspace;

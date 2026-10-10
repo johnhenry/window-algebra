@@ -162,8 +162,8 @@ export function createDomRenderer(options: DomRendererOptions): DomRenderer;
 export interface TouchOptions {
   /** Two touches on a floating window resize it (default `true`). */
   pinch?: boolean;
-  /** `false` for none; default tab swipes on. Workspace swipes (two fingers) are off unless asked. */
-  swipe?: boolean | { tabs?: boolean; workspaces?: boolean };
+  /** `false` for none; default tab swipes on. Workspace swipes (two fingers) and window swipes (one finger, between the windows of a monocle or tabs stack) are off unless asked. */
+  swipe?: boolean | { tabs?: boolean; workspaces?: boolean; windows?: boolean };
   /**
    * What a long press does: `true` dispatches a bubbling `wm-contextmenu` event on the window,
    * a function receives the press, a string is a command type dispatched as `{ type, id }`, `false` is off.
@@ -173,7 +173,7 @@ export interface TouchOptions {
   contextDelay?: number;
   /** px of drift that cancels a long press (default 10). */
   slop?: number;
-  /** px for a tab swipe (default 48). */
+  /** px for a tab or window swipe (default 48). */
   swipeDistance?: number;
   /** px for a two-finger workspace swipe (default 64). */
   workspaceSwipeDistance?: number;
