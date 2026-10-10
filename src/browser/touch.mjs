@@ -18,6 +18,7 @@
  *   pinch             floating windows: `touch-action: none` (the browser must not pinch-zoom)
  *   swipe-tabs        tab strips: `touch-action: pan-y` (horizontal strokes are ours, vertical ones scroll)
  *   swipe-workspaces  the whole stage: `touch-action: pan-y` (horizontal two-finger strokes are ours)
+ *   swipe-windows     the whole stage: `touch-action: pan-y` (horizontal one-finger strokes on a monocle/tabs window are ours)
  *   context           windows: `-webkit-touch-callout: none` (no native long-press menu)
  */
 import { createPinch, updatePinch, swipeOf } from "../interaction/pinch.mjs";
@@ -31,11 +32,12 @@ const TOUCHLIKE = new Set(["touch", "pen"]);
 export const touchOptions = (touch) => {
   if (!touch) return null;
   const o = touch === true ? {} : touch;
-  const swipe = o.swipe === undefined || o.swipe === true ? { tabs: true, workspaces: false } : o.swipe === false ? {} : o.swipe;
+  const swipe = o.swipe === undefined || o.swipe === true ? { tabs: true, workspaces: false, windows: false } : o.swipe === false ? {} : o.swipe;
   return {
     pinch: o.pinch !== false,
     swipeTabs: swipe.tabs === true,
     swipeWorkspaces: swipe.workspaces === true,
+    swipeWindows: swipe.windows === true,
     // true: dispatch a `wm-contextmenu` DOM event; a function: called with the press; a string: a command type for { type, id }.
     contextMenu: o.contextMenu === undefined ? true : o.contextMenu,
     contextDelay: o.contextDelay ?? 500,
@@ -47,7 +49,7 @@ export const touchOptions = (touch) => {
 
 /** The tokens `data-wm-touch` carries for a normalised option set. */
 export const touchTokens = (options) =>
-  [options.pinch && "pinch", options.swipeTabs && "swipe-tabs", options.swipeWorkspaces && "swipe-workspaces", options.contextMenu && "context"]
+  [options.pinch && "pinch", options.swipeTabs && "swipe-tabs", options.swipeWorkspaces && "swipe-workspaces", options.swipeWindows && "swipe-windows", options.contextMenu && "context"]
     .filter(Boolean)
     .join(" ");
 
@@ -64,6 +66,8 @@ export const touchTokens = (options) =>
  * @param {(rect: object) => object} [ctx.mirror] maps a rect between a window's own (inline-start) x and the
  *   screen's, and back; the identity in a left-to-right stage
  * @param {(state: object) => string} ctx.rootWorkspace the workspace this root shows
+ * @param {(state: object) => string[]|null} [ctx.stackOrder] the windows the stage's active stack (a monocle or
+ *   tabs layout) can show, in order, or null when the layout is not a stack; needed by `swipe.windows`
  * @param {() => number} ctx.direction 1 for left-to-right, -1 for right-to-left
  * @param {() => boolean} ctx.busy a drag/move/splitter gesture is in progress
  * @param {() => void} ctx.cancelOthers abandon any single-pointer gesture
@@ -71,7 +75,7 @@ export const touchTokens = (options) =>
  * @param {() => string} ctx.token a fresh gesture token
  */
 export const createTouchGestures = (ctx) => {
-  const { options, root, getState, dispatch, send, local, viewOf, floatRect, rootWorkspace, direction, busy, cancelOthers, timers, token, mirror = (rect) => rect } = ctx;
+  const { options, root, getState, dispatch, send, local, viewOf, floatRect, rootWorkspace, stackOrder = () => null, direction, busy, cancelOthers, timers, token, mirror = (rect) => rect } = ctx;
   const pointers = new Map(); // touch pointerId -> { x, y, target, view }
   let single = null; // { pointerId, type, x0, y0, t0, x, y, tabs, press: timer, viewEl, moved }
   let multi = null; // pinch or two-finger swipe in progress
@@ -166,6 +170,31 @@ export const createTouchGestures = (ctx) => {
     if (at >= 0 && next) send({ type: "window/focus", id: next.getAttribute("data-wm-tab") });
   };
 
+  // ------------------------------------------------------------ window swipes (monocle / tabs)
+
+  /** A text field or a horizontally scrolling element under the finger keeps its stroke. */
+  const keepsStroke = (target, viewEl) => {
+    if (target.closest?.("input, textarea, select, [contenteditable]")) return true;
+    const style = root.ownerDocument?.defaultView?.getComputedStyle;
+    for (let el = target; el && el !== viewEl?.parentNode && el.nodeType !== 9; el = el.parentNode) {
+      if (!(el.scrollWidth > el.clientWidth + 1)) continue;
+      const overflow = style ? style.call(root.ownerDocument.defaultView, el).overflowX : "";
+      if (overflow === "auto" || overflow === "scroll") return true;
+    }
+    return false;
+  };
+
+  const stepWindow = (step) => {
+    const state = getState();
+    const order = stackOrder(state);
+    if (!order?.length) return;
+    const spec = state.workspaces[rootWorkspace(state)]?.layout;
+    const focused = state.focus.window;
+    const shown = order.includes(spec?.active) ? spec.active : order.includes(focused) ? focused : order[0];
+    const next = order[order.indexOf(shown) + step * direction()];
+    if (next !== undefined) send({ type: "window/focus", id: next });
+  };
+
   // ------------------------------------------------------------ the pointer stream
 
   /** Returns true when the gesture is a multi-finger one this module now owns. */
@@ -192,6 +221,10 @@ export const createTouchGestures = (ctx) => {
     single = { pointerId: event.pointerId, type, x0: p.x, y0: p.y, x: p.x, y: p.y, clientX: p.clientX, clientY: p.clientY, t0: now(), target, viewEl, moved: false, strip: null, press: undefined };
     const strip = options.swipeTabs ? target.closest?.("wm-tabs, [data-wm-tab]") : null;
     if (strip) single.strip = strip.localName === "wm-tabs" ? strip : strip.parentNode;
+    else if (options.swipeWindows && viewEl && !viewEl.closest?.("[data-wm-drag-overlay]") && !target.closest?.("[data-wm-handle], [data-wm-splitter]") && !keepsStroke(target, viewEl)) {
+      const order = stackOrder(getState());
+      if (order?.includes(viewEl.getAttribute("data-view"))) single.windows = true;
+    }
     // A press on a control (button, text field, link) keeps its own long-press behaviour.
     const eligible =
       options.contextMenu &&
@@ -244,9 +277,12 @@ export const createTouchGestures = (ctx) => {
       const session = single;
       clearPress();
       single = null;
-      if (!cancelled && session.strip && !multi) {
+      if (!cancelled && (session.strip || session.windows) && !multi) {
         const verdict = swipeOf({ dx: session.x - session.x0, dy: session.y - session.y0, duration: now() - session.t0 }, { distance: options.swipeDistance });
-        if (verdict === "left" || verdict === "right") stepTab(session.strip, verdict === "left" ? 1 : -1);
+        if (verdict === "left" || verdict === "right") {
+          if (session.strip) stepTab(session.strip, verdict === "left" ? 1 : -1);
+          else stepWindow(verdict === "left" ? 1 : -1);
+        }
       }
     }
     return false;

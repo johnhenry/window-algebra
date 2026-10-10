@@ -75,7 +75,7 @@ test.describe("touch and pen gestures (touch.html)", () => {
   });
 
   test("opt-in: attachInput sets data-wm-touch, and BASE_CSS maps it to touch-action", async ({ page }) => {
-    await expect(page.locator("#stage")).toHaveAttribute("data-wm-touch", "pinch swipe-tabs swipe-workspaces context");
+    await expect(page.locator("#stage")).toHaveAttribute("data-wm-touch", "pinch swipe-tabs swipe-workspaces swipe-windows context");
     const actions = await page.evaluate(() => {
       const ta = (el) => getComputedStyle(el).touchAction;
       const float = document.querySelector('#stage wm-view[data-mode="floating"]');
@@ -124,6 +124,29 @@ test.describe("touch and pen gestures (touch.html)", () => {
     await settle(page);
     expect(await selected()).toBe(names[0]);
     // (Not wrapping past the last tab is covered in test/touch.test.mjs; here the strokes above are the point.)
+  });
+
+  test("window swipe: a horizontal stroke on a monocle window shows the next or previous window", async ({ page, browserName }) => {
+    const touch = await makeTouch(page, browserName);
+    await page.evaluate(() => {
+      window.wm.activateWorkspace("tiles");
+      window.wm.setLayout({ type: "monocle" });
+    });
+    await settle(page);
+    const shown = () => page.evaluate(() => window.wm.getState().focus.window);
+    const first = await page.evaluate(() => window.wm.getState().workspaces.tiles.windows[0]);
+    await page.evaluate((id) => window.wm.focus(id), first);
+    await settle(page);
+    const box = await rectOf(page, first, "#stage");
+    const y = box.y + box.height / 2;
+    const x = box.x + box.width / 2;
+    await slide(touch, [[x, y]], [[x - 120, y]], 6); // swipe left: next
+    await settle(page);
+    const second = await shown();
+    expect(second).toBe(await page.evaluate((id) => window.wm.getState().workspaces.tiles.windows[1], first));
+    await slide(touch, [[x, y]], [[x + 120, y]], 6); // swipe right: previous
+    await settle(page);
+    expect(await shown()).toBe(first);
   });
 
   test("workspace swipe: two fingers swipe to the next workspace", async ({ page, browserName }) => {

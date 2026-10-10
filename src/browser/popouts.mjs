@@ -47,17 +47,32 @@ const copyStyles = (sourceDoc, targetDoc) => {
   }
 };
 
-/** Reset the geometry a tiled/floating/anchored layout left on the element so it fills the popup instead. */
+const FILL_RESET = ["left", "top", "right", "bottom", "inset", "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end", "translate", "transform", "anchor-name", "flex", "grid-area"];
+const FILL_SET = ["position", "width", "height", "box-sizing"];
+
+/**
+ * Reset the geometry a tiled/floating/anchored layout left on the element so it fills the popup instead.
+ * Returns a function that puts back every inline property it touched (the renderer only re-patches what it
+ * manages, so `popIn` has to undo this itself).
+ */
 const fillPopup = (element) => {
   const style = element.style;
-  if (!style) return;
-  for (const prop of ["left", "top", "right", "bottom", "inset", "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end", "translate", "transform", "anchor-name", "flex", "grid-area"]) {
+  if (!style) return () => {};
+  const saved = [...FILL_RESET, ...FILL_SET].map((prop) => [prop, style.getPropertyValue?.(prop) || "", style.getPropertyPriority?.(prop) || ""]);
+  const restore = () => {
+    for (const [prop, value, priority] of saved) {
+      if (value) style.setProperty(prop, value, priority);
+      else style.removeProperty(prop);
+    }
+  };
+  for (const prop of FILL_RESET) {
     style.removeProperty(prop);
   }
   style.setProperty("position", "static");
   style.setProperty("width", "100%");
   style.setProperty("height", "100vh");
   style.setProperty("box-sizing", "border-box");
+  return restore;
 };
 
 /**
@@ -125,6 +140,7 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
     if (popIn && entry.element) {
       entry.element.remove?.();
       entry.element.removeAttribute?.("data-status");
+      entry.restoreGeometry?.();
       const mainDoc = renderer?.root?.ownerDocument;
       if (mainDoc?.adoptNode) mainDoc.adoptNode(entry.element);
       renderer?.adopt?.(id, entry.element, entry.surface);
@@ -157,9 +173,10 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
     const released = releaseElement(id);
     const element = released?.element;
     const surface = released?.surface;
+    let restoreGeometry;
     if (element && popupDoc) {
       if (popupDoc.adoptNode) popupDoc.adoptNode(element);
-      fillPopup(element);
+      restoreGeometry = fillPopup(element);
       // The renderer no longer patches this element, so the built-in chrome (CHROME_CSS) is told the window left
       // the layout directly: its pop-in button shows, and minimize/maximize/float and the resize grips hide.
       element.setAttribute?.("data-status", "popped-out");
@@ -203,6 +220,7 @@ export const attachPopouts = ({ wm, renderer, surfaceFor, open } = {}) => {
       popup,
       element,
       surface,
+      restoreGeometry,
       get closedByPopup() {
         return closedByPopup;
       },

@@ -39,7 +39,8 @@ wm-view[data-status] .wa-chrome-bar { cursor: default; }
 .wa-chrome-actions > [data-wa-show] { display: none; }
 wm-view[data-mode="floating"] .wa-chrome-actions > [data-wa-show="floating"], wm-view[data-status="maximized"] .wa-chrome-actions > [data-wa-show="maximized"], wm-view[data-status="popped-out"] .wa-chrome-actions > [data-wa-show="popped-out"] { display: inline-grid; }
 wm-view[data-mode="floating"] .wa-chrome-actions > [data-wa-hide~="floating"], wm-view[data-status="maximized"] .wa-chrome-actions > [data-wa-hide~="maximized"], wm-view[data-status="popped-out"] .wa-chrome-actions > [data-wa-hide~="popped-out"] { display: none; }
-.wa-chrome-body { box-sizing: border-box; min-block-size: 0; min-inline-size: 0; overflow: auto; position: relative; }
+.wa-chrome-body { grid-row: 2; box-sizing: border-box; min-block-size: 0; min-inline-size: 0; overflow: auto; position: relative; }
+[data-wm-touch~="swipe-windows"] .wa-chrome-body { touch-action: pan-y; }
 .wa-chrome-body:focus-visible { outline: var(--wa-focus-ring-width) solid var(--wa-focus-ring-color); outline-offset: calc(-1 * var(--wa-focus-ring-width)); }
 .wa-chrome-grip { position: absolute; z-index: 5; display: none; touch-action: none; }
 wm-view[data-mode="floating"]:not([data-status]) > .wa-chrome > .wa-chrome-grip { display: block; }

@@ -617,6 +617,7 @@ wm-tabs { touch-action: pan-x; }
 [data-wm-touch~="pinch"] wm-view[data-mode="floating"] { touch-action: none; }
 [data-wm-touch~="swipe-tabs"] wm-tabs { touch-action: pan-y; }
 [data-wm-touch~="swipe-workspaces"] { touch-action: pan-y; }
+[data-wm-touch~="swipe-windows"], [data-wm-touch~="swipe-windows"] wm-view { touch-action: pan-y; }
 [data-wm-touch~="context"] wm-view { -webkit-touch-callout: none; }
 [data-wm-splitter] { background: var(--wa-splitter-fill); position: relative; z-index: 1; }
 [data-wm-splitter]::after { content: ""; position: absolute; inset: 0; margin: auto; }
