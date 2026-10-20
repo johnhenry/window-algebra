@@ -7,6 +7,8 @@ import {
   COMMANDS,
   createState,
   createWindowManager,
+  snapshot,
+  diffStates,
   update,
   reduce,
   replay,
@@ -296,5 +298,18 @@ WindowManagerStage({ wm, palette: true, sync: true, chrome: true, popouts: true,
 WindowManagerStage({ wm, stageRef: (stage) => void stage?.sync?.peers() });
 const Palette = defineCommandPaletteElement();
 new Palette().configure({ wm }).open();
+
+const hooked = createWindowManager({
+  history: { ignore: ["window/focus", "focus/*", (command) => command.type === "window/raise"] },
+  onRejected: (rejection, command, manager) => void [rejection.reason, command.type, manager.getState()],
+});
+hooked.undo({ where: (commands) => commands.some((c) => c.type === "window/move") });
+hooked.redo({ where: (commands) => commands.length > 0 });
+hooked.canUndoWhere(() => true) satisfies boolean;
+const diff = diffStates(snapshot(hooked.getState()), hooked.getState());
+diff.windows.added satisfies string[];
+diff.focus?.after satisfies string | null | undefined;
+// @ts-expect-error a step filter takes the commands, not a state
+hooked.undo({ where: (state: State) => state.windows });
 
 export type { Event as AnyEvent, LayoutSpec };

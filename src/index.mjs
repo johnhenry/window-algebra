@@ -87,6 +87,7 @@ export {
   reorder,
 } from "./state/drops.mjs";
 export * from "./state/queries.mjs";
+export { snapshot, diffStates } from "./state/diff.mjs";
 export { createHistory, record, undo, redo, canUndo, canRedo } from "./state/history.mjs";
 
 // CSS compilation (pure)

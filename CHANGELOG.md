@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.4 — hooks for hosts that own undo and announcements (2026-10-20)
+
+Additive: nothing changes without the new options and calls, so `^0.1.0` picks this up. Asked for by Viaframe (a spatial notebook) (#14).
+
+### Added
+
+- **`history.ignore` takes `"family/*"` patterns and predicates (#14).** Besides exact command types, an entry ending in `*` matches every type with that prefix, and a function `(command) => boolean` ignores the commands it accepts, so a whole class of gestures stays out of undo.
+- **`undo({ where })`, `redo({ where })`, `canUndoWhere(where)`, `canRedoWhere(where)` (#14).** `where(commands)` selects history steps by the commands they hold; undo goes back through the nearest matching step (undoing the steps after it), redo forward through the next one. One notification and render; `replay(origin, log)` still equals the state. Plain `undo()`/`redo()` are unchanged. New types `StepFilter`, `TravelOptions`.
+- **`onRejected(rejection, command, wm)` on `createWindowManager` (#14).** Called per `command/rejected` event a dispatch produces, after subscribers, so a UI can announce why a command was refused.
+- **`snapshot(state)` and `diffStates(before, after)` (#14).** Pure: a detached plain copy of a state, and a structured diff (`changes` by path, `added`/`removed`/`changed` ids for windows, workspaces and outputs, `focus`, `activeWorkspace`, `focusedOutput`, `config`). New types `StateDiff`, `StateChange`, `IdChanges`, `ValueChange`. Documented in [docs/api/manager.md](docs/api/manager.md#snapshot-and-diff).
+
 ## 0.1.3 — focus and stacking can stay out of undo (2026-10-10)
 
 Additive: nothing changes without the new option or flag, so `^0.1.0` picks this up. Found building miso (a natto.dev-style canvas notebook), where clicking a pane to select it made Cmd+Z "undo the click" instead of the last move (#10).
