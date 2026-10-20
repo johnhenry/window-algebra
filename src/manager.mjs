@@ -48,6 +48,8 @@ const coalesce = (commands, command) => {
  *   undo/redo (number = limit); the object form also takes `ignore`, command types that are applied
  *   and logged but never become an undo step (focus and stacking, say)
  * @param {(effect: object, wm: object) => void} [options.onEffect] interpret effects
+ * @param {(rejection: object, command: object, wm: object) => void} [options.onRejected] called once per
+ *   `command/rejected` event a dispatch produces (after subscribers are notified), so a UI can say why
  *
  * Gestures: commands carrying the same `gesture` token in a row (a floating
  * drag's stream of window/move, say) form one history step and one log entry.
@@ -77,16 +79,29 @@ export const createWindowManager = ({
   schedule = immediateScheduler,
   history: historyOption = false,
   onEffect,
+  onRejected,
 } = {}) => {
   const dropRegistry = { ...DROPS, ...drops };
   const extensions = drops ? { ...dropHandlers(dropRegistry), ...extraHandlers } : extraHandlers;
   const historyConfig = typeof historyOption === "object" && historyOption !== null ? historyOption : {};
   const historyOn = Boolean(historyOption);
   const historyLimit = typeof historyOption === "number" ? historyOption : (historyConfig.limit ?? 100);
-  const ignoredTypes = new Set(historyConfig.ignore ?? []);
+  // `ignore` entries are exact types, "prefix/*" families, or predicates over the command.
+  const ignoredTypes = new Set();
+  const ignoredPrefixes = [];
+  const ignoredTests = [];
+  for (const entry of historyConfig.ignore ?? []) {
+    if (typeof entry === "function") ignoredTests.push(entry);
+    else if (typeof entry === "string" && entry.endsWith("*")) ignoredPrefixes.push(entry.slice(0, -1));
+    else ignoredTypes.add(entry);
+  }
+  const isIgnoredType = (command) =>
+    ignoredTypes.has(command?.type) ||
+    (typeof command?.type === "string" && ignoredPrefixes.some((prefix) => command.type.startsWith(prefix))) ||
+    ignoredTests.some((test) => test(command));
   // A command's own `history` flag wins over the `ignore` list.
   const skipsHistory = (command) =>
-    historyOn && command?.history !== true && (command?.history === false || ignoredTypes.has(command?.type));
+    historyOn && command?.history !== true && (command?.history === false || isIgnoredType(command));
   let history = createHistory(initial, { limit: historyLimit });
   const listeners = new Set();
   // One renderer per output, for driving several stages at once. `renderer`
@@ -193,6 +208,7 @@ export const createWindowManager = ({
       else onEffect?.(effect, wm);
     }
     notify(out.events, command);
+    if (onRejected) for (const event of out.events) if (event.type === "command/rejected") onRejected(event, command, wm);
     return out;
   };
 
@@ -210,9 +226,9 @@ export const createWindowManager = ({
     return [id ? { type: "window/focused", id, previous } : { type: "window/blurred", id: previous }];
   };
 
-  const travel = (fn, direction) => {
-    const before = getState();
-    if (!(direction < 0 ? canUndo(history) : canRedo(history))) return before;
+  /** One history step back (-1) or forward (1), without rendering or notifying. */
+  const stepOnce = (fn, direction) => {
+    if (!(direction < 0 ? canUndo(history) : canRedo(history))) return false;
     if (transient > 0) {
       // Drop the ignored changes made since the undo, so the step lands exactly.
       entries.splice(entries.length - transient);
@@ -227,6 +243,37 @@ export const createWindowManager = ({
       if (end !== -1) undone.unshift(entries.splice(end));
     }
     if (direction > 0 && undone.length) entries.push(...undone.shift());
+    return true;
+  };
+
+  /** The commands a recorded step holds (a load marker holds none). */
+  const stepCommands = (entry) => entry.commands ?? (entry.command ? [entry.command] : []);
+
+  /**
+   * How many history steps to take so the last (undo) or next (redo) step whose commands
+   * satisfy `where` is included; 0 when there is none. Steps in between go with it.
+   */
+  const stepsTo = (direction, where) => {
+    if (typeof where !== "function") return 1;
+    if (direction < 0) {
+      const steps = entries.filter((entry) => !entry.ignored);
+      for (let i = steps.length - 1, n = 1; i >= 0; i -= 1, n += 1) {
+        if (where(stepCommands(steps[i]))) return n;
+      }
+      return 0;
+    }
+    for (let i = 0; i < undone.length; i += 1) {
+      if (where(stepCommands(undone[i][0]))) return i + 1;
+    }
+    return 0;
+  };
+
+  const travel = (fn, direction, where) => {
+    const before = getState();
+    const steps = stepsTo(direction, where);
+    let moved = 0;
+    while (moved < steps && stepOnce(fn, direction)) moved += 1;
+    if (moved === 0) return before;
     if (getState() !== before) {
       render();
       notify([{ type: "history/changed" }, ...focusChange(before, getState())], null);
@@ -336,8 +383,15 @@ export const createWindowManager = ({
     /** Replace `config.rules` wholesale. */
     setRules: (rules) => dispatch({ type: "rules/set", rules }),
 
-    undo: () => travel(undoHistory, -1),
-    redo: () => travel(redoHistory, 1),
+    /**
+     * Step back; `{ where(commands) }` goes back through the latest step whose commands satisfy it,
+     * undoing any steps after it (so a host can undo layout changes only).
+     */
+    undo: (options = {}) => travel(undoHistory, -1, options?.where),
+    redo: (options = {}) => travel(redoHistory, 1, options?.where),
+    /** Is there an undo step whose commands satisfy `where`? */
+    canUndoWhere: (where) => canUndo(history) && stepsTo(-1, where) > 0,
+    canRedoWhere: (where) => canRedo(history) && stepsTo(1, where) > 0,
     get canUndo() {
       return canUndo(history);
     },

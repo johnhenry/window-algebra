@@ -29,6 +29,7 @@ createWindowManager({
   schedule,    // (task) => void, default immediateScheduler; createFrameScheduler() coalesces per frame
   history,     // false (default) | true (limit 100) | number (limit) | { limit?, ignore? }
   onEffect,    // (effect, wm) => void, for every non-render effect (i.e. { type: "focus", id })
+  onRejected,  // (rejection, command, wm) => void, once per command/rejected event a dispatch produces
 } = {}) → wm
 ```
 
@@ -112,8 +113,9 @@ There is no convenience method for `window/set-layer`, `window/set-title`, `wind
 
 | Member | Description |
 | --- | --- |
-| `undo()`, `redo()` | Step through history (requires the `history` option) and return the new state. When the state changes they render and notify `history/changed`, followed by `window/focused`/`window/blurred` (and a `focus` effect) if the restored state has a different focused window, so keyboard focus follows. |
+| `undo(options?)`, `redo(options?)` | Step through history (requires the `history` option) and return the new state. When the state changes they render and notify `history/changed`, followed by `window/focused`/`window/blurred` (and a `focus` effect) if the restored state has a different focused window, so keyboard focus follows. |
 | `canUndo`, `canRedo` (getters) | Whether a step is available. |
+| `canUndoWhere(where)`, `canRedoWhere(where)` | Whether an undo (redo) step exists whose commands satisfy `where`; see [Undoing only some steps](#undoing-only-some-steps). |
 | `log` (getter) | The commands applied since `origin`, excluding undone ones. A gesture contributes its coalesced commands. Ignored commands (`history.ignore`, `history: false`) are included. |
 | `origin` (getter) | The state `log` replays from: the initial state, or the last successfully `load()`ed one. |
 
@@ -150,7 +152,24 @@ An ignored command:
 - **Made after an undo, is discarded by the next undo or redo.** Redo restores the exact state that was undone (and undo steps back from it), so a focus or raise made while redo was available does not survive either. A recorded command after it clears redo as usual and keeps it.
 - **With a gesture token**: an ignored command that carries the token of the gesture still open (the last step) joins that gesture's step. Otherwise it does not open a gesture, so a drag that starts with an ignored `window/raise` is one undo step for its moves only, and a plain click that only raises or focuses leaves no step. An ignored command *without* the token ends an open gesture, as any other command does.
 
+`ignore` entries are exact command types, `"family/*"` patterns (a trailing `*` matches any type with that prefix: `"focus/*"`), or predicates over the command (`(command) => command.type.startsWith("window/") && command.id === pinned`), so a whole class of gestures can be left out without listing every type.
+
 Which commands count as "focus and stacking" is the application's call; the manager has no built-in list. `window/blur`, `window/raise`, `window/lower`, `focus/next` and `focus/previous` change only focus and stacking (with `config.focusRaises`, a focus also raises). `window/focus` also switches to the window's workspace (and output) when it is elsewhere, and `focus/urgent`, `output/focus` and `workspace/activate` switch workspaces too; whether such a switch should be undoable is up to you.
+
+### Undoing only some steps
+
+`wm.undo({ where })` and `wm.redo({ where })` take a filter over a step's commands (a gesture's step holds its coalesced commands; a `load()` marker holds none). `undo` goes back through the nearest step whose commands satisfy `where`, undoing the steps after it on the way; `redo` goes forward through the next matching step, redoing the steps before it. Nothing matching is a no-op that returns the current state. It is still one `history/changed` notification, one render, and `replay(wm.origin, wm.log)` still equals the state.
+
+```js
+const isLayout = (commands) => commands.some((c) => c.type.startsWith("layout/") || c.type === "window/move");
+if (wm.canUndoWhere(isLayout)) wm.undo({ where: isLayout });
+```
+
+History holds whole states, so this cannot take back one step while keeping a later one that does not match; it skips back over non-matching steps, it does not reorder them.
+
+### Why was a command refused
+
+`onRejected(rejection, command, wm)` is called once per `command/rejected` event a `dispatch` produces (including the manager's own `unknown-layout`), after subscribers are notified; `rejection` is the event (`{ type, command, id, reason }`, see [errors](./errors.md#every-rejection-reason)). Gestures that stream commands call it for each refused one. It is not called for `simulate`, for `update` used directly, or for `state/load-rejected`.
 
 ### History helpers (exported)
 
@@ -185,3 +204,20 @@ A token is only extended while nothing has been undone since. A gesture command 
 | `layout/toggle` | `a`, `b` | `unknown-layout` |
 
 A function spec is never "unknown". The check also runs in `simulate`.
+
+## Snapshot and diff
+
+Pure, exported from the root entry:
+
+| Export | Description |
+| --- | --- |
+| `snapshot(state)` | A detached plain-data copy (`JSON.parse(JSON.stringify(state))`; a function layout spec does not survive). Keep it, compare it, store it. |
+| `diffStates(before, after)` | What changed, from states or snapshots: `{ empty, changes, windows, workspaces, outputs, focus, activeWorkspace, focusedOutput, config }`. |
+
+`changes` lists every leaf difference as `{ path, op: "add" | "remove" | "replace", before?, after? }`; objects are compared key by key and arrays whole. `windows`, `workspaces` and `outputs` are `{ added, removed, changed }`: ids, and for `changed` a map from id to the top-level fields that differ. `focus` (the focused window id), `activeWorkspace` and `focusedOutput` are `{ before, after }` or `null`; `config` names the changed config keys.
+
+```js
+const before = wm.getState();
+wm.undo();
+const { windows } = diffStates(before, wm.getState());   // windows.changed.a -> ["placement"]
+```

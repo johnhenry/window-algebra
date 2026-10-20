@@ -303,6 +303,43 @@ export function redo<T>(history: History<T>): History<T>;
 export function canUndo(history: History<unknown>): boolean;
 export function canRedo(history: History<unknown>): boolean;
 
+// ------------------------------------------------------------------ snapshot and diff
+/** One leaf difference between two states. Arrays are compared whole. */
+export interface StateChange {
+  path: Array<string | number>;
+  op: "add" | "remove" | "replace";
+  before?: unknown;
+  after?: unknown;
+}
+export interface IdChanges {
+  added: string[];
+  removed: string[];
+  /** Id to the names of its top-level fields that differ. */
+  changed: Record<string, string[]>;
+}
+export interface ValueChange<T> {
+  before: T;
+  after: T;
+}
+export interface StateDiff {
+  /** Nothing differs. */
+  empty: boolean;
+  changes: StateChange[];
+  windows: IdChanges;
+  workspaces: IdChanges;
+  outputs: IdChanges;
+  /** The focused window id, or `null` when unchanged. */
+  focus: ValueChange<string | null> | null;
+  activeWorkspace: ValueChange<string> | null;
+  focusedOutput: ValueChange<string> | null;
+  /** Names of the top-level `config` keys that differ. */
+  config: string[];
+}
+/** A detached, plain-data copy of a state (a function layout spec does not survive). */
+export function snapshot(state: State): State;
+/** What changed between two states (or snapshots), as data. */
+export function diffStates(before: State, after: State): StateDiff;
+
 // ------------------------------------------------------------------ command palette (pure)
 export type PaletteFieldKind = "window" | "workspace" | "output" | "new" | "text" | "number" | "boolean" | "choice" | "json" | "layout";
 export interface PaletteField {
@@ -375,7 +412,14 @@ export interface HistoryOptions<C extends { type: string } = never> {
    * Command types that are applied and logged but never become an undo step, and never clear redo
    * (focus and stacking, say). A command's own `history` flag overrides this list.
    */
-  ignore?: ReadonlyArray<CommandType | C["type"]>;
+  ignore?: ReadonlyArray<CommandType | C["type"] | `${string}*` | ((command: Command | C) => boolean)>;
+}
+
+/** Selects history steps by the commands they hold (a gesture holds its coalesced commands). */
+export type StepFilter<C extends { type: string } = never> = (commands: ReadonlyArray<Command | C>) => boolean;
+export interface TravelOptions<C extends { type: string } = never> {
+  /** Go through the nearest step whose commands satisfy this, taking the steps after it along. */
+  where?: StepFilter<C>;
 }
 
 export interface WindowManagerOptions<C extends { type: string } = never> {
@@ -397,6 +441,8 @@ export interface WindowManagerOptions<C extends { type: string } = never> {
   history?: boolean | number | HistoryOptions<C>;
   /** Interpret every effect but `render`. */
   onEffect?: (effect: Effect, wm: WindowManager<C>) => void;
+  /** Called once per `command/rejected` event a dispatch produces, after subscribers are notified. */
+  onRejected?: (rejection: Extract<Event, { type: "command/rejected" }>, command: Command | C, wm: WindowManager<C>) => void;
 }
 
 /** The imperative facade: `wm.focus("editor")` ergonomics over the pure core. */
@@ -470,8 +516,11 @@ export interface WindowManager<C extends { type: string } = never> {
   setRules(rules: Rule[]): UpdateResult;
 
   /** Step back through history (needs the `history` option); returns the new state. */
-  undo(): State;
-  redo(): State;
+  undo(options?: TravelOptions<C>): State;
+  redo(options?: TravelOptions<C>): State;
+  /** Is there an undo (redo) step whose commands satisfy `where`? */
+  canUndoWhere(where: StepFilter<C>): boolean;
+  canRedoWhere(where: StepFilter<C>): boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
 
